@@ -303,20 +303,20 @@ public partial class Combat
 
 	private void AddEquipSlotIcon(HBoxContainer row, string emoji, string itemName)
 	{
-		var slot = new PanelContainer { CustomMinimumSize = new Vector2(44, 44) };
+		var slot = new PanelContainer { CustomMinimumSize = new Vector2(40, 40) };
 		var sb = UIStyle.MiniPanelStyle();
 		bool empty = string.IsNullOrEmpty(itemName);
 		sb.BorderWidthLeft = 2; sb.BorderWidthRight = 2;
 		sb.BorderWidthTop = 2; sb.BorderWidthBottom = 2;
 		sb.BorderColor = empty ? UIStyle.GoldDark * 0.5f : UIStyle.GoldMid;
 		sb.BgColor = empty ? new Color(0.10f, 0.09f, 0.13f) : UIStyle.PanelBgLight;
-		sb.ContentMarginLeft = 4; sb.ContentMarginRight = 4;
-		sb.ContentMarginTop = 4; sb.ContentMarginBottom = 4;
+		sb.ContentMarginLeft = 2; sb.ContentMarginRight = 2;
+		sb.ContentMarginTop = 2; sb.ContentMarginBottom = 2;
 		slot.AddThemeStyleboxOverride("panel", sb);
 		slot.TooltipText = empty ? "(пусто)" : itemName;
 		slot.MouseFilter = MouseFilterEnum.Stop;
 
-		var label = UIStyle.MakeLabel(emoji, 22, UIStyle.GoldBright);
+		var label = UIStyle.MakeLabel(emoji, 20, UIStyle.GoldBright);
 		label.HorizontalAlignment = HorizontalAlignment.Center;
 		label.VerticalAlignment = VerticalAlignment.Center;
 		if (empty) label.Modulate = new Color(0.5f, 0.5f, 0.5f);

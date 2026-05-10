@@ -134,8 +134,10 @@ public static class UIStyle
 			BorderWidthTop = borderW, BorderWidthBottom = borderW,
 			CornerRadiusTopLeft = 5, CornerRadiusTopRight = 5,
 			CornerRadiusBottomLeft = 5, CornerRadiusBottomRight = 5,
+			// Поднял вертикальные отступы до 10 — кнопка >40px тапается пальцем
+			// без промахов на телефоне (рекомендация iOS 44pt / Material 48dp).
 			ContentMarginLeft = 14, ContentMarginRight = 14,
-			ContentMarginTop = 7, ContentMarginBottom = 7,
+			ContentMarginTop = 10, ContentMarginBottom = 10,
 		};
 	}
 

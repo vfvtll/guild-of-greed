@@ -25,9 +25,27 @@ public partial class InventoryOverlay
 		v.AddThemeConstantOverride("separation", 12);
 		panel.AddChild(v);
 
+		// Шапка: иконка слева для центровки + название по центру + ✕ справа.
+		// Кнопка ✕ дублирует "Закрыть" внизу — гарантия что закрыть можно
+		// независимо от размера экрана и количества контента.
+		var titleRow = new HBoxContainer();
+		titleRow.AddThemeConstantOverride("separation", 8);
+		v.AddChild(titleRow);
+
+		var leftSpacer = new Control { CustomMinimumSize = new Vector2(44, 0) };
+		titleRow.AddChild(leftSpacer);
+
 		var title = UIStyle.MakeLabel("🎒 Инвентарь", 22, UIStyle.GoldBright);
 		title.HorizontalAlignment = HorizontalAlignment.Center;
-		v.AddChild(title);
+		title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		titleRow.AddChild(title);
+
+		var xBtn = new Button { Text = "✕" };
+		UIStyle.StyleButton(xBtn);
+		xBtn.CustomMinimumSize = new Vector2(44, 44);
+		xBtn.TooltipText = "Закрыть инвентарь";
+		xBtn.Pressed += () => EmitSignal(SignalName.Closed);
+		titleRow.AddChild(xBtn);
 
 		// Плашка показа ReadOnly — видна только во время боя.
 		_readOnlyHint = UIStyle.MakeLabel(
@@ -73,9 +91,18 @@ public partial class InventoryOverlay
 		columns.AddChild(left);
 
 		left.AddChild(UIStyle.MakeSectionTitle("Надето"));
+
+		// 8 слотов могут не помещаться по высоте на маленьких экранах —
+		// ScrollContainer гарантирует что всё остаётся доступно через скролл.
+		var equipScroll = new ScrollContainer();
+		equipScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+		equipScroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		left.AddChild(equipScroll);
+
 		_equipmentList = new VBoxContainer();
 		_equipmentList.AddThemeConstantOverride("separation", 6);
-		left.AddChild(_equipmentList);
+		_equipmentList.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		equipScroll.AddChild(_equipmentList);
 
 		var hint = UIStyle.MakeLabel("Клик — снять в инвентарь", 11, UIStyle.TextDim);
 		left.AddChild(hint);
@@ -128,7 +155,7 @@ public partial class InventoryOverlay
 			detail = det;
 		}
 
-		var panel = new PanelContainer { CustomMinimumSize = new Vector2(280, 56) };
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(280, 48) };
 		var hovered = false;
 		ApplySlotStyle(panel, hovered, isEmpty: string.IsNullOrEmpty(itemId));
 		panel.MouseFilter = MouseFilterEnum.Stop;
