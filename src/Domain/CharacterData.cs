@@ -34,6 +34,9 @@ public class CharacterData
 	[JsonIgnore] public int CurrentMp;
 	[JsonIgnore] public int CurrentBlock;
 	[JsonIgnore] public List<StatusEffect> Effects = new();
+	// Счётчик атак с момента последнего крита. Сбрасывается на 0 при крите
+	// и в начале боя. Не сохраняется — это рантайм-состояние.
+	[JsonIgnore] public int AttacksSinceLastCrit;
 
 	// Пустой конструктор — для десериализации и для CharacterCreation.
 	public CharacterData() { }
@@ -59,10 +62,31 @@ public class CharacterData
 	}
 
 	// === Крит ===
-	// CritChance в процентах: DEX 40 → 20%, DEX 50 → 25%.
-	// CritMultiplier: 1.5 + DEX/100. DEX 40 → 1.9x, DEX 50 → 2.0x.
-	public float CritChance() => Dex / 2f;
+	// Детерминированный: каждое оружие имеет CritEveryNAttacks (например 10),
+	// DEX/10 уменьшает кулдаун, минимум — 2 (через ход). Шанса нет.
+	// CritMultiplier зависит от DEX: 1.5 + DEX/100.
+	public int EffectiveCritEveryN()
+	{
+		if (Weapon == null) return int.MaxValue;
+		return System.Math.Max(2, Weapon.CritEveryNAttacks - Dex / 10);
+	}
+
 	public float CritMultiplier() => 1.5f + Dex / 100f;
+
+	// Инкрементит счётчик и возвращает true если эта атака — крит. На крите
+	// сбрасывает счётчик. Вызывается на каждой атакующей карте (damage_phys/magic).
+	public bool TryConsumeCrit()
+	{
+		if (Weapon == null) return false;
+		int effective = EffectiveCritEveryN();
+		AttacksSinceLastCrit++;
+		if (AttacksSinceLastCrit >= effective)
+		{
+			AttacksSinceLastCrit = 0;
+			return true;
+		}
+		return false;
+	}
 
 	private static int RollStat() => Rng.Range(35, 46);  // 35..45 включительно
 
@@ -112,6 +136,7 @@ public class CharacterData
 		CurrentMp = MaxMp();
 		CurrentBlock = 0;
 		Effects.Clear();
+		AttacksSinceLastCrit = 0;
 	}
 
 	public void AddEffect(string id, string type, float amount, int duration)

@@ -61,7 +61,7 @@ public partial class Combat : Control
 		Log($"[i]{GameData.Instance.CurrentLocationHint()}[/i]");
 		Log($"Противников: {_encounter.Count}");
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
-		Log($"🎯 Крит: {pc.CritChance():F0}% шанс × {pc.CritMultiplier():F2} урон");
+		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");
 		Log($"Оружие: {ItemsDB.DescribeWeapon(pc.Weapon)}");
 		Log($"Броня:  {ItemsDB.DescribeArmor(pc.Armor)}");
 		Log($"Колода ({_deck.Count} карт): {DeckSummary()}");

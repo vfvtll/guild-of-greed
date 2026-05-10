@@ -19,6 +19,10 @@ public class WeaponData
 	public float MagicMult = 1.0f;
 	public int ExtraDraw;
 
+	// Базовый кулдаун крита в атаках. DEX/10 уменьшает, нижний предел 2.
+	// 1H меч 10 → DEX 40 даёт 1 крит каждые 6 атак. Посох 20 → 1 крит каждые 16.
+	public int CritEveryNAttacks = 999;
+
 	public WeaponData Clone() => (WeaponData)MemberwiseClone();
 }
 
@@ -57,6 +61,7 @@ public static class ItemsDB
 			PhysAtk = 4, MagicAtk = 0,
 			PhysMult = 1.0f, MagicMult = 0.5f,
 			ExtraDraw = 1,
+			CritEveryNAttacks = 10,
 		},
 		["sword_2h_low"] = new()
 		{
@@ -64,6 +69,7 @@ public static class ItemsDB
 			Grade = "E", Tier = "low",
 			PhysAtk = 8, MagicAtk = 0,
 			PhysMult = 1.3f, MagicMult = 0.4f,
+			CritEveryNAttacks = 12,
 		},
 		["staff_low"] = new()
 		{
@@ -71,6 +77,7 @@ public static class ItemsDB
 			Grade = "E", Tier = "low",
 			PhysAtk = 1, MagicAtk = 10,
 			PhysMult = 0.4f, MagicMult = 1.5f,
+			CritEveryNAttacks = 20,
 		},
 	};
 
@@ -168,6 +175,8 @@ public static class ItemsDB
 			$"+{w.MagicAtk} МагАтк",
 		};
 		if (w.ExtraDraw > 0) parts.Add($"+{w.ExtraDraw} карта");
+		if (w.CritEveryNAttacks > 0 && w.CritEveryNAttacks < 999)
+			parts.Add($"крит каждые {w.CritEveryNAttacks}");
 		return $"{w.Name}: {string.Join(", ", parts)}";
 	}
 

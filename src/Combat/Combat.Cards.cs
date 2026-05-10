@@ -94,7 +94,7 @@ public partial class Combat
 			case "damage_phys":
 			{
 				int dmg = CardsDB.ComputePhysDamage(card, p, target);
-				bool isCrit = Rng.Chance(p.CritChance() / 100f);
+				bool isCrit = p.TryConsumeCrit();
 				if (isCrit) dmg = (int)Math.Round(dmg * p.CritMultiplier());
 				ApplyDamageToEnemy(target, dmg, true, isCrit);
 				break;
@@ -102,7 +102,7 @@ public partial class Combat
 			case "damage_magic":
 			{
 				int dmg = CardsDB.ComputeMagicDamage(card, p, target);
-				bool isCrit = Rng.Chance(p.CritChance() / 100f);
+				bool isCrit = p.TryConsumeCrit();
 				if (isCrit) dmg = (int)Math.Round(dmg * p.CritMultiplier());
 				ApplyDamageToEnemy(target, dmg, false, isCrit);
 				break;
