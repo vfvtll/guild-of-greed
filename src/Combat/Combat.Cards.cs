@@ -1,0 +1,203 @@
+using Godot;
+using System;
+using System.Linq;
+
+// Combat — игра карты + выбор цели + применение урона.
+public partial class Combat
+{
+	private void OnCardClicked(CardView view)
+	{
+		if (_combatOver) return;
+
+		// Найти индекс кликнутой карты в руке (по позиции в HBox).
+		int idx = -1;
+		for (int i = 0; i < _handContainer.GetChildCount(); i++)
+			if (_handContainer.GetChild(i) == view) { idx = i; break; }
+		if (idx < 0 || idx >= _hand.Count) return;
+
+		var card = view.CardData;
+		var p = GameData.Instance.Character;
+
+		if (p.CurrentMp < card.Cost)
+		{
+			Log($"[color=#888]Недостаточно маны: {card.Name} стоит {card.Cost}.[/color]");
+			return;
+		}
+
+		bool needsTarget = card.Effect == "damage_phys"
+			|| card.Effect == "damage_magic"
+			|| card.Effect == "debuff_phys";
+
+		if (!needsTarget)
+		{
+			PlayCard(idx, null);
+			return;
+		}
+
+		var alive = _encounter.Where(e => e.CurrentHp > 0).ToList();
+		if (alive.Count == 0) return;
+		if (alive.Count == 1)
+		{
+			PlayCard(idx, alive[0]);
+			return;
+		}
+
+		// Несколько целей — переходим в режим выбора.
+		if (_selectedHandIndex == idx)
+		{
+			CancelTargeting();
+		}
+		else
+		{
+			_selectedHandIndex = idx;
+			_targetingHint.Text = $"Выберите цель для «{card.Name}» (ESC / ПКМ — отмена)";
+			_targetingBanner.Visible = true;
+		}
+		RefreshUI();
+	}
+
+	private void OnEnemyTargeted(EnemyView view)
+	{
+		if (_selectedHandIndex < 0) return;
+		if (view.Enemy == null || view.Enemy.CurrentHp <= 0) return;
+		int idx = _selectedHandIndex;
+		_selectedHandIndex = -1;
+		_targetingBanner.Visible = false;
+		PlayCard(idx, view.Enemy);
+	}
+
+	private void CancelTargeting()
+	{
+		if (_selectedHandIndex < 0) return;
+		_selectedHandIndex = -1;
+		_targetingBanner.Visible = false;
+	}
+
+	private void PlayCard(int handIndex, EnemyData target)
+	{
+		if (handIndex < 0 || handIndex >= _hand.Count) return;
+
+		// Захватываем view ДО изменения данных — для анимации розыгрыша.
+		CardView playedView = null;
+		if (handIndex < _handContainer.GetChildCount())
+			playedView = _handContainer.GetChild(handIndex) as CardView;
+
+		var cardId = _hand[handIndex];
+		var card = CardsDB.GetCard(cardId);
+		var p = GameData.Instance.Character;
+
+		p.CurrentMp -= card.Cost;
+		Log($"[b]Сыграна карта:[/b] {card.Name} [color=#5af](-{card.Cost} MP)[/color]");
+
+		switch (card.Effect)
+		{
+			case "damage_phys":
+			{
+				int dmg = CardsDB.ComputePhysDamage(card, p, target);
+				ApplyDamageToEnemy(target, dmg, true);
+				break;
+			}
+			case "damage_magic":
+			{
+				int dmg = CardsDB.ComputeMagicDamage(card, p, target);
+				ApplyDamageToEnemy(target, dmg, false);
+				break;
+			}
+			case "block":
+			{
+				int amount = CardsDB.ComputeBlock(card, p);
+				p.CurrentBlock += amount;
+				Log($"Блок: +{amount} (всего {p.CurrentBlock})");
+				SpawnFloatingText(new Vector2(150, 110), $"+{amount} БЛОК", UIStyle.BlockCyan, 22);
+				break;
+			}
+			case "heal":
+			{
+				int amount = CardsDB.ComputeHeal(card, p);
+				int before = p.CurrentHp;
+				p.CurrentHp = Math.Min(p.CurrentHp + amount, p.MaxHp());
+				int healed = p.CurrentHp - before;
+				Log($"[color=#7fa]Исцеление: +{healed} ХП[/color]");
+				SpawnFloatingText(new Vector2(150, 110), $"+{healed} ХП", UIStyle.HealGreen, 22);
+				break;
+			}
+			case "debuff_phys":
+				if (target != null)
+				{
+					target.AddEffect("armor_break", "phys_taken_pct", card.AmountPct, card.Duration);
+					Log($"{target.EnemyName} получает +{card.AmountPct}% физ. урона на {card.Duration} х.");
+				}
+				break;
+			case "buff_magic":
+				p.AddEffect("magic_focus", "magic_dmg_pct", card.AmountPct, card.Duration);
+				Log($"Вы наносите +{card.AmountPct}% маг. урона {card.Duration} ходов.");
+				break;
+		}
+
+		_hand.RemoveAt(handIndex);
+		_discard.Add(cardId);
+
+		// Анимация розыгрыша: карта вылетает вверх и тает.
+		if (playedView != null) AnimateCardOut(playedView);
+
+		if (AllEnemiesDead()) OnAllEnemiesDead();
+		RefreshUI();
+	}
+
+	private bool AllEnemiesDead()
+	{
+		foreach (var e in _encounter)
+			if (e.CurrentHp > 0) return false;
+		return true;
+	}
+
+	private void ApplyDamageToEnemy(EnemyData enemy, int dmg, bool isPhys)
+	{
+		if (enemy == null) return;
+		int defense = isPhys ? enemy.PhysDef : enemy.MagicDef;
+		dmg = Math.Max(1, dmg - defense);
+		int absorbed = 0;
+		if (enemy.CurrentBlock > 0)
+		{
+			absorbed = Math.Min(enemy.CurrentBlock, dmg);
+			enemy.CurrentBlock -= absorbed;
+			dmg -= absorbed;
+		}
+		enemy.CurrentHp = Math.Max(0, enemy.CurrentHp - dmg);
+		string kind = isPhys ? "Физ" : "Маг";
+		Log(absorbed > 0
+			? $"→ {enemy.EnemyName}: {kind} урон {dmg} (поглощено блоком: {absorbed})"
+			: $"→ {enemy.EnemyName}: {kind} урон {dmg}");
+
+		var ev = FindEnemyView(enemy);
+		if (ev != null)
+		{
+			var pos = ev.GlobalPosition + new Vector2(ev.Size.X / 2f, ev.Size.Y * 0.25f);
+			var color = isPhys ? new Color(1.0f, 0.6f, 0.35f) : new Color(0.75f, 0.55f, 1.0f);
+			SpawnFloatingText(pos, $"-{dmg}", color, 28);
+			ev.Flash();
+		}
+
+		if (enemy.CurrentHp <= 0)
+			Log($"[color=#7f7]✓ {enemy.EnemyName} повержен.[/color]");
+	}
+
+	private void ApplyDamageToPlayer(int dmg)
+	{
+		var p = GameData.Instance.Character;
+		dmg = Math.Max(1, dmg - p.PhysDef());
+		int absorbed = 0;
+		if (p.CurrentBlock > 0)
+		{
+			absorbed = Math.Min(p.CurrentBlock, dmg);
+			p.CurrentBlock -= absorbed;
+			dmg -= absorbed;
+		}
+		p.CurrentHp = Math.Max(0, p.CurrentHp - dmg);
+		Log(absorbed > 0
+			? $"[color=#f88]Получен урон: {dmg} (поглощено: {absorbed})[/color]"
+			: $"[color=#f88]Получен урон: {dmg}[/color]");
+
+		SpawnFloatingText(new Vector2(150, 100), $"-{dmg}", UIStyle.DangerRed, 28);
+	}
+}

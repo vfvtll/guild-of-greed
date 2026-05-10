@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Godot;
 
 // Персонаж: статы Lineage 2 стиля.
 //   STR — физ. атака
@@ -43,7 +42,7 @@ public class CharacterData
 		Men = RollStat();
 	}
 
-	private static int RollStat() => (int)(GD.Randi() % 11) + 35;  // 35..45 включительно
+	private static int RollStat() => Rng.Range(35, 46);  // 35..45 включительно
 
 	// === Производные параметры ===
 	// Формулы подобраны под статы 35..45.

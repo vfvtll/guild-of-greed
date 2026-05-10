@@ -8,6 +8,7 @@ public partial class GameData : Node
 	public static GameData Instance { get; private set; }
 
 	public CharacterData Character { get; private set; }
+	public UserSession Session { get; private set; }
 	public int SelectedLoadout = 0;
 	public int SelectedArmor = 2;
 	public int SelectedLocation = 0;
@@ -53,7 +54,10 @@ public partial class GameData : Node
 	public override void _Ready()
 	{
 		Instance = this;
+		// Сидируем портативный Rng от Godot-генератора, чтобы Domain/Data не зависели от Godot.
 		GD.Randomize();
+		Rng.Seed((int)GD.Randi());
+		Session = new UserSession();
 		Character = new CharacterData();
 		ApplyLoadout();
 	}
@@ -81,7 +85,7 @@ public partial class GameData : Node
 		Character.Weapon = ItemsDB.GetWeapon(ld.WeaponId)?.Clone();
 		var armorId = ArmorsList[SelectedArmor];
 		// 50% шанс выпадения брони с суффиксом — для демо.
-		Character.Armor = GD.Randf() < 0.5f
+		Character.Armor = Rng.Chance(0.5f)
 			? ItemsDB.RollArmorWithSuffix(armorId)
 			: ItemsDB.GetArmor(armorId)?.Clone();
 	}

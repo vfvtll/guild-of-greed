@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Godot;
 
 // === Оружие ===
 // Все оружие имеет phys_atk и magic_atk (флэт прибавка к базе урона)
@@ -144,7 +143,7 @@ public static class ItemsDB
 		var armor = GetArmor(id)?.Clone();
 		if (armor == null || armor.Grade != "E") return armor;
 		var keys = new List<string>(Suffixes.Keys);
-		var pick = keys[(int)(GD.Randi() % (uint)keys.Count)];
+		var pick = Rng.Pick(keys);
 		var suf = Suffixes[pick];
 		armor.SuffixId = pick;
 		armor.SuffixName = suf.Name;

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Godot;
 
 // Враги работают по системе Intent: показывают своё намерение до своего хода.
 // Не используют карты — только заранее заданный список действий.
@@ -68,7 +67,7 @@ public class EnemyData
 	}
 
 	public void RollIntent()
-		=> NextIntent = Intents[(int)(GD.Randi() % (uint)Intents.Count)];
+		=> NextIntent = Rng.Pick(Intents);
 
 	public void AddEffect(string id, string type, float amount, int duration)
 	{
