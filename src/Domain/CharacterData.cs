@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 // Персонаж: статы Lineage 2 стиля.
 //   STR — физ. атака
@@ -6,6 +7,10 @@ using System.Collections.Generic;
 //   CON — ХП
 //   WIT — реген МП
 //   MEN — макс. МП
+//
+// Часть полей помечена [JsonIgnore] — они либо назначаются из БД (Weapon, Armor),
+// либо являются рантайм-состоянием боя (CurrentHp, эффекты). При сохранении/загрузке
+// игрока эти поля не сериализуются.
 public class CharacterData
 {
 	public string CharacterName = "Авантюрист";
@@ -13,24 +18,32 @@ public class CharacterData
 	public string Grade = "E";
 	public int Exp = 0;
 
-	// Статы выкатываются один раз при создании персонажа: 35..45.
+	// Постоянные статы (35..45 + распределённые игроком очки).
 	public int Str;
 	public int Int;
 	public int Con;
 	public int Wit;
 	public int Men;
 
-	public WeaponData Weapon;
-	public ArmorData Armor;
+	[JsonIgnore] public WeaponData Weapon;
+	[JsonIgnore] public ArmorData Armor;
 
-	public int CurrentHp;
-	public int CurrentMp;
-	public int CurrentBlock;
-	public List<StatusEffect> Effects = new();
+	[JsonIgnore] public int CurrentHp;
+	[JsonIgnore] public int CurrentMp;
+	[JsonIgnore] public int CurrentBlock;
+	[JsonIgnore] public List<StatusEffect> Effects = new();
 
-	public CharacterData()
+	// Пустой конструктор — для десериализации и для CharacterCreation.
+	public CharacterData() { }
+
+	// Полностью случайный персонаж (35..45 по каждому стату). Раньше использовалось
+	// автоматически — сейчас только для тестов / debug. Реальный игрок проходит
+	// через CharacterCreation.
+	public static CharacterData CreateRandom()
 	{
-		RerollStats();
+		var c = new CharacterData();
+		c.RerollStats();
+		return c;
 	}
 
 	public void RerollStats()

@@ -58,8 +58,15 @@ public partial class GameData : Node
 		GD.Randomize();
 		Rng.Seed((int)GD.Randi());
 		Session = new UserSession();
-		Character = new CharacterData();
-		ApplyLoadout();
+		// Character назначается извне через SetCharacter() — либо после создания
+		// в CharacterCreation, либо после загрузки из SaveGame. Делает это Main.cs.
+	}
+
+	// Назначить активного персонажа. Применяет дефолтный лоадаут (оружие/броня).
+	public void SetCharacter(CharacterData character)
+	{
+		Character = character;
+		if (character != null) ApplyLoadout();
 	}
 
 	public void CycleLoadout()

@@ -48,10 +48,10 @@ public partial class Combat
 		_restartButton.Pressed += OnRestartPressed;
 		top.AddChild(_restartButton);
 
-		var rerollButton = new Button { Text = Lang.T("ui.combat.reroll_stats") };
-		UIStyle.StyleButton(rerollButton);
-		rerollButton.Pressed += OnRerollStatsPressed;
-		top.AddChild(rerollButton);
+		var resetCharBtn = new Button { Text = "👤 Новый персонаж" };
+		UIStyle.StyleButton(resetCharBtn);
+		resetCharBtn.Pressed += OnResetCharacterPressed;
+		top.AddChild(resetCharBtn);
 
 		// === Player Panel ===
 		var (pp, pv) = MakeTitledPanel(Lang.T("ui.combat.player_panel"), new Vector2(20, 60), new Vector2(260, 320));

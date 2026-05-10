@@ -12,6 +12,10 @@ using System.Collections.Generic;
 //   Combat.Animations.cs — твины (всплывающий текст, вылет карты)
 public partial class Combat : Control
 {
+	// Сигнал наверх (Main.cs) когда игрок хочет удалить текущего персонажа.
+	[Signal]
+	public delegate void ResetCharacterRequestedEventHandler();
+
 	// === Состояние боя (поля) ===
 	private List<string> _deck = new();
 	private List<string> _hand = new();
@@ -189,10 +193,10 @@ public partial class Combat : Control
 
 	private void OnRestartPressed() => StartNewCombat();
 
-	private void OnRerollStatsPressed()
+	private void OnResetCharacterPressed()
 	{
-		GameData.Instance.Character.RerollStats();
-		StartNewCombat();
+		// Делегируем удаление и переход в CharacterCreation роутеру (Main.cs).
+		EmitSignal(SignalName.ResetCharacterRequested);
 	}
 
 	private void OnLocationPressed()

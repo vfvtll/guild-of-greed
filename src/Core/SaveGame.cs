@@ -1,0 +1,75 @@
+using Godot;
+using System;
+using System.Text.Json;
+
+// Сохранение и загрузка персонажа.
+// Сейчас сохраняем в Godot user:// (локальная папка приложения) как JSON.
+// На сервере: те же CharacterData будут лежать в БД, передача — через сеть в JSON.
+//
+// Что сохраняется:
+//   - Имя, статы (STR/INT/CON/WIT/MEN), Level/Grade/Exp
+// Что НЕ сохраняется (помечено [JsonIgnore] в CharacterData):
+//   - Текущая экипировка (восстанавливается ApplyLoadout)
+//   - Боевое состояние (HP/MP/Block/Effects) — это рантайм
+public static class SaveGame
+{
+	private const string SavePath = "user://character.json";
+
+	private static readonly JsonSerializerOptions Options = new()
+	{
+		WriteIndented = true,
+		IncludeFields = true,
+	};
+
+	public static bool HasSave() => FileAccess.FileExists(SavePath);
+
+	public static void Save(CharacterData character)
+	{
+		if (character == null) return;
+		try
+		{
+			var json = JsonSerializer.Serialize(character, Options);
+			using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
+			if (file == null)
+			{
+				GD.PrintErr($"SaveGame.Save: не удалось открыть {SavePath} ({FileAccess.GetOpenError()})");
+				return;
+			}
+			file.StoreString(json);
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"SaveGame.Save: {ex.Message}");
+		}
+	}
+
+	public static CharacterData Load()
+	{
+		if (!HasSave()) return null;
+		try
+		{
+			using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
+			if (file == null) return null;
+			var json = file.GetAsText();
+			return JsonSerializer.Deserialize<CharacterData>(json, Options);
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"SaveGame.Load: {ex.Message}");
+			return null;
+		}
+	}
+
+	public static void Delete()
+	{
+		if (!HasSave()) return;
+		try
+		{
+			DirAccess.RemoveAbsolute(SavePath);
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"SaveGame.Delete: {ex.Message}");
+		}
+	}
+}
