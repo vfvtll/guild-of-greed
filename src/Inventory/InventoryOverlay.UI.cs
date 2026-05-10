@@ -195,14 +195,15 @@ public partial class InventoryOverlay
 	{
 		var (name, detail, icon) = DescribeItem(itemId);
 		var ch = GameData.Instance.Character;
+		var rarity = GetItemRarity(itemId);
 
 		var panel = new PanelContainer { CustomMinimumSize = new Vector2(190, 56) };
 		var hovered = false;
-		ApplyItemStyle(panel, hovered);
+		ApplyItemStyle(panel, hovered, rarity);
 		panel.MouseFilter = MouseFilterEnum.Stop;
 		panel.TooltipText = BuildItemTooltip(itemId, name, detail, ch);
-		panel.MouseEntered += () => { hovered = true; ApplyItemStyle(panel, hovered); };
-		panel.MouseExited  += () => { hovered = false; ApplyItemStyle(panel, hovered); };
+		panel.MouseEntered += () => { hovered = true; ApplyItemStyle(panel, hovered, rarity); };
+		panel.MouseExited  += () => { hovered = false; ApplyItemStyle(panel, hovered, rarity); };
 		panel.GuiInput += ev =>
 		{
 			if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
@@ -270,11 +271,12 @@ public partial class InventoryOverlay
 		p.AddThemeStyleboxOverride("panel", sb);
 	}
 
-	private static void ApplyItemStyle(PanelContainer p, bool hovered)
+	private static void ApplyItemStyle(PanelContainer p, bool hovered, ItemRarity rarity = ItemRarity.Common)
 	{
 		var sb = UIStyle.MiniPanelStyle();
 		sb.BorderWidthLeft = 2; sb.BorderWidthRight = 2;
 		sb.BorderWidthTop = 2; sb.BorderWidthBottom = 2;
+		var rarityCol = UIStyle.RarityColor(rarity);
 		if (hovered)
 		{
 			sb.BgColor = new Color(0.20f, 0.18f, 0.26f);
@@ -283,7 +285,7 @@ public partial class InventoryOverlay
 		else
 		{
 			sb.BgColor = UIStyle.PanelBgLight;
-			sb.BorderColor = UIStyle.GoldMid;
+			sb.BorderColor = rarityCol;
 		}
 		p.AddThemeStyleboxOverride("panel", sb);
 	}

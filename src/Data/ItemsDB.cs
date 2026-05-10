@@ -155,6 +155,7 @@ public static class ItemsDB
 		{
 			Id = "ring_haste_low", Name = "Кольцо проворства", Type = "ring",
 			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
+			Rarity = ItemRarity.Uncommon,
 			ExtraDrawBonus = 1,
 		},
 		["ring_vitality_low"] = new()
@@ -162,6 +163,22 @@ public static class ItemsDB
 			Id = "ring_vitality_low", Name = "Кольцо стойкости", Type = "ring",
 			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
 			HpBonus = 15,
+		},
+
+		// === Редкий лут (Rare) — выпадает с боссов ===
+		["ring_blessed_low"] = new()
+		{
+			Id = "ring_blessed_low", Name = "Благословлённое кольцо", Type = "ring",
+			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
+			Rarity = ItemRarity.Rare,
+			PhysAtkBonus = 4, MagicAtkBonus = 4, HpBonus = 10,
+		},
+		["amulet_arcane_low"] = new()
+		{
+			Id = "amulet_arcane_low", Name = "Аркановый амулет", Type = "amulet",
+			Slot = ArmorSlot.Amulet, Grade = "E", Tier = "low",
+			Rarity = ItemRarity.Rare,
+			MpMaxBonus = 35, MagicAtkBonus = 5, ExtraDrawBonus = 1,
 		},
 	};
 

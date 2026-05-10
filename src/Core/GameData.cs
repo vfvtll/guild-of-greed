@@ -112,7 +112,7 @@ public partial class GameData : Node
 
 	private static bool AddItem(CharacterData ch, string itemId, int count)
 	{
-		int maxStack = PotionsDB.Get(itemId) != null ? 5 : 1;
+		int maxStack = PotionsDB.Get(itemId) != null ? 9 : 1;
 		return ch.Inventory.TryAdd(itemId, count, maxStack);
 	}
 
@@ -254,6 +254,8 @@ public partial class GameData : Node
 
 	// === Использование зелья ===
 	// Возвращает true если зелье было выпито.
+	// Применяет HpRestore / MpRestore мгновенно и навешивает Buff* как
+	// StatusEffect на длительность BuffDuration.
 	public bool UsePotion(string itemId)
 	{
 		if (Character == null) return false;
@@ -271,6 +273,10 @@ public partial class GameData : Node
 		{
 			Character.CurrentMp = System.Math.Min(
 				Character.MaxMp(), Character.CurrentMp + potion.MpRestore);
+		}
+		if (!string.IsNullOrEmpty(potion.BuffType) && potion.BuffDuration > 0)
+		{
+			Character.AddEffect(potion.Id, potion.BuffType, potion.BuffAmount, potion.BuffDuration);
 		}
 		return true;
 	}

@@ -204,8 +204,50 @@ public partial class Combat
 		{
 			Log($"[color=#7f7]✓ {enemy.EnemyName} повержен.[/color]");
 			Input.VibrateHandheld(120);
+			DropLoot(enemy);
 		}
 	}
+
+	// Прокатываем таблицу лута врага. Каждая запись — независимый ролл.
+	// Цвет лога окрашивается по редкости. Если инвентарь полон — лут теряется.
+	private void DropLoot(EnemyData enemy)
+	{
+		if (enemy.LootTable == null || enemy.LootTable.Count == 0) return;
+		foreach (var entry in enemy.LootTable)
+		{
+			if (!Rng.Chance(entry.Chance)) continue;
+			int count = Rng.Range(entry.MinCount, entry.MaxCount + 1);
+			if (!GameData.Instance.AddItem(entry.ItemId, count))
+			{
+				Log($"[color=#f88]Инвентарь полон — {GetItemName(entry.ItemId)} потерян.[/color]");
+				continue;
+			}
+			var (name, rarity) = GetItemNameAndRarity(entry.ItemId);
+			string color = RarityHexColor(rarity);
+			Log($"[color={color}]💰 Лут: {name} ×{count}[/color]");
+		}
+	}
+
+	private static string GetItemName(string id) => GetItemNameAndRarity(id).name;
+
+	private static (string name, ItemRarity rarity) GetItemNameAndRarity(string id)
+	{
+		var w = ItemsDB.GetWeapon(id);
+		if (w != null) return (w.Name, w.Rarity);
+		var a = ItemsDB.GetArmor(id);
+		if (a != null) return (a.Name, a.Rarity);
+		var p = PotionsDB.Get(id);
+		if (p != null) return (p.Name, p.Rarity);
+		return (id, ItemRarity.Common);
+	}
+
+	private static string RarityHexColor(ItemRarity r) => r switch
+	{
+		ItemRarity.Uncommon => "#5af55a",
+		ItemRarity.Rare     => "#5aafff",
+		ItemRarity.Epic     => "#c878ff",
+		_                   => "#dddddd",
+	};
 
 	private void ApplyDamageToPlayer(int dmg)
 	{

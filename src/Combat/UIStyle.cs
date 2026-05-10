@@ -31,6 +31,20 @@ public static class UIStyle
 	public static readonly Color DangerRed     = new(1.00f, 0.45f, 0.45f);
 	public static readonly Color OutlineBlack  = new(0, 0, 0);
 
+	// === Палитра редкости предметов ===
+	public static readonly Color RarityCommon   = new(0.65f, 0.62f, 0.55f);
+	public static readonly Color RarityUncommon = new(0.45f, 0.95f, 0.50f);
+	public static readonly Color RarityRare     = new(0.40f, 0.65f, 1.00f);
+	public static readonly Color RarityEpic     = new(0.78f, 0.45f, 1.00f);
+
+	public static Color RarityColor(ItemRarity r) => r switch
+	{
+		ItemRarity.Uncommon => RarityUncommon,
+		ItemRarity.Rare     => RarityRare,
+		ItemRarity.Epic     => RarityEpic,
+		_                   => RarityCommon,
+	};
+
 	// =====================================================================
 	// Панели
 	// =====================================================================

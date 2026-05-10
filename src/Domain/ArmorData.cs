@@ -22,6 +22,7 @@ public class ArmorData
 	public ArmorSlot Slot;
 	public string Grade;
 	public string Tier;
+	public ItemRarity Rarity = ItemRarity.Common;
 	public int PhysDef;
 	public int PhysAtkBonus;
 	public int MagicAtkBonus;

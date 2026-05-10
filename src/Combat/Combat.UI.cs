@@ -14,7 +14,7 @@ public partial class Combat
 	private HBoxContainer _handContainer;
 	private Label _targetingHint;
 	private PanelContainer _targetingBanner;
-	private Button _potionHpBtn, _potionMpBtn;
+	private HBoxContainer _potionsRow;
 	private HBoxContainer _equipArmorRow, _equipJewelryRow;
 
 	private void BuildUI()
@@ -104,22 +104,10 @@ public partial class Combat
 		_buffsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		pv.AddChild(_buffsLabel);
 
-		// === Зелья (используются в течение боя) ===
-		var potionsRow = new HBoxContainer();
-		potionsRow.AddThemeConstantOverride("separation", 6);
-		pv.AddChild(potionsRow);
-
-		_potionHpBtn = new Button();
-		UIStyle.StyleButton(_potionHpBtn);
-		_potionHpBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_potionHpBtn.Pressed += () => OnUsePotion("potion_hp_small");
-		potionsRow.AddChild(_potionHpBtn);
-
-		_potionMpBtn = new Button();
-		UIStyle.StyleButton(_potionMpBtn);
-		_potionMpBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_potionMpBtn.Pressed += () => OnUsePotion("potion_mp_small");
-		potionsRow.AddChild(_potionMpBtn);
+		// === Зелья (динамически отображаются те, что есть в инвентаре) ===
+		_potionsRow = new HBoxContainer();
+		_potionsRow.AddThemeConstantOverride("separation", 6);
+		pv.AddChild(_potionsRow);
 
 		// === Enemy Area ===
 		// Расширена до 890 (было 670) — лог-панель убрана с экрана, теперь
@@ -264,11 +252,36 @@ public partial class Combat
 		_deckCountLabel.Text = $"{Lang.T("ui.combat.deck")}: {_deck.Count}";
 		_discardCountLabel.Text = $"{Lang.T("ui.combat.discard")}: {_discard.Count}";
 
-		RefreshPotionButton(_potionHpBtn, "potion_hp_small");
-		RefreshPotionButton(_potionMpBtn, "potion_mp_small");
+		RefreshPotionsRow();
 
 		RefreshEnemyArea();
 		RefreshHand();
+	}
+
+	// Динамически перестраиваем кнопки зелий: показываем все типы, что
+	// сейчас лежат в инвентаре. Новый тип из лута → кнопка появляется сама.
+	private void RefreshPotionsRow()
+	{
+		foreach (Node c in _potionsRow.GetChildren())
+		{
+			_potionsRow.RemoveChild(c);
+			c.QueueFree();
+		}
+		var p = GameData.Instance.Character;
+		if (p == null) return;
+		foreach (var potion in PotionsDB.All())
+		{
+			int count = p.Inventory.CountOf(potion.Id);
+			if (count <= 0) continue;
+			var btn = new Button { Text = $"{potion.Icon}×{count}" };
+			UIStyle.StyleButton(btn);
+			btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+			btn.Disabled = _combatOver;
+			btn.TooltipText = $"{potion.Name}\n{potion.Description}";
+			string id = potion.Id;
+			btn.Pressed += () => OnUsePotion(id);
+			_potionsRow.AddChild(btn);
+		}
 	}
 
 	private void RefreshEquipSlots()
@@ -318,22 +331,6 @@ public partial class Combat
 		slot.AddChild(label);
 
 		row.AddChild(slot);
-	}
-
-	private void RefreshPotionButton(Button btn, string itemId)
-	{
-		var p = GameData.Instance.Character;
-		var potion = PotionsDB.Get(itemId);
-		if (p == null || potion == null)
-		{
-			btn.Text = "—";
-			btn.Disabled = true;
-			return;
-		}
-		int count = p.Inventory.CountOf(itemId);
-		btn.Text = $"{potion.Icon} ×{count}";
-		btn.Disabled = count <= 0 || _combatOver;
-		btn.TooltipText = $"{potion.Name}\n{potion.Description}";
 	}
 
 	private void RefreshEnemyArea()
@@ -412,6 +409,7 @@ public partial class Combat
 			{
 				"phys_taken_pct" => $"Пролом брони +{(int)e.Amount}% ({e.Remaining})",
 				"magic_dmg_pct"  => $"Маг. фокус +{(int)e.Amount}% ({e.Remaining})",
+				"phys_dmg_pct"   => $"Ярость +{(int)e.Amount}% ({e.Remaining})",
 				_                => $"{e.Id} ({e.Remaining})",
 			});
 		}

@@ -107,6 +107,18 @@ public partial class InventoryOverlay
 		return (id, "—", "?");
 	}
 
+	// Редкость для подкраски рамки в инвентаре.
+	private static ItemRarity GetItemRarity(string id)
+	{
+		var w = ItemsDB.GetWeapon(id);
+		if (w != null) return w.Rarity;
+		var a = ItemsDB.GetArmor(id);
+		if (a != null) return a.Rarity;
+		var p = PotionsDB.Get(id);
+		if (p != null) return p.Rarity;
+		return ItemRarity.Common;
+	}
+
 	private static string SlotIcon(ArmorSlot s) => s switch
 	{
 		ArmorSlot.Chest  => "👕",

@@ -80,6 +80,9 @@ public static class CardsDB
 		if (p == null) return Math.Max(1, card.BaseDamage);
 		float baseAmt = card.BaseDamage + p.Str / 3f + p.WeaponPhysAtk() + p.PhysAtkBonus();
 		float raw = baseAmt * p.PhysMult();
+		// Бафф эликсира ярости (potion_strength).
+		raw *= 1f + p.GetEffectAmount("phys_dmg_pct") / 100f;
+		// Дебаф пролома брони на враге.
 		float debuff = enemy != null ? enemy.GetEffectAmount("phys_taken_pct") / 100f : 0f;
 		raw *= 1f + debuff;
 		return Math.Max(1, (int)Math.Round(raw));

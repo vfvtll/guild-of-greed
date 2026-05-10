@@ -9,6 +9,7 @@ public class WeaponData
 	public string Type;
 	public string Grade;
 	public string Tier;
+	public ItemRarity Rarity = ItemRarity.Common;
 	public int PhysAtk;
 	public int MagicAtk;
 	public float PhysMult = 1.0f;
