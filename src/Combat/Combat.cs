@@ -238,7 +238,9 @@ public partial class Combat : Control
 	private void OnInventoryPressed()
 	{
 		if (_inventoryOverlay != null) return;
-		_inventoryOverlay = new InventoryOverlay();
+		// Во время активного боя инвентарь — только просмотр.
+		// Можно менять экипировку и пить зелья из инвентаря только когда бой завершён.
+		_inventoryOverlay = new InventoryOverlay { ReadOnly = !_combatOver };
 		_inventoryOverlay.Closed += OnInventoryClosed;
 		AddChild(_inventoryOverlay);
 	}

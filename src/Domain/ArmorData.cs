@@ -8,6 +8,10 @@ public enum ArmorSlot
 	Helmet,   // шлем
 	Gloves,   // перчатки
 	Boots,    // сапоги
+	Amulet,   // амулет / ожерелье
+	Ring1,    // кольцо 1 (предметы-кольца в БД помечены этим слотом по умолчанию;
+	          //  при надевании движок сам выберет Ring1 или Ring2 если есть свободное)
+	Ring2,    // кольцо 2 (используется только в SetArmorSlot/GetArmorSlot)
 }
 
 public class ArmorData

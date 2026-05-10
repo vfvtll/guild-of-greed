@@ -16,7 +16,7 @@ public partial class Combat
 	private Label _targetingHint;
 	private PanelContainer _targetingBanner;
 	private Button _potionHpBtn, _potionMpBtn;
-	private HBoxContainer _equipSlotsRow;
+	private HBoxContainer _equipArmorRow, _equipJewelryRow;
 
 	private void BuildUI()
 	{
@@ -81,11 +81,16 @@ public partial class Combat
 		_statsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		pv.AddChild(_statsLabel);
 
-		// 5 слотов экипировки иконками (вместо 5 строк текстом).
-		_equipSlotsRow = new HBoxContainer();
-		_equipSlotsRow.AddThemeConstantOverride("separation", 4);
-		_equipSlotsRow.Alignment = BoxContainer.AlignmentMode.Center;
-		pv.AddChild(_equipSlotsRow);
+		// Экипировка иконками: первый ряд — броня (5), второй ряд — бижутерия (3).
+		_equipArmorRow = new HBoxContainer();
+		_equipArmorRow.AddThemeConstantOverride("separation", 4);
+		_equipArmorRow.Alignment = BoxContainer.AlignmentMode.Center;
+		pv.AddChild(_equipArmorRow);
+
+		_equipJewelryRow = new HBoxContainer();
+		_equipJewelryRow.AddThemeConstantOverride("separation", 4);
+		_equipJewelryRow.Alignment = BoxContainer.AlignmentMode.Center;
+		pv.AddChild(_equipJewelryRow);
 
 		_blockLabel = UIStyle.MakeLabel("", 13, UIStyle.BlockCyan);
 		pv.AddChild(_blockLabel);
@@ -273,21 +278,30 @@ public partial class Combat
 
 	private void RefreshEquipSlots()
 	{
-		foreach (Node c in _equipSlotsRow.GetChildren())
-		{
-			_equipSlotsRow.RemoveChild(c);
-			c.QueueFree();
-		}
+		ClearRow(_equipArmorRow);
+		ClearRow(_equipJewelryRow);
 		var p = GameData.Instance.Character;
 		if (p == null) return;
-		AddEquipSlotIcon("⚔", p.Weapon?.Name);
-		AddEquipSlotIcon("👕", p.Chest?.Name);
-		AddEquipSlotIcon("⛑", p.Helmet?.Name);
-		AddEquipSlotIcon("🧤", p.Gloves?.Name);
-		AddEquipSlotIcon("👢", p.Boots?.Name);
+		AddEquipSlotIcon(_equipArmorRow,   "⚔",  p.Weapon?.Name);
+		AddEquipSlotIcon(_equipArmorRow,   "👕", p.Chest?.Name);
+		AddEquipSlotIcon(_equipArmorRow,   "⛑",  p.Helmet?.Name);
+		AddEquipSlotIcon(_equipArmorRow,   "🧤", p.Gloves?.Name);
+		AddEquipSlotIcon(_equipArmorRow,   "👢", p.Boots?.Name);
+		AddEquipSlotIcon(_equipJewelryRow, "📿", p.Amulet?.Name);
+		AddEquipSlotIcon(_equipJewelryRow, "💍", p.Ring1?.Name);
+		AddEquipSlotIcon(_equipJewelryRow, "💍", p.Ring2?.Name);
 	}
 
-	private void AddEquipSlotIcon(string emoji, string itemName)
+	private static void ClearRow(HBoxContainer row)
+	{
+		foreach (Node c in row.GetChildren())
+		{
+			row.RemoveChild(c);
+			c.QueueFree();
+		}
+	}
+
+	private void AddEquipSlotIcon(HBoxContainer row, string emoji, string itemName)
 	{
 		var slot = new PanelContainer { CustomMinimumSize = new Vector2(44, 44) };
 		var sb = UIStyle.MiniPanelStyle();
@@ -308,7 +322,7 @@ public partial class Combat
 		if (empty) label.Modulate = new Color(0.5f, 0.5f, 0.5f);
 		slot.AddChild(label);
 
-		_equipSlotsRow.AddChild(slot);
+		row.AddChild(slot);
 	}
 
 	private void RefreshPotionButton(Button btn, string itemId)

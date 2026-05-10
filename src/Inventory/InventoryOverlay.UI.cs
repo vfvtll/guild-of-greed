@@ -14,20 +14,28 @@ public partial class InventoryOverlay
 
 		var panel = new PanelContainer
 		{
-			Position = new Vector2(70, 60),
-			Size = new Vector2(1140, 600),
-			CustomMinimumSize = new Vector2(1140, 600),
+			Position = new Vector2(70, 30),
+			Size = new Vector2(1140, 660),
+			CustomMinimumSize = new Vector2(1140, 660),
 		};
 		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(panel);
 
 		var v = new VBoxContainer();
-		v.AddThemeConstantOverride("separation", 14);
+		v.AddThemeConstantOverride("separation", 12);
 		panel.AddChild(v);
 
 		var title = UIStyle.MakeLabel("🎒 Инвентарь", 22, UIStyle.GoldBright);
 		title.HorizontalAlignment = HorizontalAlignment.Center;
 		v.AddChild(title);
+
+		// Плашка показа ReadOnly — видна только во время боя.
+		_readOnlyHint = UIStyle.MakeLabel(
+			"🔒 Бой идёт — изменения недоступны (зелья пьются через панель игрока)",
+			13, UIStyle.WarnAmber);
+		_readOnlyHint.HorizontalAlignment = HorizontalAlignment.Center;
+		_readOnlyHint.Visible = ReadOnly;
+		v.AddChild(_readOnlyHint);
 
 		var sep = new HSeparator();
 		var sepStyle = new StyleBoxFlat

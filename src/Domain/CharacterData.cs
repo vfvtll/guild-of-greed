@@ -34,6 +34,9 @@ public class CharacterData
 	public string EquippedHelmetId = "";
 	public string EquippedGlovesId = "";
 	public string EquippedBootsId  = "";
+	public string EquippedAmuletId = "";
+	public string EquippedRing1Id  = "";
+	public string EquippedRing2Id  = "";
 
 	// === Инвентарь (с лимитом по слотам) ===
 	public Inventory Inventory = new();
@@ -44,6 +47,9 @@ public class CharacterData
 	[JsonIgnore] public ArmorData Helmet;
 	[JsonIgnore] public ArmorData Gloves;
 	[JsonIgnore] public ArmorData Boots;
+	[JsonIgnore] public ArmorData Amulet;
+	[JsonIgnore] public ArmorData Ring1;
+	[JsonIgnore] public ArmorData Ring2;
 
 	// === Боевое состояние (рантайм) ===
 	[JsonIgnore] public int CurrentHp;
@@ -88,13 +94,16 @@ public class CharacterData
 	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct);
 	public int   PhysDef()       => SumArmor(a => a.PhysDef);
 
-	// Итерация по всем надетым кускам (без null'ов).
+	// Итерация по всем надетым кускам брони + бижутерии (без null'ов).
 	public IEnumerable<ArmorData> AllArmor()
 	{
 		if (Chest  != null) yield return Chest;
 		if (Helmet != null) yield return Helmet;
 		if (Gloves != null) yield return Gloves;
 		if (Boots  != null) yield return Boots;
+		if (Amulet != null) yield return Amulet;
+		if (Ring1  != null) yield return Ring1;
+		if (Ring2  != null) yield return Ring2;
 	}
 
 	private int SumArmor(Func<ArmorData, int> selector)
@@ -110,6 +119,9 @@ public class CharacterData
 		ArmorSlot.Helmet => Helmet,
 		ArmorSlot.Gloves => Gloves,
 		ArmorSlot.Boots  => Boots,
+		ArmorSlot.Amulet => Amulet,
+		ArmorSlot.Ring1  => Ring1,
+		ArmorSlot.Ring2  => Ring2,
 		_                => null,
 	};
 
@@ -121,6 +133,9 @@ public class CharacterData
 			case ArmorSlot.Helmet: Helmet = data; break;
 			case ArmorSlot.Gloves: Gloves = data; break;
 			case ArmorSlot.Boots:  Boots  = data; break;
+			case ArmorSlot.Amulet: Amulet = data; break;
+			case ArmorSlot.Ring1:  Ring1  = data; break;
+			case ArmorSlot.Ring2:  Ring2  = data; break;
 		}
 	}
 

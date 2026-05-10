@@ -115,6 +115,54 @@ public static class ItemsDB
 			Slot = ArmorSlot.Boots, Grade = "E", Tier = "low",
 			PhysDef = 2, MpRegenBonus = 1, PhysAtkBonus = 1,
 		},
+
+		// === АМУЛЕТЫ (amulet) ===
+		["amulet_vitality_low"] = new()
+		{
+			Id = "amulet_vitality_low", Name = "Амулет жизни", Type = "amulet",
+			Slot = ArmorSlot.Amulet, Grade = "E", Tier = "low",
+			HpBonus = 25, PhysDef = 1,
+		},
+		["amulet_focus_low"] = new()
+		{
+			Id = "amulet_focus_low", Name = "Амулет сосредоточения", Type = "amulet",
+			Slot = ArmorSlot.Amulet, Grade = "E", Tier = "low",
+			MpMaxBonus = 20, MagicAtkBonus = 2,
+		},
+		["amulet_might_low"] = new()
+		{
+			Id = "amulet_might_low", Name = "Амулет силы", Type = "amulet",
+			Slot = ArmorSlot.Amulet, Grade = "E", Tier = "low",
+			PhysAtkBonus = 3, PhysDef = 1,
+		},
+
+		// === КОЛЬЦА (ring) ===
+		// Все кольца помечены Slot = Ring1; движок при надевании сам выберет
+		// свободный слот Ring1 или Ring2 (если оба заняты — свапнёт Ring1).
+		["ring_power_low"] = new()
+		{
+			Id = "ring_power_low", Name = "Кольцо силы", Type = "ring",
+			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
+			PhysAtkBonus = 2,
+		},
+		["ring_focus_low"] = new()
+		{
+			Id = "ring_focus_low", Name = "Кольцо сосредоточения", Type = "ring",
+			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
+			MagicAtkBonus = 2,
+		},
+		["ring_haste_low"] = new()
+		{
+			Id = "ring_haste_low", Name = "Кольцо проворства", Type = "ring",
+			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
+			ExtraDrawBonus = 1,
+		},
+		["ring_vitality_low"] = new()
+		{
+			Id = "ring_vitality_low", Name = "Кольцо стойкости", Type = "ring",
+			Slot = ArmorSlot.Ring1, Grade = "E", Tier = "low",
+			HpBonus = 15,
+		},
 	};
 
 	// =====================================================================

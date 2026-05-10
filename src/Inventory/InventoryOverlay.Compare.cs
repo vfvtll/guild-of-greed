@@ -113,6 +113,9 @@ public partial class InventoryOverlay
 		ArmorSlot.Helmet => "⛑",
 		ArmorSlot.Gloves => "🧤",
 		ArmorSlot.Boots  => "👢",
+		ArmorSlot.Amulet => "📿",
+		ArmorSlot.Ring1  => "💍",
+		ArmorSlot.Ring2  => "💍",
 		_                => "🛡",
 	};
 }

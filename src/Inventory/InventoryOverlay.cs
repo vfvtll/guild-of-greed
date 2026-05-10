@@ -24,8 +24,13 @@ public partial class InventoryOverlay : Control
 	[Signal]
 	public delegate void ClosedEventHandler();
 
+	// В режиме просмотра (во время боя) клики по слотам ничего не делают.
+	// Combat выставляет ReadOnly = !_combatOver перед AddChild.
+	public bool ReadOnly = false;
+
 	private Label _capacityLabel;
 	private Label _statusLabel;
+	private Label _readOnlyHint;
 	private VBoxContainer _equipmentList;
 	private GridContainer _inventoryGrid;
 	private Label _summaryAtk, _summaryDef, _summaryCrit;
@@ -53,11 +58,14 @@ public partial class InventoryOverlay : Control
 		RefreshSummary(ch);
 
 		ClearChildren(_equipmentList);
-		_equipmentList.AddChild(MakeSlotRow("⚔", "Оружие",   ch.EquippedWeaponId, () => UnequipWeapon()));
+		_equipmentList.AddChild(MakeSlotRow("⚔",  "Оружие",   ch.EquippedWeaponId, () => UnequipWeapon()));
 		_equipmentList.AddChild(MakeSlotRow("👕", "Грудь",    ch.EquippedChestId,  () => UnequipArmor(ArmorSlot.Chest)));
-		_equipmentList.AddChild(MakeSlotRow("⛑", "Шлем",     ch.EquippedHelmetId, () => UnequipArmor(ArmorSlot.Helmet)));
+		_equipmentList.AddChild(MakeSlotRow("⛑",  "Шлем",     ch.EquippedHelmetId, () => UnequipArmor(ArmorSlot.Helmet)));
 		_equipmentList.AddChild(MakeSlotRow("🧤", "Перчатки", ch.EquippedGlovesId, () => UnequipArmor(ArmorSlot.Gloves)));
 		_equipmentList.AddChild(MakeSlotRow("👢", "Сапоги",   ch.EquippedBootsId,  () => UnequipArmor(ArmorSlot.Boots)));
+		_equipmentList.AddChild(MakeSlotRow("📿", "Амулет",   ch.EquippedAmuletId, () => UnequipArmor(ArmorSlot.Amulet)));
+		_equipmentList.AddChild(MakeSlotRow("💍", "Кольцо 1", ch.EquippedRing1Id,  () => UnequipArmor(ArmorSlot.Ring1)));
+		_equipmentList.AddChild(MakeSlotRow("💍", "Кольцо 2", ch.EquippedRing2Id,  () => UnequipArmor(ArmorSlot.Ring2)));
 
 		ClearChildren(_inventoryGrid);
 		int total = Inventory.Capacity;
@@ -100,6 +108,7 @@ public partial class InventoryOverlay : Control
 
 	private void UnequipWeapon()
 	{
+		if (BlockedByReadOnly()) return;
 		if (!GameData.Instance.UnequipWeapon())
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Оружие снято.", error: false);
@@ -108,6 +117,7 @@ public partial class InventoryOverlay : Control
 
 	private void UnequipArmor(ArmorSlot slot)
 	{
+		if (BlockedByReadOnly()) return;
 		if (!GameData.Instance.UnequipSlot(slot))
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Снято в инвентарь.", error: false);
@@ -116,6 +126,7 @@ public partial class InventoryOverlay : Control
 
 	private void UseInventorySlot(string itemId)
 	{
+		if (BlockedByReadOnly()) return;
 		if (PotionsDB.Get(itemId) != null)
 		{
 			if (GameData.Instance.UsePotion(itemId))
@@ -129,6 +140,15 @@ public partial class InventoryOverlay : Control
 			else SetStatus("Не удалось надеть.", error: true);
 		}
 		Refresh();
+	}
+
+	// Если открыли инвентарь во время боя — все мутирующие действия запрещены.
+	// Зелья пьются через отдельные кнопки в панели игрока.
+	private bool BlockedByReadOnly()
+	{
+		if (!ReadOnly) return false;
+		SetStatus("Во время боя нельзя менять экипировку или пить зелья отсюда.", error: true);
+		return true;
 	}
 
 	private void SetStatus(string msg, bool error)

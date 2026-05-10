@@ -90,11 +90,15 @@ public partial class GameData : Node
 		if (string.IsNullOrEmpty(ch.EquippedBootsId))
 			ch.EquippedBootsId = DefaultBootsId;
 
-		// Стартовый набор зелий (только для нового перса с пустым инвентарём).
+		// Стартовый набор для нового перса с пустым инвентарём.
 		if (ch.Inventory != null && ch.Inventory.Slots.Count == 0)
 		{
 			AddItem(ch, "potion_hp_small", 3);
 			AddItem(ch, "potion_mp_small", 2);
+			// Бижутерия — не надета, чтобы игрок сам испытал слоты
+			AddItem(ch, "amulet_might_low",  1);
+			AddItem(ch, "ring_power_low",    1);
+			AddItem(ch, "ring_focus_low",    1);
 		}
 	}
 
@@ -113,7 +117,7 @@ public partial class GameData : Node
 	}
 
 	// Резолв: ID → реальный объект. Вызывается после SetCharacter и после
-	// смены экипировки (CycleLoadout/CycleChest).
+	// смены экипировки (CycleLoadout/CycleChest/equip из инвентаря).
 	private void ResolveEquipment()
 	{
 		if (Character == null) return;
@@ -122,6 +126,9 @@ public partial class GameData : Node
 		Character.Helmet = ItemsDB.GetArmor(Character.EquippedHelmetId)?.Clone();
 		Character.Gloves = ItemsDB.GetArmor(Character.EquippedGlovesId)?.Clone();
 		Character.Boots  = ItemsDB.GetArmor(Character.EquippedBootsId)?.Clone();
+		Character.Amulet = ItemsDB.GetArmor(Character.EquippedAmuletId)?.Clone();
+		Character.Ring1  = ItemsDB.GetArmor(Character.EquippedRing1Id)?.Clone();
+		Character.Ring2  = ItemsDB.GetArmor(Character.EquippedRing2Id)?.Clone();
 	}
 
 	// === Циклирование (тестовое — будущий инвентарь это заменит) ===
@@ -175,10 +182,18 @@ public partial class GameData : Node
 		var armor = ItemsDB.GetArmor(itemId);
 		if (armor != null)
 		{
+			ArmorSlot target = armor.Slot;
+			// Кольца: если Slot=Ring1 а Ring1 занят и Ring2 пуст — кладём в Ring2.
+			if (target == ArmorSlot.Ring1
+				&& !string.IsNullOrEmpty(Character.EquippedRing1Id)
+				&& string.IsNullOrEmpty(Character.EquippedRing2Id))
+			{
+				target = ArmorSlot.Ring2;
+			}
 			Character.Inventory.Remove(itemId, 1);
-			string oldId = GetEquippedArmorId(armor.Slot);
+			string oldId = GetEquippedArmorId(target);
 			if (!string.IsNullOrEmpty(oldId)) AddItem(Character, oldId, 1);
-			SetEquippedArmorId(armor.Slot, itemId);
+			SetEquippedArmorId(target, itemId);
 			ResolveEquipment();
 			return true;
 		}
@@ -217,6 +232,9 @@ public partial class GameData : Node
 		ArmorSlot.Helmet => Character.EquippedHelmetId,
 		ArmorSlot.Gloves => Character.EquippedGlovesId,
 		ArmorSlot.Boots  => Character.EquippedBootsId,
+		ArmorSlot.Amulet => Character.EquippedAmuletId,
+		ArmorSlot.Ring1  => Character.EquippedRing1Id,
+		ArmorSlot.Ring2  => Character.EquippedRing2Id,
 		_                => "",
 	};
 
@@ -228,6 +246,9 @@ public partial class GameData : Node
 			case ArmorSlot.Helmet: Character.EquippedHelmetId = id; break;
 			case ArmorSlot.Gloves: Character.EquippedGlovesId = id; break;
 			case ArmorSlot.Boots:  Character.EquippedBootsId  = id; break;
+			case ArmorSlot.Amulet: Character.EquippedAmuletId = id; break;
+			case ArmorSlot.Ring1:  Character.EquippedRing1Id  = id; break;
+			case ArmorSlot.Ring2:  Character.EquippedRing2Id  = id; break;
 		}
 	}
 
