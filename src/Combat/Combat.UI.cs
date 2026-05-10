@@ -7,7 +7,7 @@ public partial class Combat
 {
 	// === UI узлы ===
 	private Button _loadoutButton, _chestButton, _restartButton, _endTurnButton;
-	private Label _playerNameLabel, _hpLabel, _mpLabel, _statsLabel, _equipLabel, _blockLabel, _buffsLabel;
+	private Label _playerNameLabel, _hpLabel, _mpLabel, _statsLabel, _blockLabel, _buffsLabel;
 	private ProgressBar _hpBar, _mpBar;
 	private HBoxContainer _enemyArea;
 	private Label _deckCountLabel, _discardCountLabel;
@@ -16,6 +16,7 @@ public partial class Combat
 	private Label _targetingHint;
 	private PanelContainer _targetingBanner;
 	private Button _potionHpBtn, _potionMpBtn;
+	private HBoxContainer _equipSlotsRow;
 
 	private void BuildUI()
 	{
@@ -80,9 +81,11 @@ public partial class Combat
 		_statsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		pv.AddChild(_statsLabel);
 
-		_equipLabel = UIStyle.MakeLabel("", 11, UIStyle.TextSecondary);
-		_equipLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		pv.AddChild(_equipLabel);
+		// 5 слотов экипировки иконками (вместо 5 строк текстом).
+		_equipSlotsRow = new HBoxContainer();
+		_equipSlotsRow.AddThemeConstantOverride("separation", 4);
+		_equipSlotsRow.Alignment = BoxContainer.AlignmentMode.Center;
+		pv.AddChild(_equipSlotsRow);
 
 		_blockLabel = UIStyle.MakeLabel("", 13, UIStyle.BlockCyan);
 		pv.AddChild(_blockLabel);
@@ -244,12 +247,7 @@ public partial class Combat
 			$"STR {p.Str}  INT {p.Int}  CON {p.Con}\n" +
 			$"WIT {p.Wit}  MEN {p.Men}  DEX {p.Dex}\n" +
 			critInfo;
-		_equipLabel.Text =
-			$"⚔ {p.Weapon?.Name ?? "—"}\n" +
-			$"👕 {p.Chest?.Name ?? "—"}\n" +
-			$"⛑ {p.Helmet?.Name ?? "—"}\n" +
-			$"🧤 {p.Gloves?.Name ?? "—"}\n" +
-			$"👢 {p.Boots?.Name ?? "—"}";
+		RefreshEquipSlots();
 
 		if (p.CurrentBlock > 0)
 		{
@@ -271,6 +269,46 @@ public partial class Combat
 
 		RefreshEnemyArea();
 		RefreshHand();
+	}
+
+	private void RefreshEquipSlots()
+	{
+		foreach (Node c in _equipSlotsRow.GetChildren())
+		{
+			_equipSlotsRow.RemoveChild(c);
+			c.QueueFree();
+		}
+		var p = GameData.Instance.Character;
+		if (p == null) return;
+		AddEquipSlotIcon("⚔", p.Weapon?.Name);
+		AddEquipSlotIcon("👕", p.Chest?.Name);
+		AddEquipSlotIcon("⛑", p.Helmet?.Name);
+		AddEquipSlotIcon("🧤", p.Gloves?.Name);
+		AddEquipSlotIcon("👢", p.Boots?.Name);
+	}
+
+	private void AddEquipSlotIcon(string emoji, string itemName)
+	{
+		var slot = new PanelContainer { CustomMinimumSize = new Vector2(44, 44) };
+		var sb = UIStyle.MiniPanelStyle();
+		bool empty = string.IsNullOrEmpty(itemName);
+		sb.BorderWidthLeft = 2; sb.BorderWidthRight = 2;
+		sb.BorderWidthTop = 2; sb.BorderWidthBottom = 2;
+		sb.BorderColor = empty ? UIStyle.GoldDark * 0.5f : UIStyle.GoldMid;
+		sb.BgColor = empty ? new Color(0.10f, 0.09f, 0.13f) : UIStyle.PanelBgLight;
+		sb.ContentMarginLeft = 4; sb.ContentMarginRight = 4;
+		sb.ContentMarginTop = 4; sb.ContentMarginBottom = 4;
+		slot.AddThemeStyleboxOverride("panel", sb);
+		slot.TooltipText = empty ? "(пусто)" : itemName;
+		slot.MouseFilter = MouseFilterEnum.Stop;
+
+		var label = UIStyle.MakeLabel(emoji, 22, UIStyle.GoldBright);
+		label.HorizontalAlignment = HorizontalAlignment.Center;
+		label.VerticalAlignment = VerticalAlignment.Center;
+		if (empty) label.Modulate = new Color(0.5f, 0.5f, 0.5f);
+		slot.AddChild(label);
+
+		_equipSlotsRow.AddChild(slot);
 	}
 
 	private void RefreshPotionButton(Button btn, string itemId)

@@ -39,6 +39,9 @@ public partial class CharacterCreation : Control
 	private readonly Label[] _addedLabels = new Label[StatCount];
 	private readonly Label[] _totalLabels = new Label[StatCount];
 
+	// Превью производных характеристик (HP/MP/реген/крит) — обновляется на каждое +/-.
+	private Label _previewHp, _previewMp, _previewRegen, _previewCrit, _previewBlock, _previewBonus;
+
 	public override void _Ready()
 	{
 		SetAnchorsPreset(LayoutPreset.FullRect);
@@ -106,6 +109,27 @@ public partial class CharacterCreation : Control
 		_pointsLabel.AddThemeColorOverride("font_color",
 			_pointsRemaining == 0 ? UIStyle.HealGreen : UIStyle.WarnAmber);
 		_confirmButton.Disabled = _pointsRemaining > 0;
+
+		RefreshPreview();
+	}
+
+	// Обновляет превью производных параметров с учётом текущего распределения.
+	// Без оружия и брони — чистая база, чтобы игрок видел что даст голый персонаж.
+	private void RefreshPreview()
+	{
+		int str = Total(0), inT = Total(1), con = Total(2);
+		int wit = Total(3), men = Total(4), dex = Total(5);
+		int hp = 40 + con * 2;
+		int mp = 30 + men;
+		int regen = wit / 3;
+		float critMult = 1.5f + dex / 100f;
+		int blockBonus = dex / 4;
+		_previewHp.Text     = $"❤ ХП: {hp}";
+		_previewMp.Text     = $"💧 МП: {mp}";
+		_previewRegen.Text  = $"🔄 Реген: {regen}/ход";
+		_previewCrit.Text   = $"🎯 Крит ×{critMult:F2}";
+		_previewBlock.Text  = $"🛡 +{blockBonus} к блоку";
+		_previewBonus.Text  = $"⚔ +{str / 3}  🔮 +{inT / 3} к урону";
 	}
 
 	// =====================================================================
@@ -121,9 +145,9 @@ public partial class CharacterCreation : Control
 
 		var panel = new PanelContainer
 		{
-			Position = new Vector2(290, 40),
-			Size = new Vector2(700, 640),
-			CustomMinimumSize = new Vector2(700, 640),
+			Position = new Vector2(290, 20),
+			Size = new Vector2(700, 680),
+			CustomMinimumSize = new Vector2(700, 680),
 		};
 		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(panel);
@@ -217,6 +241,29 @@ public partial class CharacterCreation : Control
 		_pointsLabel = UIStyle.MakeLabel("", 18, UIStyle.WarnAmber);
 		_pointsLabel.HorizontalAlignment = HorizontalAlignment.Center;
 		v.AddChild(_pointsLabel);
+
+		// === Превью производных параметров ===
+		var previewPanel = new PanelContainer();
+		previewPanel.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
+		v.AddChild(previewPanel);
+
+		var previewGrid = new GridContainer { Columns = 3 };
+		previewGrid.AddThemeConstantOverride("h_separation", 18);
+		previewGrid.AddThemeConstantOverride("v_separation", 4);
+		previewPanel.AddChild(previewGrid);
+
+		_previewHp     = UIStyle.MakeLabel("", 13, UIStyle.HealGreen);
+		_previewMp     = UIStyle.MakeLabel("", 13, UIStyle.MpFill);
+		_previewRegen  = UIStyle.MakeLabel("", 13, UIStyle.MpFill);
+		_previewCrit   = UIStyle.MakeLabel("", 13, UIStyle.WarnAmber);
+		_previewBlock  = UIStyle.MakeLabel("", 13, UIStyle.BlockCyan);
+		_previewBonus  = UIStyle.MakeLabel("", 13, UIStyle.GoldBright);
+		previewGrid.AddChild(_previewHp);
+		previewGrid.AddChild(_previewMp);
+		previewGrid.AddChild(_previewRegen);
+		previewGrid.AddChild(_previewCrit);
+		previewGrid.AddChild(_previewBlock);
+		previewGrid.AddChild(_previewBonus);
 
 		// === Нижние кнопки ===
 		var btnBar = new HBoxContainer();
