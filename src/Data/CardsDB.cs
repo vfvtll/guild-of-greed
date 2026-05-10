@@ -120,7 +120,7 @@ public static class CardsDB
 	}
 
 	public static int ComputeBlock(CardData card, CharacterData p)
-		=> card.Block + (p?.Str ?? 0) / 4;
+		=> card.Block + (p?.Dex ?? 0) / 4;
 
 	public static int ComputeHeal(CardData card, CharacterData p)
 		=> card.Heal + (p?.Int ?? 0) / 3;
@@ -151,15 +151,17 @@ public static class CardsDB
 				$"= ({card.BaseDamage} + STR÷3 + Оружие.ФизАтк + Броня.ФизАтк)\n" +
 				$"  × Оружие.ФизМульт\n" +
 				$"  × (1 + ПроломБрони ÷ 100)\n" +
-				$"\nЗатем − ФизЗащ цели и поглощается её блоком.",
+				$"\nЗатем − ФизЗащ цели и поглощается её блоком.\n" +
+				$"\n🎯 Крит: DEX÷2 % шанс, ×(1.5 + DEX÷100) урон",
 			"damage_magic" =>
 				$"Маг. урон\n" +
 				$"= ({card.BaseDamage} + INT÷3 + Оружие.МагАтк + Броня.МагАтк)\n" +
 				$"  × Оружие.МагМульт\n" +
 				$"  × (1 + Броня.МагАтк% ÷ 100)\n" +
-				$"  × (1 + МагФокус ÷ 100)",
+				$"  × (1 + МагФокус ÷ 100)\n" +
+				$"\n🎯 Крит: DEX÷2 % шанс, ×(1.5 + DEX÷100) урон",
 			"block" =>
-				$"Блок = {card.Block} + STR÷4\n" +
+				$"Блок = {card.Block} + DEX÷4\n" +
 				$"Сбрасывается в начале следующего хода.",
 			"heal" =>
 				$"Восстановление = {card.Heal} + INT÷3\n" +

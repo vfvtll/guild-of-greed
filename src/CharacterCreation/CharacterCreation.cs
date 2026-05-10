@@ -14,10 +14,10 @@ public partial class CharacterCreation : Control
 {
 	public event Action<CharacterData> Confirmed;
 
-	private const int StatCount = 5;
+	private const int StatCount = 6;
 	private const int PointsTotal = 10;
 
-	private static readonly string[] StatLabels = { "STR", "INT", "CON", "WIT", "MEN" };
+	private static readonly string[] StatLabels = { "STR", "INT", "CON", "WIT", "MEN", "DEX" };
 	private static readonly string[] StatDescriptions =
 	{
 		"Физическая атака",
@@ -25,6 +25,7 @@ public partial class CharacterCreation : Control
 		"Здоровье (ХП)",
 		"Реген маны",
 		"Максимум маны",
+		"Блок, шанс и сила крита",
 	};
 
 	private readonly int[] _baseStats = new int[StatCount];
@@ -84,6 +85,7 @@ public partial class CharacterCreation : Control
 			Con = Total(2),
 			Wit = Total(3),
 			Men = Total(4),
+			Dex = Total(5),
 		};
 		var name = _nameInput.Text?.Trim();
 		ch.CharacterName = string.IsNullOrEmpty(name) ? "Авантюрист" : name;
@@ -119,9 +121,9 @@ public partial class CharacterCreation : Control
 
 		var panel = new PanelContainer
 		{
-			Position = new Vector2(290, 60),
-			Size = new Vector2(700, 600),
-			CustomMinimumSize = new Vector2(700, 600),
+			Position = new Vector2(290, 40),
+			Size = new Vector2(700, 640),
+			CustomMinimumSize = new Vector2(700, 640),
 		};
 		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(panel);

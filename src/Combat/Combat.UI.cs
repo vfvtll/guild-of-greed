@@ -207,7 +207,10 @@ public partial class Combat
 		_mpBar.Value = p.CurrentMp;
 		_mpLabel.Text = $"МП: {p.CurrentMp} / {p.MaxMp()}  (реген +{p.MpRegen()})";
 
-		_statsLabel.Text = $"STR {p.Str}  INT {p.Int}  CON {p.Con}\nWIT {p.Wit}  MEN {p.Men}";
+		_statsLabel.Text =
+			$"STR {p.Str}  INT {p.Int}  CON {p.Con}\n" +
+			$"WIT {p.Wit}  MEN {p.Men}  DEX {p.Dex}\n" +
+			$"🎯 Крит: {p.CritChance():F0}% × {p.CritMultiplier():F2}";
 		_equipLabel.Text = $"⚔ {ItemsDB.DescribeWeapon(p.Weapon)}\n🛡 {ItemsDB.DescribeArmor(p.Armor)}";
 
 		if (p.CurrentBlock > 0)

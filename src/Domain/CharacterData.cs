@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 //   CON — ХП
 //   WIT — реген МП
 //   MEN — макс. МП
+//   DEX — блок (Guard и пр.), шанс крита, множитель крита
 //
 // Часть полей помечена [JsonIgnore] — они либо назначаются из БД (Weapon, Armor),
 // либо являются рантайм-состоянием боя (CurrentHp, эффекты). При сохранении/загрузке
@@ -24,6 +25,7 @@ public class CharacterData
 	public int Con;
 	public int Wit;
 	public int Men;
+	public int Dex;
 
 	[JsonIgnore] public WeaponData Weapon;
 	[JsonIgnore] public ArmorData Armor;
@@ -53,7 +55,14 @@ public class CharacterData
 		Con = RollStat();
 		Wit = RollStat();
 		Men = RollStat();
+		Dex = RollStat();
 	}
+
+	// === Крит ===
+	// CritChance в процентах: DEX 40 → 20%, DEX 50 → 25%.
+	// CritMultiplier: 1.5 + DEX/100. DEX 40 → 1.9x, DEX 50 → 2.0x.
+	public float CritChance() => Dex / 2f;
+	public float CritMultiplier() => 1.5f + Dex / 100f;
 
 	private static int RollStat() => Rng.Range(35, 46);  // 35..45 включительно
 

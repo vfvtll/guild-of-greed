@@ -94,13 +94,17 @@ public partial class Combat
 			case "damage_phys":
 			{
 				int dmg = CardsDB.ComputePhysDamage(card, p, target);
-				ApplyDamageToEnemy(target, dmg, true);
+				bool isCrit = Rng.Chance(p.CritChance() / 100f);
+				if (isCrit) dmg = (int)Math.Round(dmg * p.CritMultiplier());
+				ApplyDamageToEnemy(target, dmg, true, isCrit);
 				break;
 			}
 			case "damage_magic":
 			{
 				int dmg = CardsDB.ComputeMagicDamage(card, p, target);
-				ApplyDamageToEnemy(target, dmg, false);
+				bool isCrit = Rng.Chance(p.CritChance() / 100f);
+				if (isCrit) dmg = (int)Math.Round(dmg * p.CritMultiplier());
+				ApplyDamageToEnemy(target, dmg, false, isCrit);
 				break;
 			}
 			case "block":
@@ -151,7 +155,7 @@ public partial class Combat
 		return true;
 	}
 
-	private void ApplyDamageToEnemy(EnemyData enemy, int dmg, bool isPhys)
+	private void ApplyDamageToEnemy(EnemyData enemy, int dmg, bool isPhys, bool isCrit = false)
 	{
 		if (enemy == null) return;
 		int defense = isPhys ? enemy.PhysDef : enemy.MagicDef;
@@ -165,16 +169,31 @@ public partial class Combat
 		}
 		enemy.CurrentHp = Math.Max(0, enemy.CurrentHp - dmg);
 		string kind = isPhys ? "Физ" : "Маг";
+		string critTag = isCrit ? "[color=#fc4]🎯 КРИТ![/color] " : "";
 		Log(absorbed > 0
-			? $"→ {enemy.EnemyName}: {kind} урон {dmg} (поглощено блоком: {absorbed})"
-			: $"→ {enemy.EnemyName}: {kind} урон {dmg}");
+			? $"{critTag}→ {enemy.EnemyName}: {kind} урон {dmg} (поглощено блоком: {absorbed})"
+			: $"{critTag}→ {enemy.EnemyName}: {kind} урон {dmg}");
 
 		var ev = FindEnemyView(enemy);
 		if (ev != null)
 		{
 			var pos = ev.GlobalPosition + new Vector2(ev.Size.X / 2f, ev.Size.Y * 0.25f);
-			var color = isPhys ? new Color(1.0f, 0.6f, 0.35f) : new Color(0.75f, 0.55f, 1.0f);
-			SpawnFloatingText(pos, $"-{dmg}", color, 28);
+			Color color;
+			int fontSize;
+			string text;
+			if (isCrit)
+			{
+				color = new Color(1.0f, 0.85f, 0.20f);
+				fontSize = 38;
+				text = $"-{dmg}!";
+			}
+			else
+			{
+				color = isPhys ? new Color(1.0f, 0.6f, 0.35f) : new Color(0.75f, 0.55f, 1.0f);
+				fontSize = 28;
+				text = $"-{dmg}";
+			}
+			SpawnFloatingText(pos, text, color, fontSize);
 			ev.Flash();
 		}
 

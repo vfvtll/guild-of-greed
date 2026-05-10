@@ -51,12 +51,25 @@ public static class SaveGame
 			using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
 			if (file == null) return null;
 			var json = file.GetAsText();
-			return JsonSerializer.Deserialize<CharacterData>(json, Options);
+			var ch = JsonSerializer.Deserialize<CharacterData>(json, Options);
+			if (ch != null) Migrate(ch);
+			return ch;
 		}
 		catch (Exception ex)
 		{
 			GD.PrintErr($"SaveGame.Load: {ex.Message}");
 			return null;
+		}
+	}
+
+	// Миграции для сейвов старых версий. Запускается на каждой Load.
+	private static void Migrate(CharacterData ch)
+	{
+		// v1 → v2: добавлен DEX. Старый сейв => Dex == 0 => катаем случайно.
+		if (ch.Dex == 0)
+		{
+			ch.Dex = Rng.Range(35, 46);
+			GD.Print($"SaveGame: миграция — добавлен DEX={ch.Dex}");
 		}
 	}
 
