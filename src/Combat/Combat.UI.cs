@@ -12,7 +12,6 @@ public partial class Combat
 	private HBoxContainer _enemyArea;
 	private Label _deckCountLabel, _discardCountLabel;
 	private HBoxContainer _handContainer;
-	private RichTextLabel _logText;
 	private Label _targetingHint;
 	private PanelContainer _targetingBanner;
 	private Button _potionHpBtn, _potionMpBtn;
@@ -55,13 +54,19 @@ public partial class Combat
 		inventoryBtn.Pressed += OnInventoryPressed;
 		top.AddChild(inventoryBtn);
 
+		var logBtn = new Button { Text = "📜 Лог" };
+		UIStyle.StyleButton(logBtn);
+		logBtn.Pressed += OnLogPressed;
+		top.AddChild(logBtn);
+
 		var resetCharBtn = new Button { Text = "👤 Новый персонаж" };
 		UIStyle.StyleButton(resetCharBtn);
 		resetCharBtn.Pressed += OnResetCharacterPressed;
 		top.AddChild(resetCharBtn);
 
 		// === Player Panel ===
-		var (pp, pv) = MakeTitledPanel(Lang.T("ui.combat.player_panel"), new Vector2(20, 60), new Vector2(260, 320));
+		// Расширен до 340 (было 260) — лог-панель убрана, освободилось место.
+		var (pp, pv) = MakeTitledPanel(Lang.T("ui.combat.player_panel"), new Vector2(20, 60), new Vector2(340, 320));
 		AddChild(pp);
 
 		_playerNameLabel = UIStyle.MakeLabel("", 16, UIStyle.TextPrimary);
@@ -117,25 +122,15 @@ public partial class Combat
 		potionsRow.AddChild(_potionMpBtn);
 
 		// === Enemy Area ===
-		var (ep, ev) = MakeTitledPanel(Lang.T("ui.combat.enemies_panel"), new Vector2(290, 60), new Vector2(670, 320));
+		// Расширена до 890 (было 670) — лог-панель убрана с экрана, теперь
+		// открывается отдельным оверлеем по кнопке 📜.
+		var (ep, ev) = MakeTitledPanel(Lang.T("ui.combat.enemies_panel"), new Vector2(370, 60), new Vector2(890, 320));
 		AddChild(ep);
 		_enemyArea = new HBoxContainer();
-		_enemyArea.AddThemeConstantOverride("separation", 8);
+		_enemyArea.AddThemeConstantOverride("separation", 12);
 		_enemyArea.SizeFlagsVertical = SizeFlags.ExpandFill;
 		_enemyArea.Alignment = BoxContainer.AlignmentMode.Center;
 		ev.AddChild(_enemyArea);
-
-		// === Log Panel ===
-		var (lp, lv) = MakeTitledPanel(Lang.T("ui.combat.log_panel"), new Vector2(970, 60), new Vector2(290, 320));
-		AddChild(lp);
-		_logText = new RichTextLabel
-		{
-			BbcodeEnabled = true,
-			ScrollFollowing = true,
-			CustomMinimumSize = new Vector2(0, 250),
-		};
-		_logText.SizeFlagsVertical = SizeFlags.ExpandFill;
-		lv.AddChild(_logText);
 
 		// === Targeting hint banner ===
 		_targetingBanner = new PanelContainer

@@ -30,6 +30,10 @@ public partial class Combat : Control
 	// Активный оверлей инвентаря (null когда закрыт).
 	private InventoryOverlay _inventoryOverlay;
 
+	// Активный оверлей лога (null когда закрыт). Сам лог хранится в _logLines.
+	private CombatLogOverlay _logOverlay;
+	private readonly System.Collections.Generic.List<string> _logLines = new();
+
 	public override void _Ready()
 	{
 		SetAnchorsPreset(LayoutPreset.FullRect);
@@ -263,6 +267,25 @@ public partial class Combat : Control
 		RefreshUI();
 	}
 
+	// Открыть оверлей лога. Содержимое подгружается из буфера _logLines;
+	// дальнейший лог дополняет оверлей в реальном времени через AppendLine.
+	private void OnLogPressed()
+	{
+		if (_logOverlay != null) return;
+		_logOverlay = new CombatLogOverlay();
+		_logOverlay.Closed += OnLogClosed;
+		AddChild(_logOverlay);
+		_logOverlay.SetContent(string.Join("\n", _logLines));
+	}
+
+	private void OnLogClosed()
+	{
+		if (_logOverlay == null) return;
+		RemoveChild(_logOverlay);
+		_logOverlay.QueueFree();
+		_logOverlay = null;
+	}
+
 	public override void _UnhandledInput(InputEvent ev)
 	{
 		if (ev is InputEventKey key && key.Pressed && key.Keycode == Key.Escape && _selectedHandIndex >= 0)
@@ -284,8 +307,14 @@ public partial class Combat : Control
 	// Утилиты
 	// =====================================================================
 
-	private void Log(string msg) => _logText.AppendText(msg + "\n");
-	private void ClearLog() => _logText.Clear();
+	// Лог идёт в буфер. Если оверлей лога открыт — обновляем live.
+	private void Log(string msg)
+	{
+		_logLines.Add(msg);
+		_logOverlay?.AppendLine(msg);
+	}
+
+	private void ClearLog() => _logLines.Clear();
 
 	private static void Shuffle<T>(List<T> list)
 	{
