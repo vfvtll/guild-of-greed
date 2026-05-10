@@ -49,6 +49,11 @@ public partial class Combat
 		_restartButton.Pressed += OnRestartPressed;
 		top.AddChild(_restartButton);
 
+		var inventoryBtn = new Button { Text = "🎒 Инвентарь" };
+		UIStyle.StyleButton(inventoryBtn);
+		inventoryBtn.Pressed += OnInventoryPressed;
+		top.AddChild(inventoryBtn);
+
 		var resetCharBtn = new Button { Text = "👤 Новый персонаж" };
 		UIStyle.StyleButton(resetCharBtn);
 		resetCharBtn.Pressed += OnResetCharacterPressed;

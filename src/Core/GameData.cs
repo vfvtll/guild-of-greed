@@ -153,6 +153,84 @@ public partial class GameData : Node
 	public void CycleLocation()
 		=> SelectedLocation = (SelectedLocation + 1) % LocationNames.Length;
 
+	// === Equip / unequip из инвентаря ===
+	// Берём предмет из инвентаря и надеваем. Если в слоте уже что-то есть,
+	// старое уходит в инвентарь (свап). Возвращает true при успехе.
+	public bool EquipFromInventory(string itemId)
+	{
+		if (Character == null) return false;
+		if (!Character.Inventory.Has(itemId)) return false;
+
+		var weapon = ItemsDB.GetWeapon(itemId);
+		if (weapon != null)
+		{
+			Character.Inventory.Remove(itemId, 1);
+			if (!string.IsNullOrEmpty(Character.EquippedWeaponId))
+				AddItem(Character, Character.EquippedWeaponId, 1);
+			Character.EquippedWeaponId = itemId;
+			ResolveEquipment();
+			return true;
+		}
+
+		var armor = ItemsDB.GetArmor(itemId);
+		if (armor != null)
+		{
+			Character.Inventory.Remove(itemId, 1);
+			string oldId = GetEquippedArmorId(armor.Slot);
+			if (!string.IsNullOrEmpty(oldId)) AddItem(Character, oldId, 1);
+			SetEquippedArmorId(armor.Slot, itemId);
+			ResolveEquipment();
+			return true;
+		}
+
+		return false;
+	}
+
+	// Снять оружие в инвентарь. Не пройдёт если инвентарь полный.
+	public bool UnequipWeapon()
+	{
+		if (Character == null) return false;
+		if (string.IsNullOrEmpty(Character.EquippedWeaponId)) return false;
+		if (Character.Inventory.IsFull) return false;
+		AddItem(Character, Character.EquippedWeaponId, 1);
+		Character.EquippedWeaponId = "";
+		ResolveEquipment();
+		return true;
+	}
+
+	// Снять кусок брони в инвентарь.
+	public bool UnequipSlot(ArmorSlot slot)
+	{
+		if (Character == null) return false;
+		string id = GetEquippedArmorId(slot);
+		if (string.IsNullOrEmpty(id)) return false;
+		if (Character.Inventory.IsFull) return false;
+		AddItem(Character, id, 1);
+		SetEquippedArmorId(slot, "");
+		ResolveEquipment();
+		return true;
+	}
+
+	private string GetEquippedArmorId(ArmorSlot slot) => slot switch
+	{
+		ArmorSlot.Chest  => Character.EquippedChestId,
+		ArmorSlot.Helmet => Character.EquippedHelmetId,
+		ArmorSlot.Gloves => Character.EquippedGlovesId,
+		ArmorSlot.Boots  => Character.EquippedBootsId,
+		_                => "",
+	};
+
+	private void SetEquippedArmorId(ArmorSlot slot, string id)
+	{
+		switch (slot)
+		{
+			case ArmorSlot.Chest:  Character.EquippedChestId  = id; break;
+			case ArmorSlot.Helmet: Character.EquippedHelmetId = id; break;
+			case ArmorSlot.Gloves: Character.EquippedGlovesId = id; break;
+			case ArmorSlot.Boots:  Character.EquippedBootsId  = id; break;
+		}
+	}
+
 	// === Использование зелья ===
 	// Возвращает true если зелье было выпито.
 	public bool UsePotion(string itemId)

@@ -27,6 +27,9 @@ public partial class Combat : Control
 	// Индекс выбранной карты в _hand (для режима выбора цели). -1 = ничего не выбрано.
 	private int _selectedHandIndex = -1;
 
+	// Активный оверлей инвентаря (null когда закрыт).
+	private InventoryOverlay _inventoryOverlay;
+
 	public override void _Ready()
 	{
 		SetAnchorsPreset(LayoutPreset.FullRect);
@@ -227,6 +230,35 @@ public partial class Combat : Control
 	{
 		GameData.Instance.CycleLocation();
 		StartNewCombat();
+	}
+
+	// Открывает модальный оверлей инвентаря поверх боя.
+	// Бой не пересоздаётся — только меняется экипировка/инвентарь персонажа.
+	// При закрытии оверлей шлёт Closed → пересчитываем UI боя.
+	private void OnInventoryPressed()
+	{
+		if (_inventoryOverlay != null) return;
+		_inventoryOverlay = new InventoryOverlay();
+		_inventoryOverlay.Closed += OnInventoryClosed;
+		AddChild(_inventoryOverlay);
+	}
+
+	private void OnInventoryClosed()
+	{
+		if (_inventoryOverlay != null)
+		{
+			RemoveChild(_inventoryOverlay);
+			_inventoryOverlay.QueueFree();
+			_inventoryOverlay = null;
+		}
+		// Экипировка могла поменяться — пересчитываем HP/MP cap и т.п.
+		var p = GameData.Instance.Character;
+		if (p != null)
+		{
+			p.CurrentHp = Math.Min(p.CurrentHp, p.MaxHp());
+			p.CurrentMp = Math.Min(p.CurrentMp, p.MaxMp());
+		}
+		RefreshUI();
 	}
 
 	public override void _UnhandledInput(InputEvent ev)
