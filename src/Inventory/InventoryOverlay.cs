@@ -35,6 +35,11 @@ public partial class InventoryOverlay : Control
 	private GridContainer _inventoryGrid;
 	private Label _summaryAtk, _summaryDef, _summaryCrit;
 
+	// Для slide-in/out анимаций.
+	private PanelContainer _panel;
+	private ColorRect _dim;
+	private Vector2 _panelTargetPos;
+
 	private const int GridColumns = 4;
 
 	public override void _Ready()
@@ -43,6 +48,35 @@ public partial class InventoryOverlay : Control
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
 		Refresh();
+		PlayOpenAnimation();
+	}
+
+	// Закрытие через анимацию: панель уезжает вниз, фон гаснет, потом сигнал.
+	// Все callsite'ы (✕, "Закрыть", внешние кнопки) должны вызывать Close(),
+	// а не EmitSignal(SignalName.Closed) напрямую.
+	public void Close()
+	{
+		var t = CreateTween().SetParallel(true)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
+		t.TweenProperty(_panel, "position", _panelTargetPos + new Vector2(0, 30), 0.18f);
+		t.TweenProperty(_panel, "modulate:a", 0f, 0.18f);
+		t.TweenProperty(_dim, "modulate:a", 0f, 0.18f);
+		t.Chain().TweenCallback(Callable.From(() => EmitSignal(SignalName.Closed)));
+	}
+
+	private void PlayOpenAnimation()
+	{
+		if (_panel == null) return;
+		_panelTargetPos = _panel.Position;
+		_panel.Position = _panelTargetPos + new Vector2(0, 30);
+		_panel.Modulate = new Color(1, 1, 1, 0);
+		_dim.Modulate = new Color(1, 1, 1, 0);
+
+		var t = CreateTween().SetParallel(true)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		t.TweenProperty(_panel, "position", _panelTargetPos, 0.22f);
+		t.TweenProperty(_panel, "modulate:a", 1f, 0.22f);
+		t.TweenProperty(_dim, "modulate:a", 1f, 0.22f);
 	}
 
 	// =====================================================================

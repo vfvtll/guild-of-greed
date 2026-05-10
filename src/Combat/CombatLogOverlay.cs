@@ -10,11 +10,42 @@ public partial class CombatLogOverlay : Control
 
 	private RichTextLabel _logText;
 
+	// Для slide-in/out анимаций.
+	private PanelContainer _panel;
+	private ColorRect _dim;
+	private Vector2 _panelTargetPos;
+
 	public override void _Ready()
 	{
 		SetAnchorsPreset(LayoutPreset.FullRect);
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
+		PlayOpenAnimation();
+	}
+
+	public void Close()
+	{
+		var t = CreateTween().SetParallel(true)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
+		t.TweenProperty(_panel, "position", _panelTargetPos + new Vector2(0, 30), 0.18f);
+		t.TweenProperty(_panel, "modulate:a", 0f, 0.18f);
+		t.TweenProperty(_dim, "modulate:a", 0f, 0.18f);
+		t.Chain().TweenCallback(Callable.From(() => EmitSignal(SignalName.Closed)));
+	}
+
+	private void PlayOpenAnimation()
+	{
+		if (_panel == null) return;
+		_panelTargetPos = _panel.Position;
+		_panel.Position = _panelTargetPos + new Vector2(0, 30);
+		_panel.Modulate = new Color(1, 1, 1, 0);
+		_dim.Modulate = new Color(1, 1, 1, 0);
+
+		var t = CreateTween().SetParallel(true)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		t.TweenProperty(_panel, "position", _panelTargetPos, 0.22f);
+		t.TweenProperty(_panel, "modulate:a", 1f, 0.22f);
+		t.TweenProperty(_dim, "modulate:a", 1f, 0.22f);
 	}
 
 	// Полная замена содержимого лога (вызывается при открытии).
@@ -33,23 +64,23 @@ public partial class CombatLogOverlay : Control
 
 	private void BuildUI()
 	{
-		var dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		dim.SetAnchorsPreset(LayoutPreset.FullRect);
-		dim.MouseFilter = MouseFilterEnum.Stop;
-		AddChild(dim);
+		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
+		_dim.SetAnchorsPreset(LayoutPreset.FullRect);
+		_dim.MouseFilter = MouseFilterEnum.Stop;
+		AddChild(_dim);
 
-		var panel = new PanelContainer
+		_panel = new PanelContainer
 		{
 			Position = new Vector2(140, 50),
 			Size = new Vector2(1000, 620),
 			CustomMinimumSize = new Vector2(1000, 620),
 		};
-		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
-		AddChild(panel);
+		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
+		AddChild(_panel);
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);
-		panel.AddChild(v);
+		_panel.AddChild(v);
 
 		// Шапка: спейсер | заголовок | ✕
 		var titleRow = new HBoxContainer();
@@ -68,7 +99,7 @@ public partial class CombatLogOverlay : Control
 		UIStyle.StyleButton(xBtn);
 		xBtn.CustomMinimumSize = new Vector2(44, 44);
 		xBtn.TooltipText = "Закрыть лог";
-		xBtn.Pressed += () => EmitSignal(SignalName.Closed);
+		xBtn.Pressed += Close;
 		titleRow.AddChild(xBtn);
 
 		var sep = new HSeparator();
@@ -96,7 +127,7 @@ public partial class CombatLogOverlay : Control
 		var closeBtn = new Button { Text = "Закрыть" };
 		UIStyle.StyleButton(closeBtn, primary: true);
 		closeBtn.CustomMinimumSize = new Vector2(180, 44);
-		closeBtn.Pressed += () => EmitSignal(SignalName.Closed);
+		closeBtn.Pressed += Close;
 		btnRow.AddChild(closeBtn);
 	}
 }

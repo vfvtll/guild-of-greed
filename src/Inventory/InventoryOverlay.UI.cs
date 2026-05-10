@@ -7,23 +7,23 @@ public partial class InventoryOverlay
 	private void BuildUI()
 	{
 		// Затемнение позади панели — закрывает клики по бою.
-		var dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		dim.SetAnchorsPreset(LayoutPreset.FullRect);
-		dim.MouseFilter = MouseFilterEnum.Stop;
-		AddChild(dim);
+		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
+		_dim.SetAnchorsPreset(LayoutPreset.FullRect);
+		_dim.MouseFilter = MouseFilterEnum.Stop;
+		AddChild(_dim);
 
-		var panel = new PanelContainer
+		_panel = new PanelContainer
 		{
 			Position = new Vector2(70, 30),
 			Size = new Vector2(1140, 660),
 			CustomMinimumSize = new Vector2(1140, 660),
 		};
-		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
-		AddChild(panel);
+		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
+		AddChild(_panel);
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);
-		panel.AddChild(v);
+		_panel.AddChild(v);
 
 		// Шапка: иконка слева для центровки + название по центру + ✕ справа.
 		// Кнопка ✕ дублирует "Закрыть" внизу — гарантия что закрыть можно
@@ -44,7 +44,7 @@ public partial class InventoryOverlay
 		UIStyle.StyleButton(xBtn);
 		xBtn.CustomMinimumSize = new Vector2(44, 44);
 		xBtn.TooltipText = "Закрыть инвентарь";
-		xBtn.Pressed += () => EmitSignal(SignalName.Closed);
+		xBtn.Pressed += Close;
 		titleRow.AddChild(xBtn);
 
 		// Плашка показа ReadOnly — видна только во время боя.
@@ -136,7 +136,7 @@ public partial class InventoryOverlay
 		var closeBtn = new Button { Text = "Закрыть" };
 		UIStyle.StyleButton(closeBtn, primary: true);
 		closeBtn.CustomMinimumSize = new Vector2(180, 44);
-		closeBtn.Pressed += () => EmitSignal(SignalName.Closed);
+		closeBtn.Pressed += Close;
 		btnRow.AddChild(closeBtn);
 	}
 

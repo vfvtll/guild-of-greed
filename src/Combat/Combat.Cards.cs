@@ -197,8 +197,14 @@ public partial class Combat
 			ev.Flash();
 		}
 
+		// Тактильная отдача на мобильном (на десктопе — no-op).
+		if (isCrit) Input.VibrateHandheld(60);
+
 		if (enemy.CurrentHp <= 0)
+		{
 			Log($"[color=#7f7]✓ {enemy.EnemyName} повержен.[/color]");
+			Input.VibrateHandheld(120);
+		}
 	}
 
 	private void ApplyDamageToPlayer(int dmg)
@@ -218,5 +224,9 @@ public partial class Combat
 			: $"[color=#f88]Получен урон: {dmg}[/color]");
 
 		SpawnFloatingText(new Vector2(150, 100), $"-{dmg}", UIStyle.DangerRed, 28);
+
+		// Удар по игроку — короткая вибрация. Урон <= блок? всё равно вибрируем,
+		// игрок ощутит что атака случилась.
+		Input.VibrateHandheld(40);
 	}
 }

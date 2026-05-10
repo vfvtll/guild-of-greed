@@ -14,6 +14,18 @@ public partial class CardView : PanelContainer
 	public bool Playable = true;
 	public bool Selected = false;
 
+	// Drag-to-play: на тач-устройствах удобнее свайп вверх, чем точный клик.
+	// Если зажать карту и потянуть вверх дальше PlayThresholdY — играем.
+	// Короткий tap без движения тоже играет (обычный клик).
+	// Если зажать и отпустить ниже порога — карта анимируется обратно в руку.
+	private const float PlayThresholdY = -80f;
+	private const float DragMoveTolerance = 5f;
+	private bool _dragging;
+	private Vector2 _dragStartPosition;
+	private Vector2 _dragOffset;
+	private bool _dragMoved;
+	private Tween _returnTween;
+
 	private CharacterData _character;
 	private EnemyData _enemy;
 
@@ -230,8 +242,54 @@ public partial class CardView : PanelContainer
 	private void OnGuiInput(InputEvent ev)
 	{
 		if (!Playable) return;
-		if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+
+		if (ev is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
+		{
+			if (mb.Pressed) StartDrag();
+			else EndDrag();
+			return;
+		}
+
+		if (ev is InputEventMouseMotion mm && _dragging)
+		{
+			_dragOffset += mm.Relative;
+			Position = _dragStartPosition + _dragOffset;
+			if (_dragOffset.Length() > DragMoveTolerance) _dragMoved = true;
+		}
+	}
+
+	private void StartDrag()
+	{
+		_returnTween?.Kill();
+		_dragging = true;
+		_dragStartPosition = Position;
+		_dragOffset = Vector2.Zero;
+		_dragMoved = false;
+		ZIndex = 50;
+		ApplyStyle(true);
+	}
+
+	private void EndDrag()
+	{
+		if (!_dragging) return;
+		_dragging = false;
+		bool draggedUpEnough = _dragOffset.Y < PlayThresholdY;
+		bool wasTap = !_dragMoved;
+		ZIndex = 0;
+
+		if (wasTap || draggedUpEnough)
+		{
+			// Игрок хочет сыграть карту. Combat подхватит это и сам
+			// либо разыграет (1 цель), либо войдёт в режим выбора цели.
 			EmitSignal(SignalName.CardClicked, this);
+			return;
+		}
+
+		// Свайп не дотянул до порога — анимация возврата в руку.
+		_returnTween = CreateTween()
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		_returnTween.TweenProperty(this, "position", _dragStartPosition, 0.18f);
+		ApplyStyle(false);
 	}
 
 	private void OnMouseEntered()
