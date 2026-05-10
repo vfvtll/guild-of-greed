@@ -1,0 +1,44 @@
+# =============================================================
+# Godot 4 .NET — Guild of Greed
+# =============================================================
+
+# Godot 4 generated cache (regenerated on open)
+.godot/
+
+# Godot 3 import cache (если кто-то откроет старой версией)
+.import/
+
+# Auto-generated translation files
+*.translation
+
+# Mono / .NET runtime artefacts
+.mono/
+data_*/
+mono_crash.*.json
+
+# .NET build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# JetBrains Rider
+.idea/
+
+# VSCode (личные настройки IDE)
+.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code локальные настройки
+.claude/settings.local.json
+
+# Godot экспорт-конфиги, специфичные для машины
+export.cfg
+export_presets.cfg
