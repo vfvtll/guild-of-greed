@@ -1,57 +1,12 @@
 using System.Collections.Generic;
 
-// === Оружие ===
-// Все оружие имеет phys_atk и magic_atk (флэт прибавка к базе урона)
-// и множители phys_mult / magic_mult.
-//   Sword 1H: средний урон, +1 карта в начале хода.
-//   Sword 2H: больший физический урон.
-//   Staff: высокая магическая атака.
-public class WeaponData
-{
-	public string Id;
-	public string Name;
-	public string Type;
-	public string Grade;
-	public string Tier;
-	public int PhysAtk;
-	public int MagicAtk;
-	public float PhysMult = 1.0f;
-	public float MagicMult = 1.0f;
-	public int ExtraDraw;
-
-	// Базовый кулдаун крита в атаках. DEX/10 уменьшает, нижний предел 2.
-	// 1H меч 10 → DEX 40 даёт 1 крит каждые 6 атак. Посох 20 → 1 крит каждые 16.
-	public int CritEveryNAttacks = 999;
-
-	public WeaponData Clone() => (WeaponData)MemberwiseClone();
-}
-
-// === Броня ===
-// Робы: маленькая физ. защита, +МакМП, бонусы магии.
-// Лёгкая: средняя физ. защита, без +МакМП, +физ. атака.
-public class ArmorData
-{
-	public string Id;
-	public string Name;
-	public string Type;
-	public string Grade;
-	public string Tier;
-	public int PhysDef;
-	public int PhysAtkBonus;
-	public int MagicAtkBonus;
-	public int MagicAtkPct;
-	public int MpMaxBonus;     // прибавка к максимальной мане
-	public int MpRegenBonus;
-	public int HpBonus;
-	public int ExtraDrawBonus;
-	public string SuffixId;
-	public string SuffixName;
-
-	public ArmorData Clone() => (ArmorData)MemberwiseClone();
-}
-
+// Реестр оружия и брони + расчётные хелперы.
+// Сами POCO-определения (WeaponData, ArmorData, ArmorSlot) — в Domain/.
 public static class ItemsDB
 {
+	// =====================================================================
+	// Оружие
+	// =====================================================================
 	public static readonly Dictionary<string, WeaponData> Weapons = new()
 	{
 		["sword_1h_low"] = new()
@@ -81,43 +36,90 @@ public static class ItemsDB
 		},
 	};
 
+	// =====================================================================
+	// Броня (4 слота: chest, helmet, gloves, boots)
+	// =====================================================================
 	public static readonly Dictionary<string, ArmorData> Armors = new()
 	{
-		// Робы — даёт МакМП (это "ткань мага"), маленькая физ. защита.
-		["robe_power_low"] = new()
+		// === ГРУДЬ (chest) — основной кусок, наибольшая защита и бонусы ===
+		["robe_chest_power_low"] = new()
 		{
-			Id = "robe_power_low", Name = "Роба силы", Type = "robe",
-			Grade = "E", Tier = "low",
+			Id = "robe_chest_power_low", Name = "Роба силы", Type = "robe",
+			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
 			PhysDef = 2,
 			MpMaxBonus = 30, MpRegenBonus = 2,
 			MagicAtkBonus = 5, MagicAtkPct = 5,
 		},
-		["robe_wisdom_low"] = new()
+		["robe_chest_wisdom_low"] = new()
 		{
-			Id = "robe_wisdom_low", Name = "Роба мудрости", Type = "robe",
-			Grade = "E", Tier = "low",
+			Id = "robe_chest_wisdom_low", Name = "Роба мудрости", Type = "robe",
+			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
 			PhysDef = 2,
 			MpMaxBonus = 30, MpRegenBonus = 6,
 		},
-		// Лёгкая — без МакМП, средняя физ. защита, +ФизАтк / ХП.
-		["light_strength_low"] = new()
+		["light_chest_strength_low"] = new()
 		{
-			Id = "light_strength_low", Name = "Кожаная броня силы", Type = "light",
-			Grade = "E", Tier = "low",
+			Id = "light_chest_strength_low", Name = "Кожаная броня силы", Type = "light",
+			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
 			PhysDef = 7,
 			MpRegenBonus = 1,
 			PhysAtkBonus = 4,
 		},
-		["light_vigor_low"] = new()
+		["light_chest_vigor_low"] = new()
 		{
-			Id = "light_vigor_low", Name = "Кожаная броня стойкости", Type = "light",
-			Grade = "E", Tier = "low",
+			Id = "light_chest_vigor_low", Name = "Кожаная броня стойкости", Type = "light",
+			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
 			PhysDef = 8,
 			MpRegenBonus = 1,
 			PhysAtkBonus = 1, HpBonus = 30,
 		},
+
+		// === ШЛЕМ (helmet) ===
+		["robe_helmet_low"] = new()
+		{
+			Id = "robe_helmet_low", Name = "Капюшон мага", Type = "robe",
+			Slot = ArmorSlot.Helmet, Grade = "E", Tier = "low",
+			PhysDef = 1, MpMaxBonus = 8, MagicAtkBonus = 2,
+		},
+		["light_helmet_low"] = new()
+		{
+			Id = "light_helmet_low", Name = "Кожаный шлем", Type = "light",
+			Slot = ArmorSlot.Helmet, Grade = "E", Tier = "low",
+			PhysDef = 2, HpBonus = 8,
+		},
+
+		// === ПЕРЧАТКИ (gloves) ===
+		["robe_gloves_low"] = new()
+		{
+			Id = "robe_gloves_low", Name = "Перчатки мага", Type = "robe",
+			Slot = ArmorSlot.Gloves, Grade = "E", Tier = "low",
+			PhysDef = 1, MagicAtkBonus = 3,
+		},
+		["light_gloves_low"] = new()
+		{
+			Id = "light_gloves_low", Name = "Кожаные перчатки", Type = "light",
+			Slot = ArmorSlot.Gloves, Grade = "E", Tier = "low",
+			PhysDef = 2, PhysAtkBonus = 2,
+		},
+
+		// === САПОГИ (boots) ===
+		["robe_boots_low"] = new()
+		{
+			Id = "robe_boots_low", Name = "Туфли мага", Type = "robe",
+			Slot = ArmorSlot.Boots, Grade = "E", Tier = "low",
+			PhysDef = 1, MpRegenBonus = 2,
+		},
+		["light_boots_low"] = new()
+		{
+			Id = "light_boots_low", Name = "Кожаные сапоги", Type = "light",
+			Slot = ArmorSlot.Boots, Grade = "E", Tier = "low",
+			PhysDef = 2, MpRegenBonus = 1, PhysAtkBonus = 1,
+		},
 	};
 
+	// =====================================================================
+	// Суффиксы — катаются на броню E grade при выпадении лута
+	// =====================================================================
 	public class Suffix
 	{
 		public string Name;
@@ -139,6 +141,9 @@ public static class ItemsDB
 		["of_drawing"]  = new() { Name = "Розыгрыша", ExtraDrawBonus = 1 },
 	};
 
+	// =====================================================================
+	// Доступ
+	// =====================================================================
 	public static WeaponData GetWeapon(string id)
 		=> Weapons.TryGetValue(id, out var w) ? w : null;
 
@@ -164,6 +169,9 @@ public static class ItemsDB
 		return armor;
 	}
 
+	// =====================================================================
+	// Описания для UI
+	// =====================================================================
 	public static string DescribeWeapon(WeaponData w)
 	{
 		if (w == null) return "—";
@@ -192,6 +200,13 @@ public static class ItemsDB
 		if (a.MagicAtkPct > 0)     parts.Add($"+{a.MagicAtkPct}% МагАтк");
 		if (a.HpBonus > 0)         parts.Add($"+{a.HpBonus} ХП");
 		if (a.ExtraDrawBonus > 0)  parts.Add($"+{a.ExtraDrawBonus} карта");
-		return $"{a.Name}: {string.Join(", ", parts)}";
+		return parts.Count == 0 ? a.Name : $"{a.Name}: {string.Join(", ", parts)}";
+	}
+
+	// Возвращает все brony данного слота — для будущего инвентарного UI выбора.
+	public static IEnumerable<ArmorData> ArmorsBySlot(ArmorSlot slot)
+	{
+		foreach (var a in Armors.Values)
+			if (a.Slot == slot) yield return a;
 	}
 }

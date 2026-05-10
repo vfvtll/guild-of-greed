@@ -63,7 +63,8 @@ public partial class Combat : Control
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
 		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");
 		Log($"Оружие: {ItemsDB.DescribeWeapon(pc.Weapon)}");
-		Log($"Броня:  {ItemsDB.DescribeArmor(pc.Armor)}");
+		Log($"👕 {pc.Chest?.Name ?? "—"}  ⛑ {pc.Helmet?.Name ?? "—"}");
+		Log($"🧤 {pc.Gloves?.Name ?? "—"}  👢 {pc.Boots?.Name ?? "—"}");
 		Log($"Колода ({_deck.Count} карт): {DeckSummary()}");
 
 		StartPlayerTurn();
@@ -186,10 +187,32 @@ public partial class Combat : Control
 		StartNewCombat();
 	}
 
-	private void OnArmorPressed()
+	private void OnChestPressed()
 	{
-		GameData.Instance.CycleArmor();
+		GameData.Instance.CycleChest();
 		StartNewCombat();
+	}
+
+	// Использовать зелье из инвентаря (HP / MP / т.д.).
+	// Зелья тратят слот в инвентаре, но не ход — можно пить мидл-комбо.
+	private void OnUsePotion(string itemId)
+	{
+		if (_combatOver) return;
+		var potion = PotionsDB.Get(itemId);
+		if (potion == null) return;
+
+		int hpBefore = GameData.Instance.Character.CurrentHp;
+		int mpBefore = GameData.Instance.Character.CurrentMp;
+		if (!GameData.Instance.UsePotion(itemId)) return;
+
+		var p = GameData.Instance.Character;
+		Log($"[color=#7fa]🧪 Применено: {potion.Name}[/color]");
+		if (p.CurrentHp > hpBefore)
+			SpawnFloatingText(new Vector2(150, 120), $"+{p.CurrentHp - hpBefore} ХП", UIStyle.HealGreen, 24);
+		if (p.CurrentMp > mpBefore)
+			SpawnFloatingText(new Vector2(150, 120), $"+{p.CurrentMp - mpBefore} МП", UIStyle.MpFill, 24);
+
+		RefreshUI();
 	}
 
 	private void OnRestartPressed() => StartNewCombat();

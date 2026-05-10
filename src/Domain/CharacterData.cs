@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -7,11 +8,11 @@ using System.Text.Json.Serialization;
 //   CON — ХП
 //   WIT — реген МП
 //   MEN — макс. МП
-//   DEX — блок (Guard и пр.), шанс крита, множитель крита
+//   DEX — блок, частота крита, множитель крита
 //
-// Часть полей помечена [JsonIgnore] — они либо назначаются из БД (Weapon, Armor),
-// либо являются рантайм-состоянием боя (CurrentHp, эффекты). При сохранении/загрузке
-// игрока эти поля не сериализуются.
+// Сохраняется в JSON: имя, уровни, статы, ID-ы надетых предметов, инвентарь.
+// Не сохраняется ([JsonIgnore]): прямые ссылки на WeaponData/ArmorData
+// (резолвятся при загрузке через ItemsDB), боевое состояние (HP, MP, эффекты).
 public class CharacterData
 {
 	public string CharacterName = "Авантюрист";
@@ -19,7 +20,7 @@ public class CharacterData
 	public string Grade = "E";
 	public int Exp = 0;
 
-	// Постоянные статы (35..45 + распределённые игроком очки).
+	// Статы (35..45 + распределённые игроком 10 очков).
 	public int Str;
 	public int Int;
 	public int Con;
@@ -27,23 +28,32 @@ public class CharacterData
 	public int Men;
 	public int Dex;
 
-	[JsonIgnore] public WeaponData Weapon;
-	[JsonIgnore] public ArmorData Armor;
+	// === Экипировка (ID-ы; реальные объекты резолвятся через ResolveEquipment) ===
+	public string EquippedWeaponId = "";
+	public string EquippedChestId  = "";
+	public string EquippedHelmetId = "";
+	public string EquippedGlovesId = "";
+	public string EquippedBootsId  = "";
 
+	// === Инвентарь (с лимитом по слотам) ===
+	public Inventory Inventory = new();
+
+	// === Прямые ссылки (рантайм, после ResolveEquipment) ===
+	[JsonIgnore] public WeaponData Weapon;
+	[JsonIgnore] public ArmorData Chest;
+	[JsonIgnore] public ArmorData Helmet;
+	[JsonIgnore] public ArmorData Gloves;
+	[JsonIgnore] public ArmorData Boots;
+
+	// === Боевое состояние (рантайм) ===
 	[JsonIgnore] public int CurrentHp;
 	[JsonIgnore] public int CurrentMp;
 	[JsonIgnore] public int CurrentBlock;
 	[JsonIgnore] public List<StatusEffect> Effects = new();
-	// Счётчик атак с момента последнего крита. Сбрасывается на 0 при крите
-	// и в начале боя. Не сохраняется — это рантайм-состояние.
 	[JsonIgnore] public int AttacksSinceLastCrit;
 
-	// Пустой конструктор — для десериализации и для CharacterCreation.
 	public CharacterData() { }
 
-	// Полностью случайный персонаж (35..45 по каждому стату). Раньше использовалось
-	// автоматически — сейчас только для тестов / debug. Реальный игрок проходит
-	// через CharacterCreation.
 	public static CharacterData CreateRandom()
 	{
 		var c = new CharacterData();
@@ -61,20 +71,68 @@ public class CharacterData
 		Dex = RollStat();
 	}
 
-	// === Крит ===
-	// Детерминированный: каждое оружие имеет CritEveryNAttacks (например 10),
-	// DEX/10 уменьшает кулдаун, минимум — 2 (через ход). Шанса нет.
-	// CritMultiplier зависит от DEX: 1.5 + DEX/100.
+	private static int RollStat() => Rng.Range(35, 46);
+
+	// === Производные параметры (с учётом всех 4 слотов брони) ===
+	public int MaxHp()    => 40 + Con * 2 + SumArmor(a => a.HpBonus);
+	public int MaxMp()    => 30 + Men + SumArmor(a => a.MpMaxBonus);
+	public int MpRegen()  => Wit / 3 + SumArmor(a => a.MpRegenBonus);
+	public int HandSize() => 5 + (Weapon?.ExtraDraw ?? 0) + SumArmor(a => a.ExtraDrawBonus);
+
+	public float PhysMult()      => Weapon?.PhysMult ?? 1.0f;
+	public float MagicMult()     => Weapon?.MagicMult ?? 1.0f;
+	public int   WeaponPhysAtk() => Weapon?.PhysAtk ?? 0;
+	public int   WeaponMagAtk()  => Weapon?.MagicAtk ?? 0;
+	public int   PhysAtkBonus()  => SumArmor(a => a.PhysAtkBonus);
+	public int   MagicAtkBonus() => SumArmor(a => a.MagicAtkBonus);
+	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct);
+	public int   PhysDef()       => SumArmor(a => a.PhysDef);
+
+	// Итерация по всем надетым кускам (без null'ов).
+	public IEnumerable<ArmorData> AllArmor()
+	{
+		if (Chest  != null) yield return Chest;
+		if (Helmet != null) yield return Helmet;
+		if (Gloves != null) yield return Gloves;
+		if (Boots  != null) yield return Boots;
+	}
+
+	private int SumArmor(Func<ArmorData, int> selector)
+	{
+		int sum = 0;
+		foreach (var a in AllArmor()) sum += selector(a);
+		return sum;
+	}
+
+	public ArmorData GetArmorSlot(ArmorSlot slot) => slot switch
+	{
+		ArmorSlot.Chest  => Chest,
+		ArmorSlot.Helmet => Helmet,
+		ArmorSlot.Gloves => Gloves,
+		ArmorSlot.Boots  => Boots,
+		_                => null,
+	};
+
+	public void SetArmorSlot(ArmorSlot slot, ArmorData data)
+	{
+		switch (slot)
+		{
+			case ArmorSlot.Chest:  Chest  = data; break;
+			case ArmorSlot.Helmet: Helmet = data; break;
+			case ArmorSlot.Gloves: Gloves = data; break;
+			case ArmorSlot.Boots:  Boots  = data; break;
+		}
+	}
+
+	// === Крит (детерминированный счётчик ударов) ===
 	public int EffectiveCritEveryN()
 	{
 		if (Weapon == null) return int.MaxValue;
-		return System.Math.Max(2, Weapon.CritEveryNAttacks - Dex / 10);
+		return Math.Max(2, Weapon.CritEveryNAttacks - Dex / 10);
 	}
 
 	public float CritMultiplier() => 1.5f + Dex / 100f;
 
-	// Инкрементит счётчик и возвращает true если эта атака — крит. На крите
-	// сбрасывает счётчик. Вызывается на каждой атакующей карте (damage_phys/magic).
 	public bool TryConsumeCrit()
 	{
 		if (Weapon == null) return false;
@@ -88,48 +146,7 @@ public class CharacterData
 		return false;
 	}
 
-	private static int RollStat() => Rng.Range(35, 46);  // 35..45 включительно
-
-	// === Производные параметры ===
-	// Формулы подобраны под статы 35..45.
-	public int MaxHp()
-	{
-		int b = 40 + Con * 2;          // CON 40 → 120 ХП
-		if (Armor != null) b += Armor.HpBonus;
-		return b;
-	}
-
-	public int MaxMp()
-	{
-		int b = 30 + Men;               // MEN 40 → 70 МП (без брони). С робой +30 = 100.
-		if (Armor != null) b += Armor.MpMaxBonus;
-		return b;
-	}
-
-	public int MpRegen()
-	{
-		int b = Wit / 3;                // WIT 40 → 13 МП/ход (без брони). Тугая экономика.
-		if (Armor != null) b += Armor.MpRegenBonus;
-		return b;
-	}
-
-	public int HandSize()
-	{
-		int b = 5;
-		if (Weapon != null) b += Weapon.ExtraDraw;
-		if (Armor != null) b += Armor.ExtraDrawBonus;
-		return b;
-	}
-
-	public float PhysMult()      => Weapon?.PhysMult ?? 1.0f;
-	public float MagicMult()     => Weapon?.MagicMult ?? 1.0f;
-	public int   WeaponPhysAtk() => Weapon?.PhysAtk ?? 0;
-	public int   WeaponMagAtk()  => Weapon?.MagicAtk ?? 0;
-	public int   PhysAtkBonus()  => Armor?.PhysAtkBonus ?? 0;
-	public int   MagicAtkBonus() => Armor?.MagicAtkBonus ?? 0;
-	public int   MagicAtkPct()   => Armor?.MagicAtkPct ?? 0;
-	public int   PhysDef()       => Armor?.PhysDef ?? 0;
-
+	// === Боевые методы ===
 	public void ResetForCombat()
 	{
 		CurrentHp = MaxHp();

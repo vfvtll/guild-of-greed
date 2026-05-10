@@ -6,7 +6,7 @@ using System.Linq;
 public partial class Combat
 {
 	// === UI узлы ===
-	private Button _loadoutButton, _armorButton, _restartButton, _endTurnButton;
+	private Button _loadoutButton, _chestButton, _restartButton, _endTurnButton;
 	private Label _playerNameLabel, _hpLabel, _mpLabel, _statsLabel, _equipLabel, _blockLabel, _buffsLabel;
 	private ProgressBar _hpBar, _mpBar;
 	private HBoxContainer _enemyArea;
@@ -15,6 +15,7 @@ public partial class Combat
 	private RichTextLabel _logText;
 	private Label _targetingHint;
 	private PanelContainer _targetingBanner;
+	private Button _potionHpBtn, _potionMpBtn;
 
 	private void BuildUI()
 	{
@@ -33,10 +34,10 @@ public partial class Combat
 		_loadoutButton.Pressed += OnLoadoutPressed;
 		top.AddChild(_loadoutButton);
 
-		_armorButton = new Button { Text = Lang.T("ui.combat.armor") };
-		UIStyle.StyleButton(_armorButton);
-		_armorButton.Pressed += OnArmorPressed;
-		top.AddChild(_armorButton);
+		_chestButton = new Button { Text = "🛡 Нагрудник" };
+		UIStyle.StyleButton(_chestButton);
+		_chestButton.Pressed += OnChestPressed;
+		top.AddChild(_chestButton);
 
 		var locationButton = new Button { Text = Lang.T("ui.combat.location") };
 		UIStyle.StyleButton(locationButton);
@@ -84,6 +85,23 @@ public partial class Combat
 		_buffsLabel = UIStyle.MakeLabel("", 11, UIStyle.BlockCyan);
 		_buffsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		pv.AddChild(_buffsLabel);
+
+		// === Зелья (используются в течение боя) ===
+		var potionsRow = new HBoxContainer();
+		potionsRow.AddThemeConstantOverride("separation", 6);
+		pv.AddChild(potionsRow);
+
+		_potionHpBtn = new Button();
+		UIStyle.StyleButton(_potionHpBtn);
+		_potionHpBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		_potionHpBtn.Pressed += () => OnUsePotion("potion_hp_small");
+		potionsRow.AddChild(_potionHpBtn);
+
+		_potionMpBtn = new Button();
+		UIStyle.StyleButton(_potionMpBtn);
+		_potionMpBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		_potionMpBtn.Pressed += () => OnUsePotion("potion_mp_small");
+		potionsRow.AddChild(_potionMpBtn);
 
 		// === Enemy Area ===
 		var (ep, ev) = MakeTitledPanel(Lang.T("ui.combat.enemies_panel"), new Vector2(290, 60), new Vector2(670, 320));
@@ -221,7 +239,12 @@ public partial class Combat
 			$"STR {p.Str}  INT {p.Int}  CON {p.Con}\n" +
 			$"WIT {p.Wit}  MEN {p.Men}  DEX {p.Dex}\n" +
 			critInfo;
-		_equipLabel.Text = $"⚔ {ItemsDB.DescribeWeapon(p.Weapon)}\n🛡 {ItemsDB.DescribeArmor(p.Armor)}";
+		_equipLabel.Text =
+			$"⚔ {p.Weapon?.Name ?? "—"}\n" +
+			$"👕 {p.Chest?.Name ?? "—"}\n" +
+			$"⛑ {p.Helmet?.Name ?? "—"}\n" +
+			$"🧤 {p.Gloves?.Name ?? "—"}\n" +
+			$"👢 {p.Boots?.Name ?? "—"}";
 
 		if (p.CurrentBlock > 0)
 		{
@@ -238,8 +261,27 @@ public partial class Combat
 		_deckCountLabel.Text = $"{Lang.T("ui.combat.deck")}: {_deck.Count}";
 		_discardCountLabel.Text = $"{Lang.T("ui.combat.discard")}: {_discard.Count}";
 
+		RefreshPotionButton(_potionHpBtn, "potion_hp_small");
+		RefreshPotionButton(_potionMpBtn, "potion_mp_small");
+
 		RefreshEnemyArea();
 		RefreshHand();
+	}
+
+	private void RefreshPotionButton(Button btn, string itemId)
+	{
+		var p = GameData.Instance.Character;
+		var potion = PotionsDB.Get(itemId);
+		if (p == null || potion == null)
+		{
+			btn.Text = "—";
+			btn.Disabled = true;
+			return;
+		}
+		int count = p.Inventory.CountOf(itemId);
+		btn.Text = $"{potion.Icon} ×{count}";
+		btn.Disabled = count <= 0 || _combatOver;
+		btn.TooltipText = $"{potion.Name}\n{potion.Description}";
 	}
 
 	private void RefreshEnemyArea()
