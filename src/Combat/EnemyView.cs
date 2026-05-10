@@ -19,6 +19,8 @@ public partial class EnemyView : PanelContainer
 	private Label _blockLabel;
 	private Label _effectsLabel;
 
+	private Tween _flashTween;
+
 	public override void _Ready()
 	{
 		CustomMinimumSize = new Vector2(125, 200);
@@ -26,43 +28,37 @@ public partial class EnemyView : PanelContainer
 		GuiInput += OnGuiInput;
 		MouseEntered += () => ApplyStyle(true);
 		MouseExited  += () => ApplyStyle(false);
+		Resized += () => PivotOffset = Size / 2f;
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 4);
 		v.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(v);
 
-		_nameLabel = new Label();
-		_nameLabel.AddThemeFontSizeOverride("font_size", 13);
+		_nameLabel = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
 		_nameLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		v.AddChild(_nameLabel);
 
 		_hpBar = new ProgressBar
 		{
 			ShowPercentage = false,
-			CustomMinimumSize = new Vector2(0, 14),
-			Modulate = new Color(0.85f, 0.25f, 0.30f),
+			CustomMinimumSize = new Vector2(0, 16),
 		};
+		UIStyle.StyleProgressBar(_hpBar, UIStyle.HpFill, UIStyle.HpEmpty);
 		v.AddChild(_hpBar);
 
-		_hpLabel = new Label();
-		_hpLabel.AddThemeFontSizeOverride("font_size", 11);
+		_hpLabel = UIStyle.MakeLabel("", 11, UIStyle.TextPrimary);
 		v.AddChild(_hpLabel);
 
-		_intentLabel = new Label();
-		_intentLabel.AddThemeFontSizeOverride("font_size", 12);
-		_intentLabel.AddThemeColorOverride("font_color", new Color(1.0f, 0.85f, 0.4f));
+		_intentLabel = UIStyle.MakeLabel("", 12, UIStyle.WarnAmber);
 		_intentLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		v.AddChild(_intentLabel);
 
-		_blockLabel = new Label();
-		_blockLabel.AddThemeFontSizeOverride("font_size", 11);
+		_blockLabel = UIStyle.MakeLabel("", 11, UIStyle.BlockCyan);
 		v.AddChild(_blockLabel);
 
-		_effectsLabel = new Label();
-		_effectsLabel.AddThemeFontSizeOverride("font_size", 10);
+		_effectsLabel = UIStyle.MakeLabel("", 10, UIStyle.DangerRed);
 		_effectsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		_effectsLabel.AddThemeColorOverride("font_color", new Color(1.0f, 0.55f, 0.55f));
 		v.AddChild(_effectsLabel);
 
 		ApplyStyle(false);
@@ -77,6 +73,20 @@ public partial class EnemyView : PanelContainer
 			Refresh();
 			ApplyStyle(false);
 		}
+	}
+
+	// Красная вспышка при попадании.
+	public void Flash()
+	{
+		_flashTween?.Kill();
+		_flashTween = CreateTween();
+		_flashTween.TweenProperty(this, "modulate", new Color(1.6f, 0.5f, 0.5f), 0.06f);
+		_flashTween.TweenProperty(this, "modulate", Modulate, 0.20f);
+		_flashTween.Chain().TweenCallback(Callable.From(Refresh));
+		// Лёгкий "удар" — масштаб
+		var t2 = CreateTween().SetTrans(Tween.TransitionType.Cubic);
+		t2.TweenProperty(this, "scale", new Vector2(1.08f, 0.94f), 0.07f);
+		t2.TweenProperty(this, "scale", new Vector2(1.0f, 1.0f), 0.18f);
 	}
 
 	public void Refresh()

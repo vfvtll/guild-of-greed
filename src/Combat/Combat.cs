@@ -28,6 +28,7 @@ public partial class Combat : Control
 	private HBoxContainer _handContainer;
 	private RichTextLabel _logText;
 	private Label _targetingHint;
+	private PanelContainer _targetingBanner;
 
 	public override void _Ready()
 	{
@@ -45,7 +46,7 @@ public partial class Combat : Control
 		_combatOver = false;
 		_turnCount = 0;
 		_selectedHandIndex = -1;
-		_targetingHint.Visible = false;
+		_targetingBanner.Visible = false;
 		GameData.Instance.Character.ResetForCombat();
 
 		_encounter = GameData.Instance.SpawnEnemies();
@@ -209,7 +210,7 @@ public partial class Combat : Control
 		{
 			_selectedHandIndex = idx;
 			_targetingHint.Text = $"Выберите цель для «{card.Name}» (ESC / ПКМ — отмена)";
-			_targetingHint.Visible = true;
+			_targetingBanner.Visible = true;
 		}
 		RefreshUI();
 	}
@@ -220,7 +221,7 @@ public partial class Combat : Control
 		if (view.Enemy == null || view.Enemy.CurrentHp <= 0) return;
 		int idx = _selectedHandIndex;
 		_selectedHandIndex = -1;
-		_targetingHint.Visible = false;
+		_targetingBanner.Visible = false;
 		PlayCard(idx, view.Enemy);
 	}
 
@@ -228,12 +229,18 @@ public partial class Combat : Control
 	{
 		if (_selectedHandIndex < 0) return;
 		_selectedHandIndex = -1;
-		_targetingHint.Visible = false;
+		_targetingBanner.Visible = false;
 	}
 
 	private void PlayCard(int handIndex, EnemyData target)
 	{
 		if (handIndex < 0 || handIndex >= _hand.Count) return;
+
+		// Захватываем view ДО изменения данных — для анимации розыгрыша.
+		CardView playedView = null;
+		if (handIndex < _handContainer.GetChildCount())
+			playedView = _handContainer.GetChild(handIndex) as CardView;
+
 		var cardId = _hand[handIndex];
 		var card = CardsDB.GetCard(cardId);
 		var p = GameData.Instance.Character;
@@ -260,6 +267,7 @@ public partial class Combat : Control
 				int amount = CardsDB.ComputeBlock(card, p);
 				p.CurrentBlock += amount;
 				Log($"Блок: +{amount} (всего {p.CurrentBlock})");
+				SpawnFloatingText(new Vector2(150, 110), $"+{amount} БЛОК", new Color(0.7f, 0.9f, 1.0f), 22);
 				break;
 			}
 			case "heal":
@@ -267,7 +275,9 @@ public partial class Combat : Control
 				int amount = CardsDB.ComputeHeal(card, p);
 				int before = p.CurrentHp;
 				p.CurrentHp = Math.Min(p.CurrentHp + amount, p.MaxHp());
-				Log($"[color=#7fa]Исцеление: +{p.CurrentHp - before} ХП[/color]");
+				int healed = p.CurrentHp - before;
+				Log($"[color=#7fa]Исцеление: +{healed} ХП[/color]");
+				SpawnFloatingText(new Vector2(150, 110), $"+{healed} ХП", new Color(0.55f, 1.0f, 0.6f), 22);
 				break;
 			}
 			case "debuff_phys":
@@ -285,6 +295,9 @@ public partial class Combat : Control
 
 		_hand.RemoveAt(handIndex);
 		_discard.Add(cardId);
+
+		// Анимация розыгрыша: карта вылетает вверх и тает.
+		if (playedView != null) AnimateCardOut(playedView);
 
 		if (AllEnemiesDead()) OnAllEnemiesDead();
 		RefreshUI();
@@ -317,6 +330,16 @@ public partial class Combat : Control
 			? $"→ {enemy.EnemyName}: {kind} урон {dmg} (поглощено блоком: {absorbed})"
 			: $"→ {enemy.EnemyName}: {kind} урон {dmg}");
 
+		// Визуал: всплывающее число + красная вспышка.
+		var ev = FindEnemyView(enemy);
+		if (ev != null)
+		{
+			var pos = ev.GlobalPosition + new Vector2(ev.Size.X / 2f, ev.Size.Y * 0.25f);
+			var color = isPhys ? new Color(1.0f, 0.6f, 0.35f) : new Color(0.75f, 0.55f, 1.0f);
+			SpawnFloatingText(pos, $"-{dmg}", color, 28);
+			ev.Flash();
+		}
+
 		if (enemy.CurrentHp <= 0)
 			Log($"[color=#7f7]✓ {enemy.EnemyName} повержен.[/color]");
 	}
@@ -336,6 +359,61 @@ public partial class Combat : Control
 		Log(absorbed > 0
 			? $"[color=#f88]Получен урон: {dmg} (поглощено: {absorbed})[/color]"
 			: $"[color=#f88]Получен урон: {dmg}[/color]");
+
+		// Визуал у панели игрока (приблизительный центр верха).
+		SpawnFloatingText(new Vector2(150, 100), $"-{dmg}", new Color(1.0f, 0.4f, 0.4f), 28);
+	}
+
+	// =====================================================================
+	// Анимации
+	// =====================================================================
+
+	// Всплывающий текст (урон, исцеление, блок) — поднимается и тает.
+	private void SpawnFloatingText(Vector2 globalPos, string text, Color color, int fontSize)
+	{
+		var label = new Label { Text = text };
+		label.AddThemeFontSizeOverride("font_size", fontSize);
+		label.AddThemeColorOverride("font_color", color);
+		label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
+		label.AddThemeConstantOverride("outline_size", 5);
+		label.HorizontalAlignment = HorizontalAlignment.Center;
+		label.MouseFilter = MouseFilterEnum.Ignore;
+		label.ZIndex = 100;
+		label.CustomMinimumSize = new Vector2(80, 0);
+		AddChild(label);
+		label.GlobalPosition = globalPos - new Vector2(40, 0);
+
+		var t = CreateTween().SetParallel(true);
+		t.TweenProperty(label, "position:y", label.Position.Y - 55, 0.75f)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		t.TweenProperty(label, "modulate:a", 0f, 0.75f).SetDelay(0.25f);
+		t.Chain().TweenCallback(Callable.From(label.QueueFree));
+	}
+
+	// Карта вылетает из руки и тает.
+	private void AnimateCardOut(CardView view)
+	{
+		if (view == null || !GodotObject.IsInstanceValid(view)) return;
+		var globalPos = view.GlobalPosition;
+		view.GetParent()?.RemoveChild(view);
+		AddChild(view);
+		view.GlobalPosition = globalPos;
+		view.MouseFilter = MouseFilterEnum.Ignore;
+		view.ZIndex = 50;
+
+		var t = CreateTween().SetParallel(true);
+		t.TweenProperty(view, "position:y", view.Position.Y - 60, 0.35f)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		t.TweenProperty(view, "modulate:a", 0.0f, 0.35f);
+		t.TweenProperty(view, "scale", new Vector2(1.15f, 1.15f), 0.35f);
+		t.Chain().TweenCallback(Callable.From(view.QueueFree));
+	}
+
+	private EnemyView FindEnemyView(EnemyData enemy)
+	{
+		foreach (Node child in _enemyArea.GetChildren())
+			if (child is EnemyView ev && ev.Enemy == enemy) return ev;
+		return null;
 	}
 
 	// === Окончание боя ===
@@ -409,33 +487,38 @@ public partial class Combat : Control
 
 	private void BuildUI()
 	{
-		var bg = new ColorRect { Color = new Color(0.07f, 0.06f, 0.10f) };
+		var bg = new ColorRect { Color = UIStyle.BgDeep };
 		bg.SetAnchorsPreset(LayoutPreset.FullRect);
 		bg.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(bg);
 
 		// === Top bar ===
 		var top = new HBoxContainer { Position = new Vector2(20, 12) };
-		top.AddThemeConstantOverride("separation", 8);
+		top.AddThemeConstantOverride("separation", 10);
 		AddChild(top);
 
-		_loadoutButton = new Button { Text = "Сменить оружие" };
+		_loadoutButton = new Button { Text = "⚔ Оружие" };
+		UIStyle.StyleButton(_loadoutButton);
 		_loadoutButton.Pressed += OnLoadoutPressed;
 		top.AddChild(_loadoutButton);
 
-		_armorButton = new Button { Text = "Сменить броню" };
+		_armorButton = new Button { Text = "🛡 Броня" };
+		UIStyle.StyleButton(_armorButton);
 		_armorButton.Pressed += OnArmorPressed;
 		top.AddChild(_armorButton);
 
-		var locationButton = new Button { Text = "Сменить локацию" };
+		var locationButton = new Button { Text = "🗺 Локация" };
+		UIStyle.StyleButton(locationButton);
 		locationButton.Pressed += OnLocationPressed;
 		top.AddChild(locationButton);
 
-		_restartButton = new Button { Text = "Новый бой" };
+		_restartButton = new Button { Text = "↻ Новый бой" };
+		UIStyle.StyleButton(_restartButton);
 		_restartButton.Pressed += OnRestartPressed;
 		top.AddChild(_restartButton);
 
-		var rerollButton = new Button { Text = "Перекинуть статы" };
+		var rerollButton = new Button { Text = "🎲 Статы" };
+		UIStyle.StyleButton(rerollButton);
 		rerollButton.Pressed += OnRerollStatsPressed;
 		top.AddChild(rerollButton);
 
@@ -443,39 +526,32 @@ public partial class Combat : Control
 		var (pp, pv) = MakeTitledPanel("Игрок", new Vector2(20, 60), new Vector2(260, 320));
 		AddChild(pp);
 
-		_playerNameLabel = new Label();
-		_playerNameLabel.AddThemeFontSizeOverride("font_size", 16);
+		_playerNameLabel = UIStyle.MakeLabel("", 16, UIStyle.TextPrimary);
 		pv.AddChild(_playerNameLabel);
 
-		_hpBar = MakeBar(new Color(0.85f, 0.25f, 0.30f));
+		_hpBar = MakeBar(UIStyle.HpFill, UIStyle.HpEmpty);
 		pv.AddChild(_hpBar);
-		_hpLabel = new Label();
+		_hpLabel = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
 		pv.AddChild(_hpLabel);
 
-		_mpBar = MakeBar(new Color(0.30f, 0.55f, 0.95f));
+		_mpBar = MakeBar(UIStyle.MpFill, UIStyle.MpEmpty);
 		pv.AddChild(_mpBar);
-		_mpLabel = new Label();
+		_mpLabel = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
 		pv.AddChild(_mpLabel);
 
-		_statsLabel = new Label();
-		_statsLabel.AddThemeFontSizeOverride("font_size", 12);
+		_statsLabel = UIStyle.MakeLabel("", 12, UIStyle.TextPrimary);
 		_statsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		pv.AddChild(_statsLabel);
 
-		_equipLabel = new Label();
-		_equipLabel.AddThemeFontSizeOverride("font_size", 11);
-		_equipLabel.AddThemeColorOverride("font_color", new Color(0.85f, 0.78f, 0.55f));
+		_equipLabel = UIStyle.MakeLabel("", 11, UIStyle.TextSecondary);
 		_equipLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		pv.AddChild(_equipLabel);
 
-		_blockLabel = new Label();
-		_blockLabel.AddThemeFontSizeOverride("font_size", 13);
+		_blockLabel = UIStyle.MakeLabel("", 13, UIStyle.BlockCyan);
 		pv.AddChild(_blockLabel);
 
-		_buffsLabel = new Label();
-		_buffsLabel.AddThemeFontSizeOverride("font_size", 11);
+		_buffsLabel = UIStyle.MakeLabel("", 11, UIStyle.BlockCyan);
 		_buffsLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		_buffsLabel.AddThemeColorOverride("font_color", new Color(0.6f, 0.85f, 1.0f));
 		pv.AddChild(_buffsLabel);
 
 		// === Enemy Area (HBox, 5 слотов) ===
@@ -499,15 +575,16 @@ public partial class Combat : Control
 		_logText.SizeFlagsVertical = SizeFlags.ExpandFill;
 		lv.AddChild(_logText);
 
-		// === Targeting hint ===
-		_targetingHint = new Label
+		// === Targeting hint banner ===
+		_targetingBanner = new PanelContainer
 		{
-			Position = new Vector2(20, 385),
+			Position = new Vector2(20, 380),
 			Visible = false,
 		};
-		_targetingHint.AddThemeFontSizeOverride("font_size", 16);
-		_targetingHint.AddThemeColorOverride("font_color", new Color(1.0f, 0.85f, 0.4f));
-		AddChild(_targetingHint);
+		_targetingBanner.AddThemeStyleboxOverride("panel", UIStyle.BannerStyle(UIStyle.GoldBright));
+		_targetingHint = UIStyle.MakeLabel("", 16, UIStyle.GoldBright);
+		_targetingBanner.AddChild(_targetingHint);
+		AddChild(_targetingBanner);
 
 		// === Hand container ===
 		_handContainer = new HBoxContainer
@@ -518,31 +595,38 @@ public partial class Combat : Control
 		_handContainer.AddThemeConstantOverride("separation", 12);
 		AddChild(_handContainer);
 
-		// === Bottom row ===
-		_deckCountLabel = new Label { Position = new Vector2(20, 670) };
-		AddChild(_deckCountLabel);
+		// === Bottom row: счётчики колоды/сброса ===
+		var deckMini = new PanelContainer { Position = new Vector2(20, 660) };
+		deckMini.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
+		_deckCountLabel = UIStyle.MakeLabel("Колода: 0", 14, UIStyle.TextPrimary);
+		deckMini.AddChild(_deckCountLabel);
+		AddChild(deckMini);
 
-		_discardCountLabel = new Label { Position = new Vector2(180, 670) };
-		AddChild(_discardCountLabel);
+		var discardMini = new PanelContainer { Position = new Vector2(170, 660) };
+		discardMini.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
+		_discardCountLabel = UIStyle.MakeLabel("Сброс: 0", 14, UIStyle.TextPrimary);
+		discardMini.AddChild(_discardCountLabel);
+		AddChild(discardMini);
 
 		_endTurnButton = new Button
 		{
-			Text = "Конец хода",
-			Position = new Vector2(1100, 660),
-			Size = new Vector2(160, 40),
+			Text = "Конец хода ▶",
+			Position = new Vector2(1080, 655),
+			Size = new Vector2(180, 50),
 		};
+		UIStyle.StyleButton(_endTurnButton, primary: true);
 		_endTurnButton.Pressed += OnEndTurnPressed;
 		AddChild(_endTurnButton);
 	}
 
-	private ProgressBar MakeBar(Color c)
+	private ProgressBar MakeBar(Color fill, Color empty)
 	{
 		var bar = new ProgressBar
 		{
 			ShowPercentage = false,
-			CustomMinimumSize = new Vector2(0, 18),
-			Modulate = c,
+			CustomMinimumSize = new Vector2(0, 22),
 		};
+		UIStyle.StyleProgressBar(bar, fill, empty);
 		return bar;
 	}
 
@@ -554,29 +638,22 @@ public partial class Combat : Control
 			Size = sz,
 			CustomMinimumSize = sz,
 		};
-
-		var sb = new StyleBoxFlat
-		{
-			BgColor = new Color(0.13f, 0.11f, 0.18f),
-			BorderColor = new Color(0.40f, 0.32f, 0.20f),
-			BorderWidthLeft = 2, BorderWidthRight = 2,
-			BorderWidthTop = 2,  BorderWidthBottom = 2,
-			CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6,
-			CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6,
-			ContentMarginLeft = 12, ContentMarginRight = 12,
-			ContentMarginTop = 10, ContentMarginBottom = 10,
-		};
-		panel.AddThemeStyleboxOverride("panel", sb);
+		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 
 		var v = new VBoxContainer();
-		v.AddThemeConstantOverride("separation", 6);
+		v.AddThemeConstantOverride("separation", 8);
 		panel.AddChild(v);
 
-		var t = new Label { Text = title };
-		t.AddThemeFontSizeOverride("font_size", 16);
-		t.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.55f));
-		v.AddChild(t);
-		v.AddChild(new HSeparator());
+		v.AddChild(UIStyle.MakeSectionTitle(title));
+		var sep = new HSeparator();
+		var sepStyle = new StyleBoxFlat
+		{
+			BgColor = UIStyle.GoldDark,
+			ContentMarginTop = 1, ContentMarginBottom = 1,
+		};
+		sep.AddThemeStyleboxOverride("separator", sepStyle);
+		sep.AddThemeConstantOverride("separation", 4);
+		v.AddChild(sep);
 
 		return (panel, v);
 	}
@@ -605,12 +682,12 @@ public partial class Combat : Control
 		if (p.CurrentBlock > 0)
 		{
 			_blockLabel.Text = $"🛡 Блок: {p.CurrentBlock}";
-			_blockLabel.AddThemeColorOverride("font_color", new Color(0.7f, 0.9f, 1.0f));
+			_blockLabel.AddThemeColorOverride("font_color", UIStyle.BlockCyan);
 		}
 		else
 		{
 			_blockLabel.Text = "🛡 Блок: —";
-			_blockLabel.AddThemeColorOverride("font_color", new Color(0.5f, 0.5f, 0.5f));
+			_blockLabel.AddThemeColorOverride("font_color", UIStyle.TextDim);
 		}
 		_buffsLabel.Text = $"Эффекты: {DescribeEffects(p.Effects)}";
 
@@ -623,18 +700,45 @@ public partial class Combat : Control
 
 	private void RefreshEnemyArea()
 	{
-		foreach (Node child in _enemyArea.GetChildren())
-		{
-			_enemyArea.RemoveChild(child);
-			child.QueueFree();
-		}
 		bool targetingActive = _selectedHandIndex >= 0;
-		foreach (var enemy in _encounter)
+
+		// Если состав encounter изменился — пересобираем. Иначе обновляем
+		// существующие view "на месте", чтобы не прерывать анимации (Flash).
+		bool needRebuild = _enemyArea.GetChildCount() != _encounter.Count;
+		if (!needRebuild)
 		{
-			var view = new EnemyView();
-			_enemyArea.AddChild(view);
-			view.SetEnemy(enemy, targetingActive && enemy.CurrentHp > 0);
-			view.EnemyClicked += OnEnemyTargeted;
+			for (int i = 0; i < _encounter.Count; i++)
+			{
+				if (_enemyArea.GetChild(i) is not EnemyView ev || ev.Enemy != _encounter[i])
+				{
+					needRebuild = true;
+					break;
+				}
+			}
+		}
+
+		if (needRebuild)
+		{
+			foreach (Node child in _enemyArea.GetChildren())
+			{
+				_enemyArea.RemoveChild(child);
+				child.QueueFree();
+			}
+			foreach (var enemy in _encounter)
+			{
+				var view = new EnemyView();
+				_enemyArea.AddChild(view);
+				view.SetEnemy(enemy, targetingActive && enemy.CurrentHp > 0);
+				view.EnemyClicked += OnEnemyTargeted;
+			}
+		}
+		else
+		{
+			for (int i = 0; i < _encounter.Count; i++)
+			{
+				if (_enemyArea.GetChild(i) is EnemyView ev)
+					ev.SetEnemy(_encounter[i], targetingActive && _encounter[i].CurrentHp > 0);
+			}
 		}
 	}
 
@@ -655,6 +759,7 @@ public partial class Combat : Control
 			view.SetCard(cardId, p, firstAlive);
 			var card = CardsDB.GetCard(cardId);
 			view.SetPlayable(p.CurrentMp >= card.Cost && !_combatOver);
+			view.SetSelected(_selectedHandIndex == i);
 			view.CardClicked += OnCardClicked;
 		}
 	}

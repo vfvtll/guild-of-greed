@@ -21,6 +21,7 @@ public class CardData
 	public int AmountPct;
 	public int Duration;
 	public string Effect;
+	public string Icon;        // emoji в центре карты
 }
 
 public static class CardsDB
@@ -31,38 +32,38 @@ public static class CardsDB
 		["strike"] = new()
 		{
 			Id = "strike", Name = "Удар", Archetype = "warrior", Type = "physical",
-			Cost = 10, BaseDamage = 6, Effect = "damage_phys",
+			Cost = 10, BaseDamage = 6, Effect = "damage_phys", Icon = "⚔",
 		},
 		["guard"] = new()
 		{
 			Id = "guard", Name = "Защитная стойка", Archetype = "warrior", Type = "physical",
-			Cost = 8, Block = 8, Effect = "block",
+			Cost = 8, Block = 8, Effect = "block", Icon = "🛡",
 		},
 		["armor_break"] = new()
 		{
 			Id = "armor_break", Name = "Пролом брони", Archetype = "warrior", Type = "physical",
-			Cost = 18, AmountPct = 35, Duration = 2, Effect = "debuff_phys",
+			Cost = 18, AmountPct = 35, Duration = 2, Effect = "debuff_phys", Icon = "💢",
 		},
 		// === Маг ===
 		["fire_bolt"] = new()
 		{
 			Id = "fire_bolt", Name = "Огненный снаряд", Archetype = "mage", Type = "magic",
-			Cost = 18, BaseDamage = 8, Effect = "damage_magic",
+			Cost = 18, BaseDamage = 8, Effect = "damage_magic", Icon = "🔥",
 		},
 		["water_strike"] = new()
 		{
 			Id = "water_strike", Name = "Удар водой", Archetype = "mage", Type = "magic",
-			Cost = 22, BaseDamage = 11, Effect = "damage_magic",
+			Cost = 22, BaseDamage = 11, Effect = "damage_magic", Icon = "💧",
 		},
 		["heal"] = new()
 		{
 			Id = "heal", Name = "Исцеление", Archetype = "mage", Type = "magic",
-			Cost = 22, Heal = 12, Effect = "heal",
+			Cost = 22, Heal = 12, Effect = "heal", Icon = "❤",
 		},
 		["magic_focus"] = new()
 		{
 			Id = "magic_focus", Name = "Магический фокус", Archetype = "mage", Type = "magic",
-			Cost = 14, AmountPct = 20, Duration = 2, Effect = "buff_magic",
+			Cost = 14, AmountPct = 20, Duration = 2, Effect = "buff_magic", Icon = "✨",
 		},
 	};
 
