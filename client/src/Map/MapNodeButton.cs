@@ -1,4 +1,6 @@
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Кнопка одного узла на карте подземелья.
 // Визуал зависит от состояния: Visited (тусклый), Current (золотая рамка),

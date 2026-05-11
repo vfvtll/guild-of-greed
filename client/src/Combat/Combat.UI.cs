@@ -1,6 +1,8 @@
 using Godot;
 using System.Collections.Generic;
 using System.Linq;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Combat — построение и обновление UI боя.
 public partial class Combat

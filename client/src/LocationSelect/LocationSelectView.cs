@@ -1,4 +1,6 @@
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Хаб между забегами. Игрок выбирает локацию для следующего run'а или
 // открывает инвентарь чтобы перераспределить экипировку.

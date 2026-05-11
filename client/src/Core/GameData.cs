@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Глобальный стейт игры (autoload, синглтон).
 // В будущем сюда переедут: GlobalStash, экономика, грейд, крафт, аукцион.

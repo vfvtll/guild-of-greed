@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+namespace GuildOfGreed.Shared.Domain;
+
 // Карта одного забега (run) — генерируется при входе в локацию,
 // уничтожается при выходе. Slay-the-Spire-style: сетка из строк (Rows),
 // в каждой строке — несколько узлов (Nodes), рёбра идут вверх.

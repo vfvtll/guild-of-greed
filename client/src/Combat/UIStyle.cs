@@ -1,4 +1,6 @@
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Единая палитра + фабрики стилей для UI боя.
 // Используется в Combat.cs и EnemyView.cs.

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Роли и разрешения. Портативно (без Godot) — будет шариться с сервером.
 //

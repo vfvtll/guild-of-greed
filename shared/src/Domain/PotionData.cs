@@ -1,3 +1,5 @@
+namespace GuildOfGreed.Shared.Domain;
+
 // POCO-описание зелья.
 // Реестр конкретных зелий — в Data/PotionsDB.cs.
 //

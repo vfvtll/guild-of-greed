@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+namespace GuildOfGreed.Shared.Domain;
+
 // Инвентарь персонажа с лимитом по числу слотов.
 // Каждый слот хранит ID предмета (оружие/броня/зелье) и количество.
 // Стакаемость определяется не Inventory'ем (он в Domain и не должен знать

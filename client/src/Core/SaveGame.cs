@@ -1,6 +1,8 @@
 using Godot;
 using System;
 using System.Text.Json;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Сохранение и загрузка персонажа.
 // Сейчас сохраняем в Godot user:// (локальная папка приложения) как JSON.

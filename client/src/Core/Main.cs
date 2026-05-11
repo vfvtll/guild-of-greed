@@ -1,5 +1,7 @@
 using Godot;
 using System;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Корневой роутер. Состояния:
 //   Нет сейва        → CharacterCreation → (создал) → LocationSelect

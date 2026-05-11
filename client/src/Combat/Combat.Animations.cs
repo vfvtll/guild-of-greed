@@ -1,4 +1,6 @@
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Combat — анимации боя: всплывающий текст, вылет карты, поиск view врага.
 public partial class Combat

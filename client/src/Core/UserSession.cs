@@ -1,3 +1,6 @@
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
+
 // Сессия текущего игрока на клиенте.
 // На прототипе живёт всё время в GameData.Instance.Session.
 // Когда появится сервер — Role будет приходить с сервера при логине.

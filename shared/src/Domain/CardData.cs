@@ -1,3 +1,5 @@
+namespace GuildOfGreed.Shared.Domain;
+
 // POCO-описание одной карты. Лежит в Domain.
 // Конкретные экземпляры и расчётные хелперы — в Data/CardsDB.cs.
 //

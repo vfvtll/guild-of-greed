@@ -1,6 +1,8 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Полноэкранный оверлей инвентаря. Открывается из Combat по кнопке "🎒 Инвентарь".
 //

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+namespace GuildOfGreed.Shared.Domain;
+
 // Враги работают по системе Intent: показывают своё намерение до своего хода.
 // Не используют карты — только заранее заданный список действий.
 //

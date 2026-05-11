@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Локализация. Использование:
 //   Lang.T("ui.combat.end_turn")

@@ -1,5 +1,7 @@
 using System;
 
+namespace GuildOfGreed.Shared.Domain;
+
 // Портативный RNG: без зависимости от Godot.
 // Используется во всех Domain/Data вместо GD.Randi/Randf.
 //

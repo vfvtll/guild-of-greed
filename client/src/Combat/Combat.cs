@@ -1,6 +1,8 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Главный контроллер боя. Поддерживает несколько врагов одновременно,
 // выбор цели для атак, одновременный ход всех живых врагов в конце хода игрока.

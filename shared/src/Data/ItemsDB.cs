@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+
+namespace GuildOfGreed.Shared.Data;
 
 // Реестр оружия и брони + расчётные хелперы.
 // Сами POCO-определения (WeaponData, ArmorData, ArmorSlot) — в Domain/.

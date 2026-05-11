@@ -1,6 +1,8 @@
 using Godot;
 using System;
 using System.Linq;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Combat — игра карты + выбор цели + применение урона.
 public partial class Combat

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // InventoryOverlay — описание предметов и сравнение надетого vs выбранного.
 public partial class InventoryOverlay

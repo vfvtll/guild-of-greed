@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+
+namespace GuildOfGreed.Shared.Data;
 
 // Реестр карт + расчётные хелперы.
 // CardData (POCO) — в Domain/CardData.cs.

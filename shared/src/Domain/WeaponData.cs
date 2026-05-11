@@ -1,3 +1,5 @@
+namespace GuildOfGreed.Shared.Domain;
+
 // POCO-описание одного оружия. Лежит в Domain потому что CharacterData
 // его держит как поле, и Domain не должен зависеть от Data.
 //

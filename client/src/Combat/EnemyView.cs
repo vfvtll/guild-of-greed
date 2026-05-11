@@ -1,5 +1,7 @@
 using Godot;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Мини-панель одного врага в локации.
 // Кликабельна когда Targetable=true (режим выбора цели).

@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+
+namespace GuildOfGreed.Shared.Data;
 
 // Генератор карт подземелья (Slay-the-Spire-style).
 //

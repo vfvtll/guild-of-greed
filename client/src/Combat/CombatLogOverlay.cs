@@ -1,4 +1,6 @@
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Модальный оверлей боевого лога. Открывается из Combat по кнопке 📜.
 // Combat хранит лог-буфер (List<string>); при открытии вкачивает всё в RichTextLabel.

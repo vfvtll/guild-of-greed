@@ -1,5 +1,7 @@
 using Godot;
 using System;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Сцена создания персонажа.
 // Логика:

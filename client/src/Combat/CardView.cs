@@ -1,4 +1,6 @@
 using Godot;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Визуальный контрол одной карты в руке.
 // Стиль зависит от архетипа: воин — тёплые тона, маг — холодные.

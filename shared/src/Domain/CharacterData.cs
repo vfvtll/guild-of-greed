@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
+namespace GuildOfGreed.Shared.Domain;
+
 // Персонаж: статы Lineage 2 стиля.
 //   STR — физ. атака
 //   INT — маг. атака

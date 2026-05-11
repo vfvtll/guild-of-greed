@@ -1,5 +1,7 @@
 using Godot;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+using GuildOfGreed.Shared.Data;
 
 // Экран карты подземелья. Рисует узлы текущего RunMap и рёбра между ними,
 // разрешает клик только по узлам из CurrentRun.AvailableNext().

@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+
+namespace GuildOfGreed.Shared.Data;
 
 // Реестр зелий. POCO PotionData — в Domain/PotionData.cs.
 public static class PotionsDB

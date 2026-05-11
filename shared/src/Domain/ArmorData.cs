@@ -1,3 +1,5 @@
+namespace GuildOfGreed.Shared.Domain;
+
 // POCO-описание одной части брони. Лежит в Domain потому что CharacterData
 // держит ссылки на ArmorData как на 4 надетых куска.
 //
