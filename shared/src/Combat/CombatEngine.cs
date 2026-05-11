@@ -60,8 +60,9 @@ public static class CombatEngine
 			Rng = new RandomSource(seed),
 		};
 
-		// Сброс боевого state игрока (Hp/Mp/Block/Effects/AttacksSinceLastCrit).
-		state.Player.ResetForCombat();
+		// Подготовка к бою: HP/MP переносятся из прошлого боя (persist между
+		// узлами одного забега), но Block / Effects / счётчик крита сбрасываются.
+		state.Player.PrepareForBattle();
 
 		var events = new List<BattleEvent> { new() { Type = BattleEventType.BattleStarted } };
 

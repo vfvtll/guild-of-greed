@@ -131,10 +131,15 @@ public partial class GameData : Node
 	// === Run lifecycle (карта подземелья) ===
 	// StartRun вызывается из LocationSelectView при входе игрока в локацию.
 	// Карта эфемерная — не сохраняется между сессиями.
+	//
+	// Здесь делаем полный restore HP/MP. Между узлами одного забега HP/MP
+	// переносятся (carry over), но вход в новое подземелье = "вы отдохнули
+	// в хабе перед заходом".
 	public void StartRun(int locationIndex)
 	{
 		if (locationIndex < 0 || locationIndex >= LocationNames.Length) locationIndex = 0;
 		SelectedLocation = locationIndex;
+		Character?.ResetForCombat();
 		CurrentRun = MapGenerator.Generate(locationIndex);
 	}
 

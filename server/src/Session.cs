@@ -247,6 +247,8 @@ public class Session
 			CharacterName = r.CharacterName ?? "",
 			Str = r.Str, Int = r.Int, Con = r.Con, Wit = r.Wit, Men = r.Men, Dex = r.Dex,
 		};
+		// Новый персонаж должен начать с полным HP/MP (поля persist'ятся).
+		ch.ResetForCombat();
 		var result = _store.CreateCharacter(_accountId.Value, ch, out var newId);
 		if (result != AccountStore.CreateCharResult.Ok)
 		{
@@ -262,7 +264,17 @@ public class Session
 		var ch = _store.LoadCharacter(_accountId.Value, r.CharacterId);
 		if (ch == null) return new SelectCharacterResponse { Success = false, Error = "not_found" };
 		_selectedCharacterId = r.CharacterId;
-		Logger.Info($"[{_peer}] selected char id={r.CharacterId}");
+
+		// Миграция старых сейвов: до И5в.6 CurrentHp/MP были [JsonIgnore] и в
+		// БД лежат как 0. Без этого fix-up нельзя играть.
+		ch.ResolveEquipment();
+		if (ch.CurrentHp <= 0 || ch.CurrentMp <= 0)
+		{
+			ch.ResetForCombat();
+			_store.UpdateCharacter(_accountId.Value, ch);
+		}
+
+		Logger.Info($"[{_peer}] selected char id={r.CharacterId} hp={ch.CurrentHp}/{ch.MaxHp()}");
 		return new SelectCharacterResponse
 		{
 			Success = true,
@@ -316,11 +328,17 @@ public class Session
 
 		if (ended)
 		{
+			// Если игрок умер в подземелье — восстанавливаем HP/MP перед save,
+			// иначе после relog он не сможет начать новый бой (HP=0).
+			// Loot loss / экстракция-штраф — отдельный И5в.9+.
+			if (_battle.Character.CurrentHp <= 0)
+				_battle.Character.ResetForCombat();
+
 			// И5в.5 persistence: сохраняем character_json с актуальным
 			// инвентарём, эффектами, HP/MP. Engine уже мутировал state.Player.
 			if (!_store.UpdateCharacter(_accountId.Value, _battle.Character))
 				Logger.Warn($"[{_peer}] failed to persist character after battle");
-			Logger.Info($"[{_peer}] battle ended victory={victory}");
+			Logger.Info($"[{_peer}] battle ended victory={victory} hp={_battle.Character.CurrentHp}");
 			_battle = null;
 		}
 

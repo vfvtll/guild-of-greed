@@ -58,9 +58,13 @@ public class CharacterData
 	[JsonIgnore] public ArmorData Ring1;
 	[JsonIgnore] public ArmorData Ring2;
 
-	// === Боевое состояние (рантайм) ===
-	[JsonIgnore] public int CurrentHp;
-	[JsonIgnore] public int CurrentMp;
+	// === Боевое состояние ===
+	// CurrentHp/CurrentMp — PERSIST между боями: расход здоровья и маны в одном
+	// бою влияет на следующий. Восстановление только при StartRun (новый забег)
+	// и при смерти в подземелье (server делает full reset перед UpdateCharacter).
+	public int CurrentHp;
+	public int CurrentMp;
+	// Перечисленные ниже — чисто per-battle, не сохраняются.
 	[JsonIgnore] public int CurrentBlock;
 	[JsonIgnore] public List<StatusEffect> Effects = new();
 	[JsonIgnore] public int AttacksSinceLastCrit;
@@ -169,10 +173,22 @@ public class CharacterData
 	}
 
 	// === Боевые методы ===
+
+	// Полный restore. Вызывается при StartRun (новый забег) и сервером при
+	// смерти игрока в подземелье (чтобы после relog можно было играть дальше).
 	public void ResetForCombat()
 	{
 		CurrentHp = MaxHp();
 		CurrentMp = MaxMp();
+		CurrentBlock = 0;
+		Effects.Clear();
+		AttacksSinceLastCrit = 0;
+	}
+
+	// Подготовка перед новым боем В ТЕКУЩЕМ забеге: HP/MP переносятся как есть,
+	// блок и эффекты обнуляются (они per-battle), счётчик крита тоже.
+	public void PrepareForBattle()
+	{
 		CurrentBlock = 0;
 		Effects.Clear();
 		AttacksSinceLastCrit = 0;

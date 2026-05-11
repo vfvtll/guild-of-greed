@@ -51,7 +51,7 @@ public partial class LocationSelectView : Control
 		if (p != null)
 		{
 			var hp = UIStyle.MakeLabel(
-				$"{p.CharacterName}   ❤ {p.MaxHp()}   ✦ {p.MaxMp()}   ⚔ {p.Weapon?.Name ?? "—"}",
+				$"{p.CharacterName}   ❤ {p.CurrentHp}/{p.MaxHp()}   ✦ {p.CurrentMp}/{p.MaxMp()}   ⚔ {p.Weapon?.Name ?? "—"}",
 				14, UIStyle.TextPrimary);
 			hp.Position = new Vector2(440, 22);
 			AddChild(hp);
