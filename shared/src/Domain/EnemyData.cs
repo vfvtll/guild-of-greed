@@ -96,6 +96,11 @@ public class EnemyData
 	public void RollIntent()
 		=> NextIntent = Rng.Pick(Intents);
 
+	// Детерминированная версия для CSP-боя: использует переданный RandomSource
+	// вместо глобального Rng, чтобы клиент и сервер получили один Intent.
+	public void RollIntent(RandomSource rng)
+		=> NextIntent = rng != null ? rng.Pick(Intents) : Rng.Pick(Intents);
+
 	public void AddEffect(string id, string type, float amount, int duration)
 	{
 		var existing = Effects.Find(e => e.Id == id);

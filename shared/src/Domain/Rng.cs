@@ -1,43 +1,26 @@
-using System;
+using System.Collections.Generic;
 
 namespace GuildOfGreed.Shared.Domain;
 
-// Портативный RNG: без зависимости от Godot.
-// Используется во всех Domain/Data вместо GD.Randi/Randf.
+// Глобальный недетерминированный RNG — фасад над глобальным RandomSource.
 //
-// На клиенте (Godot) сидируется в Core/GameData._Ready через Rng.Seed(GD.Randi()).
-// На сервере будет сидироваться от собственного источника (timestamp, crypto rng).
-// При необходимости в детерминизме (replays, тесты) — Rng.Seed(fixed) даёт воспроизводимую последовательность.
+// Используется только для UI/мира где детерминизм НЕ нужен:
+//   - Анимации, цвет-шумы, прочие визуальные эффекты на клиенте
+//   - Генерация карты подземелья (пока — позже мигрируем на seeded)
+//
+// Для боевого кода (CombatEngine) — используй явный RandomSource из BattleState.
+// Это критично для CSP: оба, клиент и сервер, должны получать одинаковую
+// последовательность чисел с одним seed.
 public static class Rng
 {
-	private static Random _rand = new Random();
+	private static RandomSource _shared = new RandomSource();
 
-	public static void Seed(int seed) => _rand = new Random(seed);
+	public static void Seed(int seed) => _shared = new RandomSource(seed);
+	public static void SeedFromTime() => _shared = new RandomSource();
 
-	public static void SeedFromTime() => _rand = new Random();
-
-	// [0, maxExclusive)
-	public static int Next(int maxExclusive)
-	{
-		if (maxExclusive <= 0) return 0;
-		return _rand.Next(maxExclusive);
-	}
-
-	// [minInclusive, maxExclusive)
-	public static int Range(int minInclusive, int maxExclusive)
-	{
-		if (maxExclusive <= minInclusive) return minInclusive;
-		return _rand.Next(minInclusive, maxExclusive);
-	}
-
-	// [0.0, 1.0)
-	public static float NextFloat() => (float)_rand.NextDouble();
-
-	public static bool Chance(float probability) => NextFloat() < probability;
-
-	public static T Pick<T>(System.Collections.Generic.IList<T> list)
-	{
-		if (list == null || list.Count == 0) return default;
-		return list[_rand.Next(list.Count)];
-	}
+	public static int Next(int maxExclusive) => _shared.Next(maxExclusive);
+	public static int Range(int min, int maxExclusive) => _shared.Range(min, maxExclusive);
+	public static float NextFloat() => _shared.NextFloat();
+	public static bool Chance(float probability) => _shared.Chance(probability);
+	public static T Pick<T>(IList<T> list) => _shared.Pick(list);
 }
