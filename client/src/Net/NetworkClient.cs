@@ -19,13 +19,20 @@ public class NetworkClient : IDisposable
 {
 	public string ClientBuild { get; set; } = "client-dev";
 
+	// Сигнал верх — соединение порвалось (любой исключение в send/receive).
+	// Main слушает и показывает ReconnectOverlay. Срабатывает один раз
+	// после ConnectAsync — повторные ошибки до Dispose игнорируются (флаг
+	// _disconnected внутри).
+	public event Action<string> Disconnected;
+
 	private TcpClient _tcp;
 	private SslStream _ssl;
 	private string _host;
 	private int _port;
 	private bool _pinMismatch;
+	private bool _disconnected;
 
-	public bool IsConnected => _tcp?.Connected == true;
+	public bool IsConnected => _tcp?.Connected == true && !_disconnected;
 
 	public async Task ConnectAsync(string host, int port, CancellationToken ct = default)
 	{
@@ -33,6 +40,7 @@ public class NetworkClient : IDisposable
 		_host = host;
 		_port = port;
 		_pinMismatch = false;
+		_disconnected = false;
 		_tcp = new TcpClient();
 		await _tcp.ConnectAsync(host, port, ct).ConfigureAwait(false);
 
@@ -146,19 +154,35 @@ public class NetworkClient : IDisposable
 	private async Task<TResponse> ExchangeAsync<TResponse>(ClientMessage request, CancellationToken ct)
 		where TResponse : ServerMessage
 	{
-		if (_ssl == null) throw new InvalidOperationException("not connected");
-		await Codec.SendAsync(_ssl, request, ct).ConfigureAwait(false);
-		var reply = await Codec.ReceiveAsync<ServerMessage>(_ssl, ct).ConfigureAwait(false);
-		if (reply is ServerError err)
+		if (_ssl == null || _disconnected) throw new InvalidOperationException("not connected");
+		try
 		{
-			throw new ServerException(err.Code, err.Message);
+			await Codec.SendAsync(_ssl, request, ct).ConfigureAwait(false);
+			var reply = await Codec.ReceiveAsync<ServerMessage>(_ssl, ct).ConfigureAwait(false);
+			if (reply is ServerError err)
+				throw new ServerException(err.Code, err.Message);
+			if (reply is not TResponse typed)
+				throw new InvalidOperationException(
+					$"unexpected reply: got {reply?.GetType().Name}, expected {typeof(TResponse).Name}");
+			return typed;
 		}
-		if (reply is not TResponse typed)
+		catch (ServerException)
 		{
-			throw new InvalidOperationException(
-				$"unexpected reply: got {reply?.GetType().Name}, expected {typeof(TResponse).Name}");
+			// Сервер явно ответил ошибкой — это не разрыв соединения.
+			throw;
 		}
-		return typed;
+		catch (Exception ex)
+		{
+			NotifyDisconnect(ex.Message);
+			throw;
+		}
+	}
+
+	private void NotifyDisconnect(string reason)
+	{
+		if (_disconnected) return;
+		_disconnected = true;
+		try { Disconnected?.Invoke(reason); } catch { /* swallow */ }
 	}
 
 	public void Dispose()

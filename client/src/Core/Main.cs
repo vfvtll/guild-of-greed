@@ -18,6 +18,8 @@ public partial class Main : Control
 {
 	private NetworkClient _net;
 	private string _login;          // login текущего залогиненного пользователя
+	private ReconnectOverlay _reconnectOverlay;
+	private bool _reconnecting;
 
 	public override void _Ready()
 	{
@@ -29,8 +31,88 @@ public partial class Main : Control
 	private void StartFlow()
 	{
 		_net?.Dispose();
-		_net = new NetworkClient();
+		_net = NewNet();
 		ShowConnecting();
+	}
+
+	// Фабрика: каждый новый NetworkClient заново подписывается на Disconnected.
+	private NetworkClient NewNet()
+	{
+		var net = new NetworkClient();
+		net.Disconnected += OnNetDisconnected;
+		return net;
+	}
+
+	private void OnNetDisconnected(string reason)
+	{
+		// Disconnected эмитится из network-таска. Все Godot-операции
+		// маршалим обратно в main thread через CallDeferred.
+		GD.Print($"Main: net disconnected: {reason}");
+		CallDeferred(MethodName.BeginReconnect);
+	}
+
+	private void BeginReconnect()
+	{
+		if (_reconnecting) return;
+		_reconnecting = true;
+		_reconnectOverlay = new ReconnectOverlay();
+		_reconnectOverlay.RetryRequested += () => _ = ReconnectAsync();
+		AddChild(_reconnectOverlay);
+		_ = ReconnectAsync();
+	}
+
+	private async System.Threading.Tasks.Task ReconnectAsync()
+	{
+		if (_reconnectOverlay == null) return;
+		_reconnectOverlay.SetStatus($"Соединение с {NetPrefs.Host}:{NetPrefs.Port}...");
+		try
+		{
+			_net?.Dispose();
+			_net = NewNet();
+			await _net.ConnectAsync(NetPrefs.Host, NetPrefs.Port);
+			_reconnectOverlay.SetStatus("Сверка версий...");
+			var welcome = await _net.HandshakeAsync();
+			if (!welcome.Compatible)
+			{
+				FinishReconnect();
+				ShowUpdateRequired(welcome);
+				return;
+			}
+			if (AuthPrefs.HasSession())
+			{
+				_reconnectOverlay.SetStatus("Восстановление сессии...");
+				var prefs = AuthPrefs.Load();
+				var resp = await _net.ResumeAsync(prefs.Token);
+				if (!resp.Success)
+				{
+					AuthPrefs.Clear();
+					FinishReconnect();
+					ShowAuth();
+					return;
+				}
+				_login = resp.Login;
+			}
+			// Активный бой/run на сервере уже не существует (in-memory). Кидаем
+			// игрока в хаб — это известно-хорошее состояние.
+			FinishReconnect();
+			if (string.IsNullOrEmpty(_login)) ShowAuth();
+			else                              ShowLocationSelect();
+		}
+		catch (System.Exception ex)
+		{
+			_reconnectOverlay?.SetError($"Не удалось восстановить: {ex.Message}");
+		}
+	}
+
+	private void FinishReconnect()
+	{
+		_reconnecting = false;
+		if (_reconnectOverlay != null)
+		{
+			RemoveChild(_reconnectOverlay);
+			_reconnectOverlay.QueueFree();
+			_reconnectOverlay = null;
+		}
 	}
 
 	// =====================================================================
@@ -300,6 +382,8 @@ public partial class Main : Control
 	{
 		foreach (Node child in GetChildren())
 		{
+			// Reconnect overlay переживает переходы между экранами.
+			if (child == _reconnectOverlay) continue;
 			RemoveChild(child);
 			child.QueueFree();
 		}

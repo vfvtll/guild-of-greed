@@ -68,10 +68,17 @@ public partial class Combat : Control
 		{
 			resp = await Net.StartBattleAsync(locationIndex, nodeType);
 		}
+		catch (ServerException ex)
+		{
+			GD.PrintErr($"Combat: server refused StartBattle: {ex.Code}");
+			EmitSignal(SignalName.CombatExitRequested, false);
+			return;
+		}
 		catch (Exception ex)
 		{
-			GD.PrintErr($"Combat: StartBattle failed: {ex.Message}");
-			EmitSignal(SignalName.CombatExitRequested, false);
+			// Транспортный сбой — NetworkClient уже эмитнул Disconnected,
+			// Main покажет ReconnectOverlay. Молча выходим, не дублируем UI.
+			GD.PrintErr($"Combat: StartBattle network error: {ex.Message}");
 			return;
 		}
 		if (!resp.Success)
@@ -136,10 +143,16 @@ public partial class Combat : Control
 				resp = await Net.SendBattleActionAsync(
 					(int)action.Type, action.HandIndex, action.TargetEnemyIndex, action.PotionId);
 			}
+			catch (ServerException ex)
+			{
+				GD.PrintErr($"Combat: server rejected action: {ex.Code}");
+				EmitSignal(SignalName.CombatExitRequested, false);
+				return;
+			}
 			catch (Exception ex)
 			{
+				// Транспорт упал — overlay уже работает. Не дёргаем CombatExit.
 				GD.PrintErr($"Combat: action network error: {ex.Message}");
-				EmitSignal(SignalName.CombatExitRequested, false);
 				return;
 			}
 			if (!resp.Confirmed)
