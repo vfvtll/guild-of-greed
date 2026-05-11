@@ -1,33 +1,40 @@
 # Coding Standards — Guild of Greed
 
-Последнее обновление: 2026-05-10. Проект — Godot 4.6 .NET (C# / .NET 8) клиент. Сервер планируется отдельно на C# с шарингом Domain/Data через class library.
+Последнее обновление: 2026-05-11. Монорепа из трёх .NET 8 проектов: Godot-клиент, C# сервер (заглушка) и общая class library `GuildOfGreed.Shared` с Domain+Data.
 
 ---
 
-## 1. Структура папок
+## 1. Структура репозитория
 
 ```
-src/
-├── Core/        — autoloads, синглтоны, глобальный стейт игры (Godot-aware)
-├── Data/        — статические БД (предметы, карты, локации) + расчётные хелперы. Без Godot.
-├── Domain/      — POCO-сущности (CharacterData, EnemyData, Rng). Без Godot.
-└── <Feature>/   — фичи (Combat, Town, Inventory, Crafting, Auction, Extraction).
-                  Каждая фича — свой контроллер сцены + UI + (опционально) UIStyle.
-assets/          — арт, звук, шрифты (заполняется по мере)
-scenes/          — .tscn-файлы
+GuildOfGreed.sln          — общая solution для всех проектов
+client/                   — Godot 4.6 .NET (C#). GuildOfGreed.Client.csproj
+  project.godot
+  scenes/                 — .tscn-файлы
+  assets/                 — арт, звук, шрифты
+  src/
+    Core/                 — autoloads, синглтоны, глобальный стейт (Godot-aware)
+    <Feature>/            — Combat, Inventory, Map, LocationSelect, CharacterCreation, ...
+shared/                   — class library без Godot. GuildOfGreed.Shared.csproj
+  src/
+    Domain/               — POCO-сущности (CharacterData, EnemyData, RunMap, Rng)
+    Data/                 — статические БД (ItemsDB, CardsDB, PotionsDB, MapGenerator)
+                            + расчётные хелперы (формулы урона, лут, генерация карт)
+server/                   — C# сервер. GuildOfGreed.Server.csproj
+  src/                    — заглушка, наполнение позже
 ```
 
 **Правило зависимостей (одностороннее):**
 
 ```
-Feature → Data → Domain
-   ↓
-  Core → (Godot)
+client/Feature → client/Core → (Godot)
+client/* → shared/Data → shared/Domain
+server/* → shared/Data → shared/Domain
 ```
 
-Запрещено: `Domain → Godot`, `Domain → Data`, `Data → Feature`, `Data → Core`.
+Запрещено: `shared/* → Godot`, `shared/Domain → shared/Data`, `shared/* → client/*`, `shared/* → server/*`.
 
-**Why:** `Domain` и `Data` будут вынесены в shared class library — её подключит и клиент (Godot), и сервер (C# console / ASP.NET). Любой `using Godot;` или ссылка вверх ломает портативность.
+**Why:** `shared` подключается и клиентом (через ProjectReference в `client/GuildOfGreed.Client.csproj`), и сервером (через `server/GuildOfGreed.Server.csproj`). Любой `using Godot;` в shared или ссылка вверх ломает портативность и валит сборку server.
 
 ## 2. Именование
 
@@ -71,11 +78,11 @@ Feature → Data → Domain
 
 ## 6. Архитектурные правила
 
-- **Domain** — POCO. Никаких `using Godot;`. Будут вынесены в shared library.
-- **Data** — `public static class XxxDB`. Содержит словари + чистые расчётные хелперы (`ComputePhysDamage`, `DescribeCurrent`, `DescribeFormula`). Тоже portable.
-- **Core/GameData** — единственный синглтон через `public static GameData Instance { get; private set; }`. Назначается в `_Ready`.
-- **Feature/View-классы** (`CardView`, `EnemyView`) — только отображение, шлют сигналы, не меняют игровую модель.
-- **Feature/Controller** (`Combat`) — координирует View и Domain через сигналы и явные вызовы.
+- **shared/Domain** — POCO. Никаких `using Godot;`. Это уже shared library — её подключают client и server.
+- **shared/Data** — `public static class XxxDB`. Содержит словари + чистые расчётные хелперы (`ComputePhysDamage`, `DescribeCurrent`, `DescribeFormula`). Никакого Godot.
+- **client/Core/GameData** — единственный синглтон через `public static GameData Instance { get; private set; }`. Назначается в `_Ready`.
+- **client/Feature/View-классы** (`CardView`, `EnemyView`) — только отображение, шлют сигналы, не меняют игровую модель.
+- **client/Feature/Controller** (`Combat`) — координирует View и Domain через сигналы и явные вызовы.
 
 ## 7. Игровые паттерны
 
@@ -122,12 +129,12 @@ Feature → Data → Domain
 
 ## 12. Client/Server подготовка
 
-- Текущий код — клиент-only прототип. Но пишем как будто сервер уже на горизонте:
-  - Игровая логика (формулы урона, эффекты, прогрессия) — в `Data/`. Server подключит как библиотеку и будет авторитетно вычислять то же самое.
-  - Состояние сущностей (`CharacterData`, `EnemyData`) — POCO без Godot. Сериализуется в JSON для сети.
-  - Никаких UI-вызовов из Domain/Data.
-  - Random через `Rng` — на сервере подменим реализацию на seeded для replay/детерминизма.
-- Когда сервер начнётся: создать `GuildOfGreed.Core.csproj` (class library), переместить туда `src/Domain` и `src/Data`. И клиент, и сервер будут ссылаться на этот проект.
+- `shared/` уже выделен как class library (`GuildOfGreed.Shared.csproj`) — содержит Domain + Data. Подключён к client и server через ProjectReference.
+- Игровая логика (формулы урона, эффекты, прогрессия, генерация карт подземелья) живёт в `shared/Data` — обе стороны вычисляют идентично.
+- Состояние сущностей (`CharacterData`, `EnemyData`, `RunMap`) — POCO в `shared/Domain`. Сериализуется в JSON для сейва (сейчас) и сети (позже).
+- Никаких UI-вызовов из shared. Никаких `using Godot;`.
+- Random через `Rng` (`shared/Domain/Rng.cs`). На сервере при подключении подменим Seed на детерминированный для replay.
+- При добавлении новых формул / БД — кладём сразу в `shared/`, не в `client/`.
 
 ## 13. Комментарии и язык
 
