@@ -11,7 +11,7 @@ public partial class Combat
 {
 	private void OnCardClicked(CardView view)
 	{
-		if (_state == null || _state.CombatOver) return;
+		if (_state == null || _state.CombatOver || _busy) return;
 
 		// Найти индекс кликнутой карты в руке (по позиции в HBox).
 		int idx = -1;
@@ -81,7 +81,7 @@ public partial class Combat
 
 	// Захватывает CardView ДО engine.Apply (после Apply карта уйдёт из руки),
 	// чтобы AnimateCardOut получил корректный view-node.
-	private void PlayCardWithTarget(int handIndex, int targetEnemyIndex)
+	private async void PlayCardWithTarget(int handIndex, int targetEnemyIndex)
 	{
 		CardView playedView = null;
 		if (handIndex < _handContainer.GetChildCount())
@@ -94,7 +94,7 @@ public partial class Combat
 			if (card != null) Log($"[b]Сыграна карта:[/b] {card.Name}");
 		}
 
-		ApplyAction(new BattleAction
+		await ApplyActionAsync(new BattleAction
 		{
 			Type = BattleActionType.PlayCard,
 			HandIndex = handIndex,

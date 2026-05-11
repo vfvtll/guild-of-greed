@@ -253,6 +253,26 @@ public class AccountStore : IDisposable
 		}
 	}
 
+	// Сохраняет обновлённый CharacterData (HP/Inventory/Equipment/Effects).
+	// Вызывается сервером после BattleEnded — это даёт persistence изменений
+	// после боя между сессиями игрока.
+	public bool UpdateCharacter(Guid accountId, CharacterData ch)
+	{
+		if (ch == null) return false;
+		lock (_lock)
+		{
+			using var cmd = _conn.CreateCommand();
+			cmd.CommandText = """
+				UPDATE characters SET character_json = $j
+				WHERE id = $id AND account_id = $a
+			""";
+			cmd.Parameters.AddWithValue("$j", JsonSerializer.Serialize(ch, _jsonOptions));
+			cmd.Parameters.AddWithValue("$id", ch.Id.ToByteArray());
+			cmd.Parameters.AddWithValue("$a", accountId.ToByteArray());
+			return cmd.ExecuteNonQuery() > 0;
+		}
+	}
+
 	private int CountCharacters(Guid accountId)
 	{
 		using var cmd = _conn.CreateCommand();

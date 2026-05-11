@@ -4,7 +4,9 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using GuildOfGreed.Shared.Auth;
+using GuildOfGreed.Shared.Combat;
 using GuildOfGreed.Shared.Crypto;
+using GuildOfGreed.Shared.Data;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Net;
 
@@ -33,6 +35,9 @@ public class Session
 
 	private Guid? _accountId;
 	private string _login;
+	private Guid? _selectedCharacterId;
+	private BattleSession _battle;
+	private readonly Random _serverRng = new();
 
 	public Session(TcpClient tcp, Stream stream, AccountStore store, string peer, CancellationToken shutdown)
 	{
@@ -137,6 +142,8 @@ public class Session
 				CreateCharacterRequest r  => HandleCreateCharacter(r),
 				SelectCharacterRequest r  => HandleSelectCharacter(r),
 				DeleteCharacterRequest r  => HandleDeleteCharacter(r),
+				StartBattleRequest r      => HandleStartBattle(r),
+				BattleActionRequest r     => HandleBattleAction(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -254,12 +261,74 @@ public class Session
 	{
 		var ch = _store.LoadCharacter(_accountId.Value, r.CharacterId);
 		if (ch == null) return new SelectCharacterResponse { Success = false, Error = "not_found" };
+		_selectedCharacterId = r.CharacterId;
 		Logger.Info($"[{_peer}] selected char id={r.CharacterId}");
 		return new SelectCharacterResponse
 		{
 			Success = true,
 			CharacterJson = System.Text.Json.JsonSerializer.Serialize(ch,
 				new System.Text.Json.JsonSerializerOptions { IncludeFields = true }),
+		};
+	}
+
+	// =======================================================================
+	// Combat (И5в.4)
+	// =======================================================================
+
+	private ServerMessage HandleStartBattle(StartBattleRequest r)
+	{
+		if (_selectedCharacterId == null)
+			return new BattleStartedResponse { Success = false, Error = "no_character_selected" };
+
+		var character = _store.LoadCharacter(_accountId.Value, _selectedCharacterId.Value);
+		if (character == null)
+			return new BattleStartedResponse { Success = false, Error = "character_missing" };
+
+		character.ResolveEquipment();   // тянем Weapon/Armor по EquippedXxxId — нужно для расчётов.
+
+		var enemies = EnemyData.SpawnFor(r.LocationIndex, (MapNodeType)r.NodeType);
+		var deck = CardsDB.DeckFor(character);
+		int seed = _serverRng.Next();
+
+		_battle = new BattleSession(character, enemies, deck, seed);
+		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
+			$"seed={seed} enemies={enemies.Count}");
+
+		return new BattleStartedResponse { Success = true, Seed = seed };
+	}
+
+	private ServerMessage HandleBattleAction(BattleActionRequest r)
+	{
+		if (_battle == null)
+			return new BattleActionResponse { Confirmed = false, Error = "no_active_battle" };
+
+		var action = new BattleAction
+		{
+			Type = (BattleActionType)r.ActionType,
+			HandIndex = r.HandIndex,
+			TargetEnemyIndex = r.TargetEnemyIndex,
+			PotionId = r.PotionId,
+		};
+
+		_battle.ApplyAction(action);
+		bool ended = _battle.State.CombatOver;
+		bool victory = _battle.State.Victory;
+
+		if (ended)
+		{
+			// И5в.5 persistence: сохраняем character_json с актуальным
+			// инвентарём, эффектами, HP/MP. Engine уже мутировал state.Player.
+			if (!_store.UpdateCharacter(_accountId.Value, _battle.Character))
+				Logger.Warn($"[{_peer}] failed to persist character after battle");
+			Logger.Info($"[{_peer}] battle ended victory={victory}");
+			_battle = null;
+		}
+
+		return new BattleActionResponse
+		{
+			Confirmed = true,
+			BattleEnded = ended,
+			Victory = victory,
 		};
 	}
 

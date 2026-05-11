@@ -30,6 +30,8 @@ namespace GuildOfGreed.Shared.Net;
 [Union(6, typeof(CreateCharacterRequest))]
 [Union(7, typeof(SelectCharacterRequest))]
 [Union(8, typeof(DeleteCharacterRequest))]
+[Union(9, typeof(StartBattleRequest))]
+[Union(10, typeof(BattleActionRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -92,6 +94,27 @@ public class DeleteCharacterRequest : ClientMessage
 	[Key(0)] public Guid CharacterId;
 }
 
+// Старт боя. Клиент сообщает только координаты узла на карте — список врагов
+// и стартовую колоду сервер вычисляет сам через EnemyData.SpawnFor / CardsDB.DeckFor.
+// Так обе стороны заведомо в синхроне и анти-чит не зависит от того что прислал клиент.
+[MessagePackObject]
+public class StartBattleRequest : ClientMessage
+{
+	[Key(0)] public int LocationIndex;
+	[Key(1)] public int NodeType;       // (int)MapNodeType
+}
+
+// Одно действие игрока в активном бою. Маппится на BattleAction в shared/Combat.
+// Сервер прокатывает через идентичный CombatEngine с тем же seed что выдал клиенту.
+[MessagePackObject]
+public class BattleActionRequest : ClientMessage
+{
+	[Key(0)] public int ActionType;          // (int)BattleActionType
+	[Key(1)] public int HandIndex = -1;
+	[Key(2)] public int TargetEnemyIndex = -1;
+	[Key(3)] public string PotionId;
+}
+
 // === Server → Client ===========================================================
 
 [Union(0, typeof(ServerWelcome))]
@@ -104,6 +127,8 @@ public class DeleteCharacterRequest : ClientMessage
 [Union(7, typeof(SelectCharacterResponse))]
 [Union(8, typeof(DeleteCharacterResponse))]
 [Union(9, typeof(ServerError))]
+[Union(10, typeof(BattleStartedResponse))]
+[Union(11, typeof(BattleActionResponse))]
 public abstract class ServerMessage { }
 
 [MessagePackObject]
@@ -196,4 +221,30 @@ public class ServerError : ServerMessage
 {
 	[Key(0)] public string Code;             // "protocol_violation" / "internal_error" / ...
 	[Key(1)] public string Message;
+}
+
+// Подтверждение старта боя. Seed используется обеими сторонами для
+// инициализации RandomSource в BattleState — гарантирует синхрон.
+[MessagePackObject]
+public class BattleStartedResponse : ServerMessage
+{
+	[Key(0)] public bool Success;
+	[Key(1)] public int Seed;
+	[Key(2)] public string Error;
+}
+
+// Ответ на действие игрока. Confirmed=true → клиент уже применил
+// оптимистично, всё хорошо. Confirmed=false → клиент должен прервать
+// бой (рассинхрон, возможный читер или баг). На прототипе rollback
+// не делаем — игрок выкидывается обратно в LocationSelect.
+//
+// BattleEnded флаг — сервер увидел исход (победа/смерть/бегство) и уже
+// сохранил character_json. Клиенту достаточно вызвать CombatExitRequested.
+[MessagePackObject]
+public class BattleActionResponse : ServerMessage
+{
+	[Key(0)] public bool Confirmed;
+	[Key(1)] public string Error;
+	[Key(2)] public bool BattleEnded;
+	[Key(3)] public bool Victory;
 }

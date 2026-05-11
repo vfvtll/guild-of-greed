@@ -124,19 +124,9 @@ public partial class GameData : Node
 	}
 
 	// Резолв: ID → реальный объект. Вызывается после SetCharacter и после
-	// смены экипировки (equip из инвентаря).
-	private void ResolveEquipment()
-	{
-		if (Character == null) return;
-		Character.Weapon = ItemsDB.GetWeapon(Character.EquippedWeaponId)?.Clone();
-		Character.Chest  = ItemsDB.GetArmor(Character.EquippedChestId)?.Clone();
-		Character.Helmet = ItemsDB.GetArmor(Character.EquippedHelmetId)?.Clone();
-		Character.Gloves = ItemsDB.GetArmor(Character.EquippedGlovesId)?.Clone();
-		Character.Boots  = ItemsDB.GetArmor(Character.EquippedBootsId)?.Clone();
-		Character.Amulet = ItemsDB.GetArmor(Character.EquippedAmuletId)?.Clone();
-		Character.Ring1  = ItemsDB.GetArmor(Character.EquippedRing1Id)?.Clone();
-		Character.Ring2  = ItemsDB.GetArmor(Character.EquippedRing2Id)?.Clone();
-	}
+	// смены экипировки (equip из инвентаря). Сама логика живёт в shared,
+	// чтобы сервер её тоже использовал перед StartBattle.
+	private void ResolveEquipment() => Character?.ResolveEquipment();
 
 	// === Run lifecycle (карта подземелья) ===
 	// StartRun вызывается из LocationSelectView при входе игрока в локацию.
@@ -278,51 +268,9 @@ public partial class GameData : Node
 		return true;
 	}
 
-	public List<string> CurrentDeckIds()
-	{
-		var kind = Loadouts[SelectedLoadout].Deck;
-		return new List<string>(kind == "warrior" ? CardsDB.WarriorDeck : CardsDB.MageDeck);
-	}
+	// Колода + спавн делегированы в shared (см. CardsDB.DeckFor / EnemyData.SpawnFor).
+	// Server использует те же helpers — обе стороны заведомо согласованы.
+	public List<string> CurrentDeckIds() => CardsDB.DeckFor(Character);
 
 	public string CurrentLocationName() => LocationNames[SelectedLocation];
-
-	// Спавн врагов для текущего узла карты. Если CurrentRun == null
-	// (на прототипе — старый запуск без карты), фоллбек к одному гоблину.
-	public List<EnemyData> SpawnForCurrentNode()
-	{
-		var list = new List<EnemyData>();
-		var node = CurrentRun?.CurrentNode();
-		if (node == null)
-		{
-			list.Add(EnemyData.CreateGoblin());
-			return list;
-		}
-
-		if (node.Type == MapNodeType.Boss)
-		{
-			list.Add(EnemyData.CreateBoss());
-			return list;
-		}
-
-		// Battle (и на этом инкременте — Elite, пока без отдельных моделей):
-		// набор врагов зависит от локации. Не пять goblin'ов разом — это был
-		// формат "вся локация = один бой". Теперь локация = много узлов.
-		switch (SelectedLocation)
-		{
-			case 0:
-				list.Add(EnemyData.CreateGoblin());
-				break;
-			case 1:
-				list.Add(EnemyData.CreateForestGoblin());
-				list.Add(EnemyData.CreateForestGoblin());
-				break;
-			case 2:
-				list.Add(EnemyData.CreateGoblin());
-				break;
-			default:
-				list.Add(EnemyData.CreateGoblin());
-				break;
-		}
-		return list;
-	}
 }

@@ -69,6 +69,16 @@ public static class CardsDB
 		"strike",
 	};
 
+	// Стартовая колода по экипированному оружию. Используется и клиентом
+	// при StartNewCombat, и сервером в BattleSession — оба должны получить
+	// одну и ту же колоду для одного игрока.
+	public static List<string> DeckFor(CharacterData character)
+	{
+		if (character?.EquippedWeaponId != null && character.EquippedWeaponId.Contains("staff"))
+			return new List<string>(MageDeck);
+		return new List<string>(WarriorDeck);
+	}
+
 	// =====================================================================
 	// Расчёт боевого эффекта — единый источник правды.
 	// Combat.cs использует те же функции для применения урона,

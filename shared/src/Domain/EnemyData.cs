@@ -20,6 +20,28 @@ public class EnemyData
 	public Intent NextIntent;
 	public List<LootEntry> LootTable = new();
 
+	// Спавн encounter'а для узла на карте. Используется и клиентом
+	// (GameData.SpawnForCurrentNode → display), и сервером (BattleSession
+	// → authoritative). Чтобы анти-чит работал, обе стороны должны
+	// вычислять одно и то же.
+	public static List<EnemyData> SpawnFor(int locationIndex, MapNodeType nodeType)
+	{
+		var list = new List<EnemyData>();
+		if (nodeType == MapNodeType.Boss)
+		{
+			list.Add(CreateBoss());
+			return list;
+		}
+		switch (locationIndex)
+		{
+			case 0: list.Add(CreateGoblin()); break;
+			case 1: list.Add(CreateForestGoblin()); list.Add(CreateForestGoblin()); break;
+			case 2: list.Add(CreateGoblin()); break;
+			default: list.Add(CreateGoblin()); break;
+		}
+		return list;
+	}
+
 	// Слабый гоблин для леса — 5 шт. атакуют разом, поэтому каждый сильно слабее.
 	public static EnemyData CreateForestGoblin()
 	{

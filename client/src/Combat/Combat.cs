@@ -1,9 +1,11 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using GuildOfGreed.Shared.Combat;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
+using GuildOfGreed.Shared.Net;
 
 // Главный контроллер боя.
 //
@@ -25,11 +27,16 @@ public partial class Combat : Control
 	// advance=false — поражение или ручной выход (узел не отмечается).
 	[Signal] public delegate void CombatExitRequestedEventHandler(bool advance);
 
+	// Сетевой клиент. Передаётся из Main через property, потому что у Godot Node
+	// нет нормальных конструкторов с параметрами.
+	public NetworkClient Net { get; set; }
+
 	// === Боевое состояние — через shared engine ===
 	private BattleState _state;
 
 	// UI state.
 	private int _selectedHandIndex = -1;
+	private bool _busy;                 // блокирует input на время network round-trip.
 	private InventoryOverlay _inventoryOverlay;
 	private CombatLogOverlay _logOverlay;
 	private readonly List<string> _logLines = new();
@@ -38,30 +45,51 @@ public partial class Combat : Control
 	{
 		SetAnchorsPreset(LayoutPreset.FullRect);
 		BuildUI();
-		StartNewCombat();
+		_ = StartNewCombatAsync();
 	}
 
 	// =====================================================================
 	// Жизненный цикл боя
 	// =====================================================================
 
-	private void StartNewCombat()
+	// Старт боя теперь требует сервер: он выдаёт seed, мы прокатываем тот же
+	// StartBattle с теми же входными данными — обе стороны идут в синхрон.
+	private async Task StartNewCombatAsync()
 	{
 		_selectedHandIndex = -1;
 		_targetingBanner.Visible = false;
 
+		var node = GameData.Instance.CurrentRun?.CurrentNode();
+		int locationIndex = GameData.Instance.SelectedLocation;
+		int nodeType = (int)(node?.Type ?? MapNodeType.Battle);
+
+		BattleStartedResponse resp;
+		try
+		{
+			resp = await Net.StartBattleAsync(locationIndex, nodeType);
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"Combat: StartBattle failed: {ex.Message}");
+			EmitSignal(SignalName.CombatExitRequested, false);
+			return;
+		}
+		if (!resp.Success)
+		{
+			GD.PrintErr($"Combat: server refused StartBattle: {resp.Error}");
+			EmitSignal(SignalName.CombatExitRequested, false);
+			return;
+		}
+
+		// Сервер уже знает encounter/deck — мы вычисляем то же из shared helpers.
 		var character = GameData.Instance.Character;
-		var enemies = GameData.Instance.SpawnForCurrentNode();
-		var deck = GameData.Instance.CurrentDeckIds();
+		var enemies = EnemyData.SpawnFor(locationIndex, (MapNodeType)nodeType);
+		var deck = CardsDB.DeckFor(character);
 
-		// Seed выдадим локально на И5в.3; в И5в.4 он будет приходить от сервера
-		// в BattleStarted, и оба калькулятора (этот клиент и сервер) поедут
-		// с одинаковой Rng-последовательностью.
-		int seed = Rng.Next(int.MaxValue);
-
-		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, seed);
+		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, resp.Seed);
 		_state = state;
 		_endTurnButton.Disabled = false;
+		_busy = false;
 
 		ClearLog();
 		LogIntro();
@@ -84,16 +112,46 @@ public partial class Combat : Control
 		Log($"Колода ({_state.Deck.Count} карт): {DeckSummary()}");
 	}
 
-	// Единственная точка применения BattleAction: гонит через engine и
-	// рендерит результирующие events. playedView — захваченная CardView
-	// (если action — PlayCard), чтобы AnimateCardOut получил правильный
-	// узел до того как карта уйдёт из руки.
-	private void ApplyAction(BattleAction action, CardView playedView)
+	// Единая точка действия игрока. Pattern:
+	//   1. Optimistic apply через локальный engine — игрок видит результат сразу.
+	//   2. Параллельно шлём action на server — он применяет ту же логику
+	//      с тем же seed и подтверждает Confirmed=true (или Rejected при mismatch).
+	//   3. На время round-trip UI заблокирован (_busy=true) — простой защитный
+	//      механизм от спама. При Rejected — выкидываем игрока в LocationSelect.
+	private async Task ApplyActionAsync(BattleAction action, CardView playedView)
 	{
 		if (_state == null || _state.CombatOver) return;
-		var events = CombatEngine.Apply(_state, action);
-		ApplyEvents(events, playedView);
-		RefreshUI();
+		if (_busy) return;
+		_busy = true;
+		try
+		{
+			var events = CombatEngine.Apply(_state, action);
+			ApplyEvents(events, playedView);
+			RefreshUI();
+
+			if (Net == null) return;
+			BattleActionResponse resp;
+			try
+			{
+				resp = await Net.SendBattleActionAsync(
+					(int)action.Type, action.HandIndex, action.TargetEnemyIndex, action.PotionId);
+			}
+			catch (Exception ex)
+			{
+				GD.PrintErr($"Combat: action network error: {ex.Message}");
+				EmitSignal(SignalName.CombatExitRequested, false);
+				return;
+			}
+			if (!resp.Confirmed)
+			{
+				GD.PrintErr($"Combat: server rejected action: {resp.Error}");
+				EmitSignal(SignalName.CombatExitRequested, false);
+			}
+		}
+		finally
+		{
+			_busy = false;
+		}
 	}
 
 	// Прокатывает список events: лог, всплывающий текст, анимации, vibration.
@@ -190,21 +248,21 @@ public partial class Combat : Control
 	// Кнопки и user input
 	// =====================================================================
 
-	private void OnEndTurnPressed()
+	private async void OnEndTurnPressed()
 	{
-		if (_state == null || _state.CombatOver) return;
+		if (_state == null || _state.CombatOver || _busy) return;
 		CancelTargeting();
-		ApplyAction(new BattleAction { Type = BattleActionType.EndTurn }, playedView: null);
+		await ApplyActionAsync(new BattleAction { Type = BattleActionType.EndTurn }, playedView: null);
 	}
 
 	// Зелья тратят слот, но не ход — игрок может пить мидл-комбо.
-	private void OnUsePotion(string itemId)
+	private async void OnUsePotion(string itemId)
 	{
-		if (_state == null || _state.CombatOver) return;
+		if (_state == null || _state.CombatOver || _busy) return;
 		var potion = PotionsDB.Get(itemId);
 		if (potion == null) return;
 		Log($"[color=#7fa]🧪 Применено: {potion.Name}[/color]");
-		ApplyAction(new BattleAction
+		await ApplyActionAsync(new BattleAction
 		{
 			Type = BattleActionType.UsePotion,
 			PotionId = itemId,
@@ -215,7 +273,7 @@ public partial class Combat : Control
 	//   В бою          — Flee через engine (state.CombatOver=true, victory=false).
 	//   После победы   — просто emit signal с advance=true.
 	//   После смерти   — просто emit signal с advance=false.
-	private void OnExitPressed()
+	private async void OnExitPressed()
 	{
 		if (_state == null)
 		{
@@ -224,7 +282,7 @@ public partial class Combat : Control
 		}
 		if (!_state.CombatOver)
 		{
-			ApplyAction(new BattleAction { Type = BattleActionType.Flee }, playedView: null);
+			await ApplyActionAsync(new BattleAction { Type = BattleActionType.Flee }, playedView: null);
 		}
 		bool advance = _state.CombatOver && _state.Victory;
 		EmitSignal(SignalName.CombatExitRequested, advance);

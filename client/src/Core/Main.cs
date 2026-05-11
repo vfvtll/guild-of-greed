@@ -250,7 +250,7 @@ public partial class Main : Control
 		if (n != null) n.Visited = false;
 
 		ClearContent();
-		var combat = new Combat();
+		var combat = new Combat { Net = _net };
 		combat.ResetCharacterRequested += OnResetCharacterFromGame;
 		combat.CombatExitRequested += (advance) => OnCombatExit(advance, nodeId, prevNodeId);
 		AddChild(combat);

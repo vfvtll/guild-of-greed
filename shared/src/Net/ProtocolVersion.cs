@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 2;   // I3: SelectCharacterResponse.CharacterJson.
+	public const int Current = 3;   // I5v.4: combat messages (StartBattle / BattleAction).
 }
