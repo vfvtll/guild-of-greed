@@ -44,6 +44,7 @@ public class BattleEvent
 	public int HandIndex = -1;
 	public int Amount;
 	public bool IsCrit;
+	public bool IsPhys;       // для DamageDealtTo* — выбор цвета всплывающего текста.
 	public bool Victory;
 	public string CardId;
 	public string PotionId;

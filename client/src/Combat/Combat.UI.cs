@@ -236,8 +236,8 @@ public partial class Combat
 		}
 		_buffsLabel.Text = $"Эффекты: {DescribeEffects(p.Effects)}";
 
-		_deckCountLabel.Text = $"{Lang.T("ui.combat.deck")}: {_deck.Count}";
-		_discardCountLabel.Text = $"{Lang.T("ui.combat.discard")}: {_discard.Count}";
+		_deckCountLabel.Text = $"{Lang.T("ui.combat.deck")}: {_state?.Deck.Count ?? 0}";
+		_discardCountLabel.Text = $"{Lang.T("ui.combat.discard")}: {_state?.Discard.Count ?? 0}";
 
 		RefreshPotionsRow();
 		RefreshExitButton();
@@ -248,18 +248,14 @@ public partial class Combat
 
 	private void RefreshExitButton()
 	{
-		if (!_combatOver)
-		{
+		bool over = _state != null && _state.CombatOver;
+		bool victory = _state != null && _state.Victory;
+		if (!over)
 			_exitButton.Text = "🏳 Бежать";
-		}
-		else if (_victory)
-		{
+		else if (victory)
 			_exitButton.Text = "✅ На карту →";
-		}
 		else
-		{
 			_exitButton.Text = "💀 Выйти из подземелья";
-		}
 	}
 
 	// Динамически перестраиваем кнопки зелий: показываем все типы, что
@@ -280,7 +276,7 @@ public partial class Combat
 			var btn = new Button { Text = $"{potion.Icon}×{count}" };
 			UIStyle.StyleButton(btn);
 			btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-			btn.Disabled = _combatOver;
+			btn.Disabled = _state != null && _state.CombatOver;
 			btn.TooltipText = $"{potion.Name}\n{potion.Description}";
 			string id = potion.Id;
 			btn.Pressed += () => OnUsePotion(id);
@@ -339,16 +335,18 @@ public partial class Combat
 
 	private void RefreshEnemyArea()
 	{
+		if (_state == null) return;
 		bool targetingActive = _selectedHandIndex >= 0;
+		var enemies = _state.Enemies;
 
 		// Если состав encounter изменился — пересобираем. Иначе обновляем
 		// существующие view "на месте", чтобы не прерывать анимации (Flash).
-		bool needRebuild = _enemyArea.GetChildCount() != _encounter.Count;
+		bool needRebuild = _enemyArea.GetChildCount() != enemies.Count;
 		if (!needRebuild)
 		{
-			for (int i = 0; i < _encounter.Count; i++)
+			for (int i = 0; i < enemies.Count; i++)
 			{
-				if (_enemyArea.GetChild(i) is not EnemyView ev || ev.Enemy != _encounter[i])
+				if (_enemyArea.GetChild(i) is not EnemyView ev || ev.Enemy != enemies[i])
 				{
 					needRebuild = true;
 					break;
@@ -363,7 +361,7 @@ public partial class Combat
 				_enemyArea.RemoveChild(child);
 				child.QueueFree();
 			}
-			foreach (var enemy in _encounter)
+			foreach (var enemy in enemies)
 			{
 				var view = new EnemyView();
 				_enemyArea.AddChild(view);
@@ -373,10 +371,10 @@ public partial class Combat
 		}
 		else
 		{
-			for (int i = 0; i < _encounter.Count; i++)
+			for (int i = 0; i < enemies.Count; i++)
 			{
 				if (_enemyArea.GetChild(i) is EnemyView ev)
-					ev.SetEnemy(_encounter[i], targetingActive && _encounter[i].CurrentHp > 0);
+					ev.SetEnemy(enemies[i], targetingActive && enemies[i].CurrentHp > 0);
 			}
 		}
 	}
@@ -388,16 +386,18 @@ public partial class Combat
 			_handContainer.RemoveChild(child);
 			child.QueueFree();
 		}
+		if (_state == null) return;
 		var p = GameData.Instance.Character;
-		var firstAlive = _encounter.FirstOrDefault(e => e.CurrentHp > 0);
-		for (int i = 0; i < _hand.Count; i++)
+		var firstAlive = _state.Enemies.FirstOrDefault(e => e.CurrentHp > 0);
+		bool over = _state.CombatOver;
+		for (int i = 0; i < _state.Hand.Count; i++)
 		{
-			var cardId = _hand[i];
+			var cardId = _state.Hand[i];
 			var view = new CardView();
 			_handContainer.AddChild(view);
 			view.SetCard(cardId, p, firstAlive);
 			var card = CardsDB.GetCard(cardId);
-			view.SetPlayable(p.CurrentMp >= card.Cost && !_combatOver);
+			view.SetPlayable(p.CurrentMp >= card.Cost && !over);
 			view.SetSelected(_selectedHandIndex == i);
 			view.CardClicked += OnCardClicked;
 		}
@@ -423,8 +423,9 @@ public partial class Combat
 	private string DeckSummary()
 	{
 		var counts = new Dictionary<string, int>();
-		foreach (var id in _deck)
-			counts[id] = counts.GetValueOrDefault(id, 0) + 1;
+		if (_state != null)
+			foreach (var id in _state.Deck)
+				counts[id] = counts.GetValueOrDefault(id, 0) + 1;
 		var parts = new List<string>();
 		foreach (var kv in counts)
 			parts.Add($"{CardsDB.GetCard(kv.Key).Name}×{kv.Value}");

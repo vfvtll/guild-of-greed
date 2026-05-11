@@ -1,24 +1,26 @@
 using Godot;
-using System;
+using System.Collections.Generic;
 using System.Linq;
+using GuildOfGreed.Shared.Combat;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
 
-// Combat — игра карты + выбор цели + применение урона.
+// Combat — обработка кликов по картам/врагам, выбор цели,
+// view-рендеры BattleEvent. ВСЯ боевая математика — в shared CombatEngine.
 public partial class Combat
 {
 	private void OnCardClicked(CardView view)
 	{
-		if (_combatOver) return;
+		if (_state == null || _state.CombatOver) return;
 
 		// Найти индекс кликнутой карты в руке (по позиции в HBox).
 		int idx = -1;
 		for (int i = 0; i < _handContainer.GetChildCount(); i++)
 			if (_handContainer.GetChild(i) == view) { idx = i; break; }
-		if (idx < 0 || idx >= _hand.Count) return;
+		if (idx < 0 || idx >= _state.Hand.Count) return;
 
 		var card = view.CardData;
-		var p = GameData.Instance.Character;
+		var p = _state.Player;
 
 		if (p.CurrentMp < card.Cost)
 		{
@@ -26,25 +28,25 @@ public partial class Combat
 			return;
 		}
 
-		bool needsTarget = card.Effect == "damage_phys"
-			|| card.Effect == "damage_magic"
-			|| card.Effect == "debuff_phys";
+		bool needsTarget = card.Effect is "damage_phys" or "damage_magic" or "debuff_phys";
 
 		if (!needsTarget)
 		{
-			PlayCard(idx, null);
+			PlayCardWithTarget(idx, -1);
 			return;
 		}
 
-		var alive = _encounter.Where(e => e.CurrentHp > 0).ToList();
-		if (alive.Count == 0) return;
-		if (alive.Count == 1)
+		var aliveIndices = new List<int>();
+		for (int i = 0; i < _state.Enemies.Count; i++)
+			if (_state.Enemies[i].CurrentHp > 0) aliveIndices.Add(i);
+		if (aliveIndices.Count == 0) return;
+		if (aliveIndices.Count == 1)
 		{
-			PlayCard(idx, alive[0]);
+			PlayCardWithTarget(idx, aliveIndices[0]);
 			return;
 		}
 
-		// Несколько целей — переходим в режим выбора.
+		// Несколько целей — переходим в режим выбора (или отменяем повторным кликом).
 		if (_selectedHandIndex == idx)
 		{
 			CancelTargeting();
@@ -62,10 +64,12 @@ public partial class Combat
 	{
 		if (_selectedHandIndex < 0) return;
 		if (view.Enemy == null || view.Enemy.CurrentHp <= 0) return;
-		int idx = _selectedHandIndex;
+		int handIdx = _selectedHandIndex;
+		int enemyIdx = _state.Enemies.IndexOf(view.Enemy);
 		_selectedHandIndex = -1;
 		_targetingBanner.Visible = false;
-		PlayCard(idx, view.Enemy);
+		if (enemyIdx < 0) return;
+		PlayCardWithTarget(handIdx, enemyIdx);
 	}
 
 	private void CancelTargeting()
@@ -75,162 +79,115 @@ public partial class Combat
 		_targetingBanner.Visible = false;
 	}
 
-	private void PlayCard(int handIndex, EnemyData target)
+	// Захватывает CardView ДО engine.Apply (после Apply карта уйдёт из руки),
+	// чтобы AnimateCardOut получил корректный view-node.
+	private void PlayCardWithTarget(int handIndex, int targetEnemyIndex)
 	{
-		if (handIndex < 0 || handIndex >= _hand.Count) return;
-
-		// Захватываем view ДО изменения данных — для анимации розыгрыша.
 		CardView playedView = null;
 		if (handIndex < _handContainer.GetChildCount())
 			playedView = _handContainer.GetChild(handIndex) as CardView;
 
-		var cardId = _hand[handIndex];
-		var card = CardsDB.GetCard(cardId);
-		var p = GameData.Instance.Character;
-
-		p.CurrentMp -= card.Cost;
-		Log($"[b]Сыграна карта:[/b] {card.Name} [color=#5af](-{card.Cost} MP)[/color]");
-
-		switch (card.Effect)
+		string cardId = handIndex >= 0 && handIndex < _state.Hand.Count ? _state.Hand[handIndex] : null;
+		if (!string.IsNullOrEmpty(cardId))
 		{
-			case "damage_phys":
-			{
-				int dmg = CardsDB.ComputePhysDamage(card, p, target);
-				bool isCrit = p.TryConsumeCrit();
-				if (isCrit) dmg = (int)Math.Round(dmg * p.CritMultiplier());
-				ApplyDamageToEnemy(target, dmg, true, isCrit);
-				break;
-			}
-			case "damage_magic":
-			{
-				int dmg = CardsDB.ComputeMagicDamage(card, p, target);
-				bool isCrit = p.TryConsumeCrit();
-				if (isCrit) dmg = (int)Math.Round(dmg * p.CritMultiplier());
-				ApplyDamageToEnemy(target, dmg, false, isCrit);
-				break;
-			}
-			case "block":
-			{
-				int amount = CardsDB.ComputeBlock(card, p);
-				p.CurrentBlock += amount;
-				Log($"Блок: +{amount} (всего {p.CurrentBlock})");
-				SpawnFloatingText(new Vector2(150, 110), $"+{amount} БЛОК", UIStyle.BlockCyan, 22);
-				break;
-			}
-			case "heal":
-			{
-				int amount = CardsDB.ComputeHeal(card, p);
-				int before = p.CurrentHp;
-				p.CurrentHp = Math.Min(p.CurrentHp + amount, p.MaxHp());
-				int healed = p.CurrentHp - before;
-				Log($"[color=#7fa]Исцеление: +{healed} ХП[/color]");
-				SpawnFloatingText(new Vector2(150, 110), $"+{healed} ХП", UIStyle.HealGreen, 22);
-				break;
-			}
-			case "debuff_phys":
-				if (target != null)
-				{
-					target.AddEffect("armor_break", "phys_taken_pct", card.AmountPct, card.Duration);
-					Log($"{target.EnemyName} получает +{card.AmountPct}% физ. урона на {card.Duration} х.");
-				}
-				break;
-			case "buff_magic":
-				p.AddEffect("magic_focus", "magic_dmg_pct", card.AmountPct, card.Duration);
-				Log($"Вы наносите +{card.AmountPct}% маг. урона {card.Duration} ходов.");
-				break;
+			var card = CardsDB.GetCard(cardId);
+			if (card != null) Log($"[b]Сыграна карта:[/b] {card.Name}");
 		}
 
-		_hand.RemoveAt(handIndex);
-		_discard.Add(cardId);
-
-		// Анимация розыгрыша: карта вылетает вверх и тает.
-		if (playedView != null) AnimateCardOut(playedView);
-
-		if (AllEnemiesDead()) OnAllEnemiesDead();
-		RefreshUI();
+		ApplyAction(new BattleAction
+		{
+			Type = BattleActionType.PlayCard,
+			HandIndex = handIndex,
+			TargetEnemyIndex = targetEnemyIndex,
+		}, playedView);
 	}
 
-	private bool AllEnemiesDead()
-	{
-		foreach (var e in _encounter)
-			if (e.CurrentHp > 0) return false;
-		return true;
-	}
+	// =====================================================================
+	// View-рендеры BattleEvent
+	// =====================================================================
 
-	private void ApplyDamageToEnemy(EnemyData enemy, int dmg, bool isPhys, bool isCrit = false)
+	private void RenderDamageToEnemy(BattleEvent ev)
 	{
-		if (enemy == null) return;
-		int defense = isPhys ? enemy.PhysDef : enemy.MagicDef;
-		dmg = Math.Max(1, dmg - defense);
-		int absorbed = 0;
-		if (enemy.CurrentBlock > 0)
-		{
-			absorbed = Math.Min(enemy.CurrentBlock, dmg);
-			enemy.CurrentBlock -= absorbed;
-			dmg -= absorbed;
-		}
-		enemy.CurrentHp = Math.Max(0, enemy.CurrentHp - dmg);
-		string kind = isPhys ? "Физ" : "Маг";
-		string critTag = isCrit ? "[color=#fc4]🎯 КРИТ![/color] " : "";
-		Log(absorbed > 0
-			? $"{critTag}→ {enemy.EnemyName}: {kind} урон {dmg} (поглощено блоком: {absorbed})"
-			: $"{critTag}→ {enemy.EnemyName}: {kind} урон {dmg}");
+		if (ev.EnemyIndex < 0 || ev.EnemyIndex >= _state.Enemies.Count) return;
+		var enemy = _state.Enemies[ev.EnemyIndex];
 
-		var ev = FindEnemyView(enemy);
-		if (ev != null)
+		string critTag = ev.IsCrit ? "[color=#fc4]🎯 КРИТ![/color] " : "";
+		string kind = ev.IsPhys ? "Физ" : "Маг";
+		Log($"{critTag}→ {enemy.EnemyName}: {kind} урон {ev.Amount}");
+
+		var view = FindEnemyView(enemy);
+		if (view != null)
 		{
-			var pos = ev.GlobalPosition + new Vector2(ev.Size.X / 2f, ev.Size.Y * 0.25f);
+			var pos = view.GlobalPosition + new Vector2(view.Size.X / 2f, view.Size.Y * 0.25f);
 			Color color;
 			int fontSize;
 			string text;
-			if (isCrit)
+			if (ev.IsCrit)
 			{
 				color = new Color(1.0f, 0.85f, 0.20f);
 				fontSize = 38;
-				text = $"-{dmg}!";
+				text = $"-{ev.Amount}!";
 			}
 			else
 			{
-				color = isPhys ? new Color(1.0f, 0.6f, 0.35f) : new Color(0.75f, 0.55f, 1.0f);
+				color = ev.IsPhys ? new Color(1.0f, 0.6f, 0.35f) : new Color(0.75f, 0.55f, 1.0f);
 				fontSize = 28;
-				text = $"-{dmg}";
+				text = $"-{ev.Amount}";
 			}
 			SpawnFloatingText(pos, text, color, fontSize);
-			ev.Flash();
+			view.Flash();
 		}
-
-		// Тактильная отдача на мобильном (на десктопе — no-op).
-		if (isCrit) Input.VibrateHandheld(60);
-
-		if (enemy.CurrentHp <= 0)
-		{
-			Log($"[color=#7f7]✓ {enemy.EnemyName} повержен.[/color]");
-			Input.VibrateHandheld(120);
-			DropLoot(enemy);
-		}
+		if (ev.IsCrit) Input.VibrateHandheld(60);
 	}
 
-	// Прокатываем таблицу лута врага. Каждая запись — независимый ролл.
-	// Цвет лога окрашивается по редкости. Если инвентарь полон — лут теряется.
-	private void DropLoot(EnemyData enemy)
+	private void RenderDamageToPlayer(BattleEvent ev)
 	{
-		if (enemy.LootTable == null || enemy.LootTable.Count == 0) return;
-		foreach (var entry in enemy.LootTable)
+		Log($"[color=#f88]{ev.IntentName ?? "Атака"}: получено {ev.Amount} урона[/color]");
+		SpawnFloatingText(new Vector2(150, 100), $"-{ev.Amount}", UIStyle.DangerRed, 28);
+		Input.VibrateHandheld(40);
+	}
+
+	private void RenderEffectApplied(BattleEvent ev)
+	{
+		// На цель (враг) или на игрока — определяется EnemyIndex.
+		string targetName = ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count
+			? _state.Enemies[ev.EnemyIndex].EnemyName
+			: "Вы";
+		switch (ev.EffectType)
 		{
-			if (!Rng.Chance(entry.Chance)) continue;
-			int count = Rng.Range(entry.MinCount, entry.MaxCount + 1);
-			if (!GameData.Instance.AddItem(entry.ItemId, count))
-			{
-				Log($"[color=#f88]Инвентарь полон — {GetItemName(entry.ItemId)} потерян.[/color]");
-				continue;
-			}
-			var (name, rarity) = GetItemNameAndRarity(entry.ItemId);
-			string color = RarityHexColor(rarity);
-			Log($"[color={color}]💰 Лут: {name} ×{count}[/color]");
+			case "phys_taken_pct":
+				Log($"{targetName} получает +{ev.Amount}% физ. урона на {ev.EffectDuration} ходов.");
+				break;
+			case "magic_dmg_pct":
+				Log($"{targetName} наносит +{ev.Amount}% маг. урона на {ev.EffectDuration} ходов.");
+				break;
+			case "phys_dmg_pct":
+				Log($"{targetName}: ярость +{ev.Amount}% физ. урона ({ev.EffectDuration} ходов).");
+				break;
+			default:
+				Log($"{targetName}: эффект {ev.EffectType} ({ev.EffectDuration} ходов).");
+				break;
 		}
 	}
 
-	private static string GetItemName(string id) => GetItemNameAndRarity(id).name;
+	private void RenderLootDropped(BattleEvent ev)
+	{
+		if (ev.DroppedItems == null) return;
+		foreach (var item in ev.DroppedItems)
+		{
+			// item приходит как "itemId×count" — разбираем для лога.
+			int x = item.IndexOf('×');
+			string itemId = x > 0 ? item[..x] : item;
+			string countStr = x > 0 ? item[(x + 1)..] : "1";
+			var (name, rarity) = GetItemNameAndRarity(itemId);
+			string color = RarityHexColor(rarity);
+			Log($"[color={color}]💰 Лут: {name} ×{countStr}[/color]");
+		}
+	}
+
+	// =====================================================================
+	// Lookup helpers
+	// =====================================================================
 
 	private static (string name, ItemRarity rarity) GetItemNameAndRarity(string id)
 	{
@@ -250,27 +207,4 @@ public partial class Combat
 		ItemRarity.Epic     => "#c878ff",
 		_                   => "#dddddd",
 	};
-
-	private void ApplyDamageToPlayer(int dmg)
-	{
-		var p = GameData.Instance.Character;
-		dmg = Math.Max(1, dmg - p.PhysDef());
-		int absorbed = 0;
-		if (p.CurrentBlock > 0)
-		{
-			absorbed = Math.Min(p.CurrentBlock, dmg);
-			p.CurrentBlock -= absorbed;
-			dmg -= absorbed;
-		}
-		p.CurrentHp = Math.Max(0, p.CurrentHp - dmg);
-		Log(absorbed > 0
-			? $"[color=#f88]Получен урон: {dmg} (поглощено: {absorbed})[/color]"
-			: $"[color=#f88]Получен урон: {dmg}[/color]");
-
-		SpawnFloatingText(new Vector2(150, 100), $"-{dmg}", UIStyle.DangerRed, 28);
-
-		// Удар по игроку — короткая вибрация. Урон <= блок? всё равно вибрируем,
-		// игрок ощутит что атака случилась.
-		Input.VibrateHandheld(40);
-	}
 }

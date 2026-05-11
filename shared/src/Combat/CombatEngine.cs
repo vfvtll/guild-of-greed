@@ -65,14 +65,11 @@ public static class CombatEngine
 
 		var events = new List<BattleEvent> { new() { Type = BattleEventType.BattleStarted } };
 
-		// Колода + тасовка.
+		// Колода + тасовка. Стартовый shuffle event не эмитим — клиент видит
+		// итоговый порядок прямо в state.Deck. DeckShuffled понадобится только
+		// при reshuffle сброса во время боя (DrawToHand ниже).
 		state.Deck = new List<string>(deckSource);
 		Shuffle(state.Deck, state.Rng);
-		events.Add(new BattleEvent
-		{
-			Type = BattleEventType.DeckShuffled,
-			CardOrder = new List<string>(state.Deck),
-		});
 
 		// Намерения врагов.
 		for (int i = 0; i < state.Enemies.Count; i++)
@@ -408,6 +405,7 @@ public static class CombatEngine
 			EnemyIndex = enemyIndex,
 			Amount = dmg,
 			IsCrit = isCrit,
+			IsPhys = isPhys,
 		});
 
 		if (enemy.CurrentHp <= 0)

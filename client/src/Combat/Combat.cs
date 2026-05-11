@@ -1,47 +1,38 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Combat;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
 
-// Главный контроллер боя. Поддерживает несколько врагов одновременно,
-// выбор цели для атак, одновременный ход всех живых врагов в конце хода игрока.
+// Главный контроллер боя.
+//
+// С И5в.3 вся боевая логика живёт в shared/Combat/CombatEngine. Этот файл —
+// View-обёртка: собирает BattleAction из user input, прокатывает через
+// engine, рендерит итоговые BattleEvent (лог, анимации, всплывающий текст).
+// Это та же модель, что побежит на сервере — base для CSP.
 //
 // Файлы:
-//   Combat.cs            — состояние, _Ready, жизненный цикл боя, кнопки
-//   Combat.Cards.cs      — игра карт, выбор цели, расчёт урона
+//   Combat.cs            — состояние боя, _Ready, ApplyEvents, кнопки
+//   Combat.Cards.cs      — обработка кликов по картам/врагам, выбор цели
 //   Combat.UI.cs         — построение и обновление UI
 //   Combat.Animations.cs — твины (всплывающий текст, вылет карты)
 public partial class Combat : Control
 {
-	// Сигнал наверх (Main.cs) когда игрок хочет удалить текущего персонажа.
-	[Signal]
-	public delegate void ResetCharacterRequestedEventHandler();
+	[Signal] public delegate void ResetCharacterRequestedEventHandler();
 
-	// Сигнал наверх когда бой завершён.
-	//   advance=true  — победа, продвигаем по карте к этому узлу.
-	//   advance=false — поражение или ручной выход; узел не помечается пройденным.
-	[Signal]
-	public delegate void CombatExitRequestedEventHandler(bool advance);
+	// Бой завершён: advance=true — победа (продвижение по карте);
+	// advance=false — поражение или ручной выход (узел не отмечается).
+	[Signal] public delegate void CombatExitRequestedEventHandler(bool advance);
 
-	// === Состояние боя (поля) ===
-	private List<string> _deck = new();
-	private List<string> _hand = new();
-	private List<string> _discard = new();
-	private List<EnemyData> _encounter = new();
-	private bool _combatOver = false;
-	private bool _victory = false;       // Бой завершён победой (для UX exit-кнопки).
-	private int _turnCount = 0;
+	// === Боевое состояние — через shared engine ===
+	private BattleState _state;
 
-	// Индекс выбранной карты в _hand (для режима выбора цели). -1 = ничего не выбрано.
+	// UI state.
 	private int _selectedHandIndex = -1;
-
-	// Активный оверлей инвентаря (null когда закрыт).
 	private InventoryOverlay _inventoryOverlay;
-
-	// Активный оверлей лога (null когда закрыт). Сам лог хранится в _logLines.
 	private CombatLogOverlay _logOverlay;
-	private readonly System.Collections.Generic.List<string> _logLines = new();
+	private readonly List<string> _logLines = new();
 
 	public override void _Ready()
 	{
@@ -56,196 +47,199 @@ public partial class Combat : Control
 
 	private void StartNewCombat()
 	{
-		_combatOver = false;
-		_victory = false;
-		_turnCount = 0;
 		_selectedHandIndex = -1;
 		_targetingBanner.Visible = false;
-		GameData.Instance.Character.ResetForCombat();
 
-		_encounter = GameData.Instance.SpawnForCurrentNode();
-		foreach (var e in _encounter) e.RollIntent();
+		var character = GameData.Instance.Character;
+		var enemies = GameData.Instance.SpawnForCurrentNode();
+		var deck = GameData.Instance.CurrentDeckIds();
 
-		_deck = GameData.Instance.CurrentDeckIds();
-		Shuffle(_deck);
-		_hand.Clear();
-		_discard.Clear();
+		// Seed выдадим локально на И5в.3; в И5в.4 он будет приходить от сервера
+		// в BattleStarted, и оба калькулятора (этот клиент и сервер) поедут
+		// с одинаковой Rng-последовательностью.
+		int seed = Rng.Next(int.MaxValue);
+
+		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, seed);
+		_state = state;
 		_endTurnButton.Disabled = false;
 
-		var pc = GameData.Instance.Character;
 		ClearLog();
+		LogIntro();
+		ApplyEvents(events, playedView: null);
+		RefreshUI();
+	}
+
+	private void LogIntro()
+	{
+		var pc = _state.Player;
 		var node = GameData.Instance.CurrentRun?.CurrentNode();
 		string nodeLabel = node?.Type == MapNodeType.Boss ? "БОСС" : "Стычка";
 		Log($"[b]=== {GameData.Instance.CurrentLocationName()} — {nodeLabel} ===[/b]");
-		Log($"Противников: {_encounter.Count}");
+		Log($"Противников: {_state.Enemies.Count}");
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
 		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");
 		Log($"Оружие: {ItemsDB.DescribeWeapon(pc.Weapon)}");
 		Log($"👕 {pc.Chest?.Name ?? "—"}  ⛑ {pc.Helmet?.Name ?? "—"}");
 		Log($"🧤 {pc.Gloves?.Name ?? "—"}  👢 {pc.Boots?.Name ?? "—"}");
-		Log($"Колода ({_deck.Count} карт): {DeckSummary()}");
-
-		StartPlayerTurn();
+		Log($"Колода ({_state.Deck.Count} карт): {DeckSummary()}");
 	}
 
-	private void StartPlayerTurn()
+	// Единственная точка применения BattleAction: гонит через engine и
+	// рендерит результирующие events. playedView — захваченная CardView
+	// (если action — PlayCard), чтобы AnimateCardOut получил правильный
+	// узел до того как карта уйдёт из руки.
+	private void ApplyAction(BattleAction action, CardView playedView)
 	{
-		_turnCount++;
-		var p = GameData.Instance.Character;
-
-		// Реген МП (на 1м ходу мы на максимуме после ResetForCombat).
-		if (_turnCount > 1)
-		{
-			p.CurrentMp = Math.Min(p.MaxMp(), p.CurrentMp + p.MpRegen());
-			Log($"[color=#5dd]Реген маны: +{p.MpRegen()}[/color]");
-		}
-
-		// Блок не переносится между ходами игрока.
-		p.CurrentBlock = 0;
-		DrawToHand(p.HandSize());
-
-		Log($"[b]--- Ход {_turnCount} ---[/b]");
+		if (_state == null || _state.CombatOver) return;
+		var events = CombatEngine.Apply(_state, action);
+		ApplyEvents(events, playedView);
 		RefreshUI();
 	}
 
-	private void DrawToHand(int target)
+	// Прокатывает список events: лог, всплывающий текст, анимации, vibration.
+	private void ApplyEvents(List<BattleEvent> events, CardView playedView)
 	{
-		while (_hand.Count < target)
+		foreach (var ev in events)
 		{
-			if (_deck.Count == 0)
+			switch (ev.Type)
 			{
-				if (_discard.Count == 0) return;
-				_deck = new List<string>(_discard);
-				Shuffle(_deck);
-				_discard.Clear();
-				Log("[color=#888]Колода перетасована.[/color]");
+				case BattleEventType.BattleStarted: break;
+
+				case BattleEventType.TurnStarted:
+					Log($"[b]--- Ход {ev.Amount} ---[/b]");
+					break;
+
+				case BattleEventType.DeckShuffled:
+					Log("[color=#888]Колода перетасована.[/color]");
+					break;
+
+				case BattleEventType.CardDrawn: break;       // визуала добора пока нет
+
+				case BattleEventType.MpSpent:
+					Log($"[color=#5af](−{ev.Amount} MP)[/color]");
+					break;
+
+				case BattleEventType.MpRegenerated:
+					Log($"[color=#5dd]Реген маны: +{ev.Amount}[/color]");
+					break;
+
+				case BattleEventType.HpHealed:
+					Log($"[color=#7fa]Исцеление: +{ev.Amount} ХП[/color]");
+					SpawnFloatingText(new Vector2(150, 110), $"+{ev.Amount} ХП",
+						UIStyle.HealGreen, 22);
+					break;
+
+				case BattleEventType.BlockGained:
+					Log($"Блок: +{ev.Amount} (всего {_state.Player.CurrentBlock})");
+					SpawnFloatingText(new Vector2(150, 110), $"+{ev.Amount} БЛОК",
+						UIStyle.BlockCyan, 22);
+					break;
+
+				case BattleEventType.DamageDealtToEnemy:
+					RenderDamageToEnemy(ev);
+					break;
+
+				case BattleEventType.DamageDealtToPlayer:
+					RenderDamageToPlayer(ev);
+					break;
+
+				case BattleEventType.EffectApplied:
+					RenderEffectApplied(ev);
+					break;
+
+				case BattleEventType.EffectTicked: break;     // нет UI-эффекта
+
+				case BattleEventType.EnemyIntentRolled: break; // отрисует EnemyView через Refresh
+
+				case BattleEventType.EnemyAction:
+					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
+						Log($"{_state.Enemies[ev.EnemyIndex].EnemyName}: {ev.IntentName} (+{ev.Amount} блок)");
+					break;
+
+				case BattleEventType.CardDiscarded:
+					if (playedView != null) { AnimateCardOut(playedView); playedView = null; }
+					break;
+
+				case BattleEventType.EnemyDied:
+					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
+					{
+						Log($"[color=#7f7]✓ {_state.Enemies[ev.EnemyIndex].EnemyName} повержен.[/color]");
+						Input.VibrateHandheld(120);
+					}
+					break;
+
+				case BattleEventType.LootDropped:
+					RenderLootDropped(ev);
+					break;
+
+				case BattleEventType.PlayerDied:
+					_endTurnButton.Disabled = true;
+					Log($"[color=#f44][b]{Lang.T("log.player_dead")}[/b][/color]");
+					break;
+
+				case BattleEventType.BattleEnded:
+					_endTurnButton.Disabled = true;
+					if (ev.Victory)
+						Log($"[color=#7f7][b]{Lang.T("log.encounter_cleared")}[/b][/color]");
+					break;
 			}
-			var top = _deck[^1];
-			_deck.RemoveAt(_deck.Count - 1);
-			_hand.Add(top);
 		}
 	}
+
+	// =====================================================================
+	// Кнопки и user input
+	// =====================================================================
 
 	private void OnEndTurnPressed()
 	{
-		if (_combatOver) return;
+		if (_state == null || _state.CombatOver) return;
 		CancelTargeting();
-
-		// Сброс руки.
-		foreach (var c in _hand) _discard.Add(c);
-		_hand.Clear();
-
-		// Тик эффектов игрока.
-		GameData.Instance.Character.TickEffects();
-
-		// Все живые враги бьют разом.
-		EnemyTurn();
-		if (_combatOver) return;
-
-		// Перекидывают намерения для следующего хода.
-		foreach (var e in _encounter)
-			if (e.CurrentHp > 0) e.RollIntent();
-
-		StartPlayerTurn();
+		ApplyAction(new BattleAction { Type = BattleActionType.EndTurn }, playedView: null);
 	}
 
-	private void EnemyTurn()
+	// Зелья тратят слот, но не ход — игрок может пить мидл-комбо.
+	private void OnUsePotion(string itemId)
 	{
-		foreach (var enemy in _encounter)
+		if (_state == null || _state.CombatOver) return;
+		var potion = PotionsDB.Get(itemId);
+		if (potion == null) return;
+		Log($"[color=#7fa]🧪 Применено: {potion.Name}[/color]");
+		ApplyAction(new BattleAction
 		{
-			if (enemy.CurrentHp <= 0) continue;
-			enemy.CurrentBlock = 0;
-			var intent = enemy.NextIntent;
-			if (intent == null) continue;
-
-			switch (intent.Type)
-			{
-				case "attack":
-					Log($"[color=#f88]{enemy.EnemyName}: {intent.Name} ({intent.Amount} дмг)[/color]");
-					ApplyDamageToPlayer(intent.Amount);
-					if (GameData.Instance.Character.CurrentHp <= 0)
-					{
-						OnPlayerDead();
-						return;
-					}
-					break;
-				case "block":
-					enemy.CurrentBlock += intent.Amount;
-					Log($"{enemy.EnemyName}: {intent.Name} (+{intent.Amount} блок)");
-					break;
-			}
-
-			enemy.TickEffects();
-		}
+			Type = BattleActionType.UsePotion,
+			PotionId = itemId,
+		}, playedView: null);
 	}
 
-	private void OnPlayerDead()
-	{
-		_combatOver = true;
-		_endTurnButton.Disabled = true;
-		Log($"[color=#f44][b]{Lang.T("log.player_dead")}[/b][/color]");
-		Log("[color=#f44]Нажмите «Новый бой» чтобы начать заново.[/color]");
-	}
-
-	private void OnAllEnemiesDead()
-	{
-		_combatOver = true;
-		_victory = true;
-		_endTurnButton.Disabled = true;
-		Log($"[color=#7f7][b]{Lang.T("log.encounter_cleared")}[/b][/color]");
-	}
-
-	// =====================================================================
-	// Кнопки
-	// =====================================================================
-
-	// Единственная кнопка выхода: меняет смысл по состоянию.
-	//   В бою          — «Бежать»: возврат на карту, узел не помечается пройденным.
-	//   После победы   — «На карту →»: продвигаемся к этому узлу.
-	//   После смерти   — «Выйти из подземелья»: run прерывается.
+	// Выход:
+	//   В бою          — Flee через engine (state.CombatOver=true, victory=false).
+	//   После победы   — просто emit signal с advance=true.
+	//   После смерти   — просто emit signal с advance=false.
 	private void OnExitPressed()
 	{
-		bool advance = _combatOver && _victory;
+		if (_state == null)
+		{
+			EmitSignal(SignalName.CombatExitRequested, false);
+			return;
+		}
+		if (!_state.CombatOver)
+		{
+			ApplyAction(new BattleAction { Type = BattleActionType.Flee }, playedView: null);
+		}
+		bool advance = _state.CombatOver && _state.Victory;
 		EmitSignal(SignalName.CombatExitRequested, advance);
 	}
 
-	// Использовать зелье из инвентаря (HP / MP / т.д.).
-	// Зелья тратят слот в инвентаре, но не ход — можно пить мидл-комбо.
-	private void OnUsePotion(string itemId)
-	{
-		if (_combatOver) return;
-		var potion = PotionsDB.Get(itemId);
-		if (potion == null) return;
-
-		int hpBefore = GameData.Instance.Character.CurrentHp;
-		int mpBefore = GameData.Instance.Character.CurrentMp;
-		if (!GameData.Instance.UsePotion(itemId)) return;
-
-		var p = GameData.Instance.Character;
-		Log($"[color=#7fa]🧪 Применено: {potion.Name}[/color]");
-		if (p.CurrentHp > hpBefore)
-			SpawnFloatingText(new Vector2(150, 120), $"+{p.CurrentHp - hpBefore} ХП", UIStyle.HealGreen, 24);
-		if (p.CurrentMp > mpBefore)
-			SpawnFloatingText(new Vector2(150, 120), $"+{p.CurrentMp - mpBefore} МП", UIStyle.MpFill, 24);
-
-		RefreshUI();
-	}
-
 	private void OnResetCharacterPressed()
-	{
-		// Делегируем удаление и переход в CharacterCreation роутеру (Main.cs).
-		EmitSignal(SignalName.ResetCharacterRequested);
-	}
+		=> EmitSignal(SignalName.ResetCharacterRequested);
 
 	// Открывает модальный оверлей инвентаря поверх боя.
-	// Бой не пересоздаётся — только меняется экипировка/инвентарь персонажа.
-	// При закрытии оверлей шлёт Closed → пересчитываем UI боя.
+	// Во время активного боя — только просмотр; после завершения — полный доступ.
 	private void OnInventoryPressed()
 	{
 		if (_inventoryOverlay != null) return;
-		// Во время активного боя инвентарь — только просмотр.
-		// Можно менять экипировку и пить зелья из инвентаря только когда бой завершён.
-		_inventoryOverlay = new InventoryOverlay { ReadOnly = !_combatOver };
+		bool combatOver = _state != null && _state.CombatOver;
+		_inventoryOverlay = new InventoryOverlay { ReadOnly = !combatOver };
 		_inventoryOverlay.Closed += OnInventoryClosed;
 		AddChild(_inventoryOverlay);
 	}
@@ -258,7 +252,6 @@ public partial class Combat : Control
 			_inventoryOverlay.QueueFree();
 			_inventoryOverlay = null;
 		}
-		// Экипировка могла поменяться — пересчитываем HP/MP cap и т.п.
 		var p = GameData.Instance.Character;
 		if (p != null)
 		{
@@ -268,8 +261,6 @@ public partial class Combat : Control
 		RefreshUI();
 	}
 
-	// Открыть оверлей лога. Содержимое подгружается из буфера _logLines;
-	// дальнейший лог дополняет оверлей в реальном времени через AppendLine.
 	private void OnLogPressed()
 	{
 		if (_logOverlay != null) return;
@@ -308,7 +299,6 @@ public partial class Combat : Control
 	// Утилиты
 	// =====================================================================
 
-	// Лог идёт в буфер. Если оверлей лога открыт — обновляем live.
 	private void Log(string msg)
 	{
 		_logLines.Add(msg);
@@ -316,13 +306,4 @@ public partial class Combat : Control
 	}
 
 	private void ClearLog() => _logLines.Clear();
-
-	private static void Shuffle<T>(List<T> list)
-	{
-		for (int i = list.Count - 1; i > 0; i--)
-		{
-			int j = Rng.Next(i + 1);
-			(list[i], list[j]) = (list[j], list[i]);
-		}
-	}
 }
