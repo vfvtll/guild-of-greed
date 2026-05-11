@@ -34,7 +34,7 @@ public static class TlsCertificate
 			try
 			{
 				return new X509Certificate2(path, PfxPassword,
-					X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+					X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
 			}
 			catch (CryptographicException)
 			{
@@ -72,6 +72,6 @@ public static class TlsCertificate
 		File.WriteAllBytes(path, pfxBytes);
 
 		return new X509Certificate2(pfxBytes, PfxPassword,
-			X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+			X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
 	}
 }
