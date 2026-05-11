@@ -73,6 +73,12 @@ public static class SaveGame
 			ch.Dex = Rng.Range(35, 46);
 			GD.Print($"SaveGame: миграция — добавлен DEX={ch.Dex}");
 		}
+		// v2 → v3: добавлен Id. Старый сейв => Guid.Empty => генерим новый.
+		if (ch.Id == System.Guid.Empty)
+		{
+			ch.Id = System.Guid.NewGuid();
+			GD.Print($"SaveGame: миграция — присвоен Id={ch.Id}");
+		}
 	}
 
 	public static void Delete()

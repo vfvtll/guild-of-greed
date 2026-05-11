@@ -17,6 +17,11 @@ namespace GuildOfGreed.Shared.Domain;
 // (резолвятся при загрузке через ItemsDB), боевое состояние (HP, MP, эффекты).
 public class CharacterData
 {
+	// Стабильный идентификатор для серверной БД и для выбора слота.
+	// Заполняется при создании; в старых клиентских сейвах будет Guid.Empty
+	// и должен быть установлен при первом резолве (см. SaveGame.Migrate).
+	public Guid Id = Guid.NewGuid();
+
 	public string CharacterName = "Авантюрист";
 	public int Level = 1;
 	public string Grade = "E";
