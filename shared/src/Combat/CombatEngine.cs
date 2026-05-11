@@ -17,10 +17,31 @@ namespace GuildOfGreed.Shared.Combat;
 //   - Сервер сравнивает: ожидаемые от клиента события (или просто хеши) с
 //     серверными. При совпадении — confirms. При расхождении — sends rollback.
 //
-// На И5в.1 реализованы только StartBattle и EndTurn — простейшие действия
-// без выбора цели карты. PlayCard/UsePotion/Flee — следующий шаг.
+// И5в.2: добавлены PlayCard / UsePotion / Flee + dispatcher Apply.
+// Дроп лута живёт в engine: на смерть врага рандомно прокатывается LootTable
+// и итог кладётся в state.Player.Inventory здесь же — обе стороны (клиент и
+// сервер) пополняют инвентарь идентично при одном RNG.
 public static class CombatEngine
 {
+	private const int PotionMaxStack = 9;
+
+	// =======================================================================
+	// Dispatcher
+	// =======================================================================
+
+	public static List<BattleEvent> Apply(BattleState state, BattleAction action)
+	{
+		if (state.CombatOver) return new List<BattleEvent>();
+		return action.Type switch
+		{
+			BattleActionType.PlayCard  => PlayCardAction(state, action),
+			BattleActionType.UsePotion => UsePotionAction(state, action),
+			BattleActionType.EndTurn   => EndTurn(state),
+			BattleActionType.Flee      => FleeAction(state),
+			_                          => new List<BattleEvent>(),
+		};
+	}
+
 	// === Старт боя =========================================================
 
 	// Создаёт state, генерит начальную колоду, тасует, тянет руку, ролит intent.
@@ -258,5 +279,245 @@ public static class CombatEngine
 			int j = rng.Next(i + 1);
 			(list[i], list[j]) = (list[j], list[i]);
 		}
+	}
+
+	// =======================================================================
+	// PlayCard
+	// =======================================================================
+
+	private static List<BattleEvent> PlayCardAction(BattleState state, BattleAction action)
+	{
+		var events = new List<BattleEvent>();
+
+		// Валидация: индекс в руке, существование карты, достаточно MP, цель жива.
+		if (action.HandIndex < 0 || action.HandIndex >= state.Hand.Count) return events;
+		string cardId = state.Hand[action.HandIndex];
+		var card = CardsDB.GetCard(cardId);
+		if (card == null) return events;
+		if (state.Player.CurrentMp < card.Cost) return events;
+
+		bool needsTarget = card.Effect is "damage_phys" or "damage_magic" or "debuff_phys";
+		EnemyData target = null;
+		if (needsTarget)
+		{
+			if (action.TargetEnemyIndex < 0 || action.TargetEnemyIndex >= state.Enemies.Count) return events;
+			target = state.Enemies[action.TargetEnemyIndex];
+			if (target.CurrentHp <= 0) return events;
+		}
+
+		// Списываем MP.
+		state.Player.CurrentMp -= card.Cost;
+		events.Add(new BattleEvent { Type = BattleEventType.MpSpent, Amount = card.Cost });
+
+		// Применяем эффект карты.
+		switch (card.Effect)
+		{
+			case "damage_phys":
+			{
+				int dmg = CardsDB.ComputePhysDamage(card, state.Player, target);
+				bool isCrit = state.Player.TryConsumeCrit();
+				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
+				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: true, isCrit);
+				break;
+			}
+			case "damage_magic":
+			{
+				int dmg = CardsDB.ComputeMagicDamage(card, state.Player, target);
+				bool isCrit = state.Player.TryConsumeCrit();
+				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
+				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: false, isCrit);
+				break;
+			}
+			case "block":
+			{
+				int amount = CardsDB.ComputeBlock(card, state.Player);
+				state.Player.CurrentBlock += amount;
+				events.Add(new BattleEvent { Type = BattleEventType.BlockGained, Amount = amount });
+				break;
+			}
+			case "heal":
+			{
+				int amount = CardsDB.ComputeHeal(card, state.Player);
+				int before = state.Player.CurrentHp;
+				state.Player.CurrentHp = Math.Min(state.Player.CurrentHp + amount, state.Player.MaxHp());
+				int healed = state.Player.CurrentHp - before;
+				events.Add(new BattleEvent { Type = BattleEventType.HpHealed, Amount = healed });
+				break;
+			}
+			case "debuff_phys":
+				target.AddEffect("armor_break", "phys_taken_pct", card.AmountPct, card.Duration);
+				events.Add(new BattleEvent
+				{
+					Type = BattleEventType.EffectApplied,
+					EnemyIndex = action.TargetEnemyIndex,
+					EffectType = "phys_taken_pct",
+					Amount = (int)card.AmountPct,
+					EffectDuration = card.Duration,
+				});
+				break;
+			case "buff_magic":
+				state.Player.AddEffect("magic_focus", "magic_dmg_pct", card.AmountPct, card.Duration);
+				events.Add(new BattleEvent
+				{
+					Type = BattleEventType.EffectApplied,
+					EnemyIndex = -1,
+					EffectType = "magic_dmg_pct",
+					Amount = (int)card.AmountPct,
+					EffectDuration = card.Duration,
+				});
+				break;
+		}
+
+		// Карта уходит в сброс.
+		state.Hand.RemoveAt(action.HandIndex);
+		state.Discard.Add(cardId);
+		events.Add(new BattleEvent
+		{
+			Type = BattleEventType.CardDiscarded,
+			CardId = cardId,
+			HandIndex = action.HandIndex,
+		});
+
+		// Победа?
+		if (AllEnemiesDead(state))
+		{
+			state.CombatOver = true;
+			state.Victory = true;
+			events.Add(new BattleEvent { Type = BattleEventType.BattleEnded, Victory = true });
+		}
+
+		return events;
+	}
+
+	private static void ApplyDamageToEnemy(BattleState state, List<BattleEvent> events,
+		int enemyIndex, int rawDamage, bool isPhys, bool isCrit)
+	{
+		var enemy = state.Enemies[enemyIndex];
+		int defense = isPhys ? enemy.PhysDef : enemy.MagicDef;
+		int dmg = Math.Max(1, rawDamage - defense);
+		if (enemy.CurrentBlock > 0)
+		{
+			int absorbed = Math.Min(enemy.CurrentBlock, dmg);
+			enemy.CurrentBlock -= absorbed;
+			dmg -= absorbed;
+		}
+		enemy.CurrentHp = Math.Max(0, enemy.CurrentHp - dmg);
+		events.Add(new BattleEvent
+		{
+			Type = BattleEventType.DamageDealtToEnemy,
+			EnemyIndex = enemyIndex,
+			Amount = dmg,
+			IsCrit = isCrit,
+		});
+
+		if (enemy.CurrentHp <= 0)
+		{
+			events.Add(new BattleEvent
+			{
+				Type = BattleEventType.EnemyDied,
+				EnemyIndex = enemyIndex,
+			});
+			var dropped = DropLoot(state, enemy);
+			if (dropped.Count > 0)
+			{
+				events.Add(new BattleEvent
+				{
+					Type = BattleEventType.LootDropped,
+					EnemyIndex = enemyIndex,
+					DroppedItems = dropped,
+				});
+			}
+		}
+	}
+
+	// Прокатывает LootTable врага. Каждая запись — независимый ролл через
+	// state.Rng (детерминированно). Результат кладётся в инвентарь игрока,
+	// если место есть; если переполнен — предмет в списке пропускается.
+	private static List<string> DropLoot(BattleState state, EnemyData enemy)
+	{
+		var dropped = new List<string>();
+		if (enemy.LootTable == null) return dropped;
+		foreach (var entry in enemy.LootTable)
+		{
+			if (!state.Rng.Chance(entry.Chance)) continue;
+			int count = state.Rng.Range(entry.MinCount, entry.MaxCount + 1);
+			int maxStack = PotionsDB.Get(entry.ItemId) != null ? PotionMaxStack : 1;
+			if (state.Player.Inventory.TryAdd(entry.ItemId, count, maxStack))
+			{
+				// Записываем строкой "itemId×count" для удобства логирования view.
+				dropped.Add($"{entry.ItemId}×{count}");
+			}
+			// Если инвентарь полон — лут теряется (как в текущей Combat.DropLoot).
+			// Сейчас не emit'им отдельного события: для CSP достаточно
+			// факта inventory state, а UI лог покажет это через diff.
+		}
+		return dropped;
+	}
+
+	private static bool AllEnemiesDead(BattleState state)
+	{
+		foreach (var e in state.Enemies)
+			if (e.CurrentHp > 0) return false;
+		return true;
+	}
+
+	// =======================================================================
+	// UsePotion
+	// =======================================================================
+
+	private static List<BattleEvent> UsePotionAction(BattleState state, BattleAction action)
+	{
+		var events = new List<BattleEvent>();
+		if (string.IsNullOrEmpty(action.PotionId)) return events;
+		if (!state.Player.Inventory.Has(action.PotionId)) return events;
+		var potion = PotionsDB.Get(action.PotionId);
+		if (potion == null) return events;
+
+		state.Player.Inventory.Remove(action.PotionId, 1);
+
+		if (potion.HpRestore > 0)
+		{
+			int before = state.Player.CurrentHp;
+			state.Player.CurrentHp = Math.Min(state.Player.MaxHp(), state.Player.CurrentHp + potion.HpRestore);
+			int delta = state.Player.CurrentHp - before;
+			if (delta > 0)
+				events.Add(new BattleEvent { Type = BattleEventType.HpHealed, Amount = delta });
+		}
+		if (potion.MpRestore > 0)
+		{
+			int before = state.Player.CurrentMp;
+			state.Player.CurrentMp = Math.Min(state.Player.MaxMp(), state.Player.CurrentMp + potion.MpRestore);
+			int delta = state.Player.CurrentMp - before;
+			if (delta > 0)
+				events.Add(new BattleEvent { Type = BattleEventType.MpRegenerated, Amount = delta });
+		}
+		if (!string.IsNullOrEmpty(potion.BuffType) && potion.BuffDuration > 0)
+		{
+			state.Player.AddEffect(potion.Id, potion.BuffType, potion.BuffAmount, potion.BuffDuration);
+			events.Add(new BattleEvent
+			{
+				Type = BattleEventType.EffectApplied,
+				EnemyIndex = -1,
+				EffectType = potion.BuffType,
+				Amount = (int)potion.BuffAmount,
+				EffectDuration = potion.BuffDuration,
+				PotionId = potion.Id,
+			});
+		}
+		return events;
+	}
+
+	// =======================================================================
+	// Flee
+	// =======================================================================
+
+	private static List<BattleEvent> FleeAction(BattleState state)
+	{
+		state.CombatOver = true;
+		state.Victory = false;
+		return new List<BattleEvent>
+		{
+			new() { Type = BattleEventType.BattleEnded, Victory = false },
+		};
 	}
 }
