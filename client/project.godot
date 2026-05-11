@@ -33,7 +33,7 @@ window/handheld/orientation=0
 
 [dotnet]
 
-project/assembly_name="GuildOfGreed"
+project/assembly_name="GuildOfGreed.Client"
 
 [rendering]
 
