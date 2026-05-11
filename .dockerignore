@@ -1,0 +1,26 @@
+# Не таскать в build-context лишнее — уменьшает время docker build
+# и не пускает локальные артефакты в образ.
+
+**/bin
+**/obj
+**/.godot
+**/.vs
+**/.vscode
+**/.idea
+
+# Godot client целиком не нужен серверу.
+client/
+
+# Git и метаданные.
+.git
+.gitignore
+.gitattributes
+.claude
+
+# Документация.
+*.md
+
+# Локальные данные сервера (cert + db) — должны быть только в volume.
+server/bin
+server/data
+docker-data

@@ -1,0 +1,23 @@
+# docker compose up -d --build  → собрать и запустить.
+# docker compose logs -f          → следить за логом.
+# docker compose down             → остановить и удалить.
+#
+# Persistent data — в ./docker-data на хосте. Удали её, если хочешь
+# регенерировать self-signed cert и начать с пустой БД.
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gog-server
+    ports:
+      - "5870:5870"
+    volumes:
+      - ./docker-data:/app/data
+    environment:
+      # Если на машине порт 5870 занят — поменяй слева ("5871:5870" например).
+      # Сам процесс внутри контейнера всё равно слушает 5870.
+      GOG_HOST: "0.0.0.0"
+      GOG_PORT: "5870"
+    restart: unless-stopped
