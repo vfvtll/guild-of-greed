@@ -254,9 +254,13 @@ public class Session
 	{
 		var ch = _store.LoadCharacter(_accountId.Value, r.CharacterId);
 		if (ch == null) return new SelectCharacterResponse { Success = false, Error = "not_found" };
-		// Игровое state-management начнётся в И5; сейчас просто подтверждаем выбор.
 		Logger.Info($"[{_peer}] selected char id={r.CharacterId}");
-		return new SelectCharacterResponse { Success = true };
+		return new SelectCharacterResponse
+		{
+			Success = true,
+			CharacterJson = System.Text.Json.JsonSerializer.Serialize(ch,
+				new System.Text.Json.JsonSerializerOptions { IncludeFields = true }),
+		};
 	}
 
 	private ServerMessage HandleDeleteCharacter(DeleteCharacterRequest r)

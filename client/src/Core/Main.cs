@@ -1,21 +1,24 @@
-using Godot;
 using System;
+using System.Text.Json;
+using Godot;
 using GuildOfGreed.Shared.Domain;
-using GuildOfGreed.Shared.Data;
+using GuildOfGreed.Shared.Net;
 
-// Корневой роутер. Состояния:
-//   Нет сейва        → CharacterCreation → (создал) → LocationSelect
-//   Есть сейв        → LocationSelect
-//   LocationSelect   → (выбрал локацию)  → StartRun → MapView
-//   MapView          → (клик доступного узла) → Combat (для Battle/Boss)
-//   Combat завершён  → если победа над боссом или смерть → EndRun → LocationSelect
-//                     если победа над обычным узлом     → MapView (с Advance)
-//                     если бегство во время боя         → MapView (узел не отмечен)
+// Корневой роутер.
 //
-// Также реагирует на запросы из любых экранов на удаление персонажа
-// (возврат в CharacterCreation после Delete сейва).
+// Поток (после введения сети):
+//   Connecting → handshake → если несовместимо: UpdateRequired
+//                          → если есть токен: Resume → CharacterSelect (или AuthView при failure)
+//                          → иначе: AuthView
+//   AuthView → CharacterSelect
+//   CharacterSelect → CharacterCreation (создать) или сразу LocationSelect (выбрать существующего)
+//   LocationSelect → MapView → Combat → ... → LocationSelect (как раньше)
+//   Logout → AuthPrefs.Clear → AuthView
 public partial class Main : Control
 {
+	private NetworkClient _net;
+	private string _login;          // login текущего залогиненного пользователя
+
 	public override void _Ready()
 	{
 		SetAnchorsPreset(LayoutPreset.FullRect);
@@ -25,37 +28,167 @@ public partial class Main : Control
 
 	private void StartFlow()
 	{
-		if (SaveGame.HasSave())
-		{
-			var saved = SaveGame.Load();
-			if (saved != null)
-			{
-				GameData.Instance.SetCharacter(saved);
-				ShowLocationSelect();
-				return;
-			}
-		}
-		ShowCharacterCreation();
+		_net?.Dispose();
+		_net = new NetworkClient();
+		ShowConnecting();
 	}
 
 	// =====================================================================
-	// Экраны
+	// Connecting / Handshake / Auto-resume
+	// =====================================================================
+
+	private void ShowConnecting()
+	{
+		ClearContent();
+		var view = new ConnectingView();
+		view.RetryRequested += StartFlow;
+		AddChild(view);
+		_ = ConnectAndAuthenticateAsync(view);
+	}
+
+	private async System.Threading.Tasks.Task ConnectAndAuthenticateAsync(ConnectingView view)
+	{
+		try
+		{
+			view.SetStatus($"Соединение с {NetPrefs.Host}:{NetPrefs.Port}...");
+			await _net.ConnectAsync(NetPrefs.Host, NetPrefs.Port);
+
+			view.SetStatus("Сверка версий...");
+			var welcome = await _net.HandshakeAsync();
+			if (!welcome.Compatible)
+			{
+				ShowUpdateRequired(welcome);
+				return;
+			}
+
+			if (AuthPrefs.HasSession())
+			{
+				view.SetStatus("Восстановление сессии...");
+				var prefs = AuthPrefs.Load();
+				try
+				{
+					var resp = await _net.ResumeAsync(prefs.Token);
+					if (resp.Success)
+					{
+						_login = resp.Login;
+						ShowCharacterSelect();
+						return;
+					}
+					AuthPrefs.Clear();
+				}
+				catch (ServerException)
+				{
+					AuthPrefs.Clear();
+				}
+			}
+
+			ShowAuth();
+		}
+		catch (Exception ex)
+		{
+			view.SetError($"Не удалось подключиться: {ex.Message}");
+		}
+	}
+
+	// =====================================================================
+	// Auth screens
+	// =====================================================================
+
+	private void ShowAuth()
+	{
+		ClearContent();
+		var view = new AuthView(_net);
+		view.AuthSucceeded += OnAuthSucceeded;
+		AddChild(view);
+	}
+
+	private void OnAuthSucceeded(string token, string accountId, string login)
+	{
+		AuthPrefs.Save(token, Guid.Parse(accountId), login);
+		_login = login;
+		ShowCharacterSelect();
+	}
+
+	private void ShowCharacterSelect()
+	{
+		ClearContent();
+		var view = new CharacterSelectView(_net, _login);
+		view.CharacterSelected += OnCharacterSelected;
+		view.CreateCharacterRequested += ShowCharacterCreation;
+		view.LogoutRequested += OnLogoutRequested;
+		AddChild(view);
+	}
+
+	private async void OnCharacterSelected(string characterId)
+	{
+		try
+		{
+			var resp = await _net.SelectCharacterAsync(Guid.Parse(characterId));
+			if (!resp.Success)
+			{
+				GD.PrintErr($"SelectCharacter failed: {resp.Error}");
+				ShowCharacterSelect();
+				return;
+			}
+			var character = JsonSerializer.Deserialize<CharacterData>(resp.CharacterJson,
+				new JsonSerializerOptions { IncludeFields = true });
+			GameData.Instance.SetCharacter(character);
+			ShowLocationSelect();
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"SelectCharacter exception: {ex.Message}");
+			ShowCharacterSelect();
+		}
+	}
+
+	private async void OnLogoutRequested()
+	{
+		try { await _net.LogoutAsync(); } catch { /* swallow — token уже на сервере мог истечь */ }
+		AuthPrefs.Clear();
+		_login = null;
+		StartFlow();
+	}
+
+	private void ShowUpdateRequired(ServerWelcome welcome)
+	{
+		ClearContent();
+		AddChild(new UpdateRequiredView(welcome));
+	}
+
+	// =====================================================================
+	// Character creation
 	// =====================================================================
 
 	private void ShowCharacterCreation()
 	{
 		ClearContent();
 		var cc = new CharacterCreation();
-		cc.Confirmed += OnCharacterConfirmed;
+		cc.Confirmed += OnCharacterCreationConfirmed;
 		AddChild(cc);
 	}
 
-	private void OnCharacterConfirmed(CharacterData character)
+	private async void OnCharacterCreationConfirmed(CharacterData ch)
 	{
-		GameData.Instance.SetCharacter(character);
-		SaveGame.Save(character);
-		ShowLocationSelect();
+		try
+		{
+			var resp = await _net.CreateCharacterAsync(
+				ch.CharacterName, ch.Str, ch.Int, ch.Con, ch.Wit, ch.Men, ch.Dex);
+			if (!resp.Success)
+			{
+				GD.PrintErr($"CreateCharacter failed: {resp.Error}");
+			}
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"CreateCharacter exception: {ex.Message}");
+		}
+		ShowCharacterSelect();
 	}
+
+	// =====================================================================
+	// Game (как было до этой главы)
+	// =====================================================================
 
 	private void ShowLocationSelect()
 	{
@@ -63,7 +196,7 @@ public partial class Main : Control
 		ClearContent();
 		var view = new LocationSelectView();
 		view.LocationChosen += OnLocationChosen;
-		view.ResetCharacterRequested += OnResetCharacter;
+		view.ResetCharacterRequested += OnResetCharacterFromGame;
 		AddChild(view);
 	}
 
@@ -79,7 +212,7 @@ public partial class Main : Control
 		var map = new MapView();
 		map.NodeSelected += OnMapNodeSelected;
 		map.BackToLocationsRequested += ShowLocationSelect;
-		map.ResetCharacterRequested += OnResetCharacter;
+		map.ResetCharacterRequested += OnResetCharacterFromGame;
 		AddChild(map);
 	}
 
@@ -90,8 +223,6 @@ public partial class Main : Control
 		var node = run.GetNode(nodeId);
 		if (node == null) return;
 
-		// На MVP-инкременте поддерживаем только Battle/Boss.
-		// Остальные типы добавятся в следующих инкрементах (Elite/Rest/Chest/Event).
 		switch (node.Type)
 		{
 			case MapNodeType.Battle:
@@ -100,9 +231,6 @@ public partial class Main : Control
 				ShowCombatForNode(nodeId);
 				break;
 			default:
-				// Заглушка для нереализованных типов: считаем "пройденным"
-				// без эффекта. До добавления экранов эти узлы не должны
-				// генерироваться, но безопаснее не зависнуть.
 				GameData.Instance.AdvanceTo(nodeId);
 				ShowMap();
 				break;
@@ -111,22 +239,15 @@ public partial class Main : Control
 
 	private void ShowCombatForNode(int nodeId)
 	{
-		// Узел становится "currentNodeId" сейчас, чтобы Combat.SpawnForCurrentNode
-		// мог по нему определить тип боя. Если игрок сбежит — Visited не выставится,
-		// но CurrentNodeId сместится. Это безопасно: AvailableNext() при возврате
-		// будет считать что игрок уже на этом узле, и предложит соседей вперёд.
-		// Чтобы избежать кривого UX (бегство = бесплатный пропуск), сохраняем
-		// предыдущий CurrentNodeId и восстанавливаем его при бегстве.
 		var run = GameData.Instance.CurrentRun;
 		int prevNodeId = run.CurrentNodeId;
 		run.Advance(nodeId);
-		// Сразу откатываем Visited флаг — пометится только при победе.
 		var n = run.GetNode(nodeId);
 		if (n != null) n.Visited = false;
 
 		ClearContent();
 		var combat = new Combat();
-		combat.ResetCharacterRequested += OnResetCharacter;
+		combat.ResetCharacterRequested += OnResetCharacterFromGame;
 		combat.CombatExitRequested += (advance) => OnCombatExit(advance, nodeId, prevNodeId);
 		AddChild(combat);
 	}
@@ -146,11 +267,9 @@ public partial class Main : Control
 
 		if (advance && node != null)
 		{
-			// Победа: помечаем узел пройденным.
 			node.Visited = true;
 			if (node.Type == MapNodeType.Boss)
 			{
-				// Босс убит — подземелье завершено, возврат в хаб.
 				ShowLocationSelect();
 				return;
 			}
@@ -158,19 +277,20 @@ public partial class Main : Control
 			return;
 		}
 
-		// Бегство: откатываем CurrentNodeId на предыдущий, чтобы карта
-		// показывала те же доступные узлы что и до боя.
 		if (run != null) run.CurrentNodeId = prevNodeId;
 		ShowMap();
 	}
 
-	private void OnResetCharacter()
+	// «Новый персонаж» из игровых экранов теперь = вернуться к выбору слота
+	// (а не удалять профиль локально). Удаление делается из CharacterSelectView.
+	private void OnResetCharacterFromGame()
 	{
-		SaveGame.Delete();
 		GameData.Instance.EndRun();
 		GameData.Instance.SetCharacter(null);
-		ShowCharacterCreation();
+		ShowCharacterSelect();
 	}
+
+	// =====================================================================
 
 	private void ClearContent()
 	{
@@ -179,5 +299,10 @@ public partial class Main : Control
 			RemoveChild(child);
 			child.QueueFree();
 		}
+	}
+
+	public override void _ExitTree()
+	{
+		_net?.Dispose();
 	}
 }

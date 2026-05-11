@@ -177,6 +177,9 @@ public class SelectCharacterResponse : ServerMessage
 {
 	[Key(0)] public bool Success;
 	[Key(1)] public string Error;
+	// JSON CharacterData выбранного персонажа. Кладём в этот ответ чтобы
+	// клиенту не делать второй round-trip за полным состоянием. Пусто при Success=false.
+	[Key(2)] public string CharacterJson;
 }
 
 [MessagePackObject]
