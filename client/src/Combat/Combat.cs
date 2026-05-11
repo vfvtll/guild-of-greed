@@ -157,14 +157,64 @@ public partial class Combat : Control
 			}
 			if (!resp.Confirmed)
 			{
-				GD.PrintErr($"Combat: server rejected action: {resp.Error}");
-				EmitSignal(SignalName.CombatExitRequested, false);
+				GD.PrintErr($"Combat: server rejected action: {resp.Error} — fetching authoritative state");
+				Log("[color=#fc4]⚠ Рассинхронизация — состояние восстановлено с сервера.[/color]");
+				await RefreshStateFromServerAsync();
 			}
 		}
 		finally
 		{
 			_busy = false;
 		}
+	}
+
+	// При rejection клиент берёт авторитетную копию боя у сервера и
+	// перестраивает _state. RNG догоняется через AdvanceTo, чтобы потоки
+	// случайностей снова совпали — следующее действие должно подтвердиться.
+	private async Task RefreshStateFromServerAsync()
+	{
+		BattleStateResponse snap;
+		try
+		{
+			snap = await Net.GetBattleStateAsync();
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"Combat: GetBattleState failed: {ex.Message}");
+			return;
+		}
+		if (!snap.Success)
+		{
+			GD.PrintErr($"Combat: GetBattleState error: {snap.Error}");
+			return;
+		}
+
+		var jsonOpts = new System.Text.Json.JsonSerializerOptions { IncludeFields = true };
+		var newPlayer = System.Text.Json.JsonSerializer.Deserialize<CharacterData>(snap.PlayerJson, jsonOpts);
+		var newEnemies = System.Text.Json.JsonSerializer.Deserialize<List<EnemyData>>(snap.EnemiesJson, jsonOpts);
+		if (newPlayer == null || newEnemies == null) return;
+		newPlayer.ResolveEquipment();
+
+		// Replace global Character reference — UI слои (LocationSelectView и
+		// MapView) читают GameData.Character, _state.Player должен указывать туда же.
+		GameData.Instance.SetCharacter(newPlayer);
+
+		_state.Player = newPlayer;
+		_state.Enemies = newEnemies;
+		_state.Deck = snap.Deck ?? new List<string>();
+		_state.Hand = snap.Hand ?? new List<string>();
+		_state.Discard = snap.Discard ?? new List<string>();
+		_state.TurnCount = snap.TurnCount;
+		_state.Seed = snap.Seed;
+		_state.CombatOver = snap.CombatOver;
+		_state.Victory = snap.Victory;
+		_state.Rng = new RandomSource(snap.Seed);
+		_state.Rng.AdvanceTo(snap.RngCalls);
+
+		_selectedHandIndex = -1;
+		_targetingBanner.Visible = false;
+		_endTurnButton.Disabled = _state.CombatOver;
+		RefreshUI();
 	}
 
 	// Прокатывает список events: лог, всплывающий текст, анимации, vibration.

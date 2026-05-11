@@ -32,6 +32,7 @@ namespace GuildOfGreed.Shared.Net;
 [Union(8, typeof(DeleteCharacterRequest))]
 [Union(9, typeof(StartBattleRequest))]
 [Union(10, typeof(BattleActionRequest))]
+[Union(11, typeof(GetBattleStateRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -115,6 +116,12 @@ public class BattleActionRequest : ClientMessage
 	[Key(3)] public string PotionId;
 }
 
+// Просит полное состояние активного боя — клиент пересоберёт свой BattleState
+// из ответа. Используется при rejection (Confirmed=false): вместо kick-out
+// в LocationSelect клиент берёт авторитетную копию и продолжает играть.
+[MessagePackObject]
+public class GetBattleStateRequest : ClientMessage { }
+
 // === Server → Client ===========================================================
 
 [Union(0, typeof(ServerWelcome))]
@@ -129,6 +136,7 @@ public class BattleActionRequest : ClientMessage
 [Union(9, typeof(ServerError))]
 [Union(10, typeof(BattleStartedResponse))]
 [Union(11, typeof(BattleActionResponse))]
+[Union(12, typeof(BattleStateResponse))]
 public abstract class ServerMessage { }
 
 [MessagePackObject]
@@ -233,10 +241,9 @@ public class BattleStartedResponse : ServerMessage
 	[Key(2)] public string Error;
 }
 
-// Ответ на действие игрока. Confirmed=true → клиент уже применил
-// оптимистично, всё хорошо. Confirmed=false → клиент должен прервать
-// бой (рассинхрон, возможный читер или баг). На прототипе rollback
-// не делаем — игрок выкидывается обратно в LocationSelect.
+// Ответ на действие игрока. Confirmed=true → клиент применил оптимистично
+// корректно. Confirmed=false → рассинхрон или невалидное действие; клиент
+// шлёт GetBattleStateRequest, перестраивает state из ответа и продолжает.
 //
 // BattleEnded флаг — сервер увидел исход (победа/смерть/бегство) и уже
 // сохранил character_json. Клиенту достаточно вызвать CombatExitRequested.
@@ -247,4 +254,28 @@ public class BattleActionResponse : ServerMessage
 	[Key(1)] public string Error;
 	[Key(2)] public bool BattleEnded;
 	[Key(3)] public bool Victory;
+}
+
+// Серверный snapshot активного боя. Передаются:
+//   - PlayerJson / EnemiesJson — JSON-сериализация POCO (через System.Text.Json
+//     с IncludeFields), потому что [MessagePackObject] на CharacterData/EnemyData
+//     не хочется навешивать ради этого случая.
+//   - RngCalls — сколько раз серверный RandomSource был вызван; клиент
+//     пересоздаёт свой RandomSource(seed) и прокручивает его столько же раз
+//     через AdvanceTo, чтобы оба RNG-потока снова совпали.
+[MessagePackObject]
+public class BattleStateResponse : ServerMessage
+{
+	[Key(0)] public bool Success;
+	[Key(1)] public string Error;
+	[Key(2)] public string PlayerJson;
+	[Key(3)] public string EnemiesJson;
+	[Key(4)] public System.Collections.Generic.List<string> Deck;
+	[Key(5)] public System.Collections.Generic.List<string> Hand;
+	[Key(6)] public System.Collections.Generic.List<string> Discard;
+	[Key(7)] public int TurnCount;
+	[Key(8)] public int Seed;
+	[Key(9)] public int RngCalls;
+	[Key(10)] public bool CombatOver;
+	[Key(11)] public bool Victory;
 }

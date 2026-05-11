@@ -144,6 +144,7 @@ public class Session
 				DeleteCharacterRequest r  => HandleDeleteCharacter(r),
 				StartBattleRequest r      => HandleStartBattle(r),
 				BattleActionRequest r     => HandleBattleAction(r),
+				GetBattleStateRequest r   => HandleGetBattleState(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -347,6 +348,29 @@ public class Session
 			Confirmed = true,
 			BattleEnded = ended,
 			Victory = victory,
+		};
+	}
+
+	private ServerMessage HandleGetBattleState(GetBattleStateRequest r)
+	{
+		if (_battle == null)
+			return new BattleStateResponse { Success = false, Error = "no_active_battle" };
+
+		var jsonOpts = new System.Text.Json.JsonSerializerOptions { IncludeFields = true };
+		var s = _battle.State;
+		return new BattleStateResponse
+		{
+			Success = true,
+			PlayerJson = System.Text.Json.JsonSerializer.Serialize(s.Player, jsonOpts),
+			EnemiesJson = System.Text.Json.JsonSerializer.Serialize(s.Enemies, jsonOpts),
+			Deck = new System.Collections.Generic.List<string>(s.Deck),
+			Hand = new System.Collections.Generic.List<string>(s.Hand),
+			Discard = new System.Collections.Generic.List<string>(s.Discard),
+			TurnCount = s.TurnCount,
+			Seed = s.Seed,
+			RngCalls = s.Rng.Calls,
+			CombatOver = s.CombatOver,
+			Victory = s.Victory,
 		};
 	}
 

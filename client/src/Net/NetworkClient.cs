@@ -151,6 +151,9 @@ public class NetworkClient : IDisposable
 			PotionId = potionId,
 		}, ct);
 
+	public Task<BattleStateResponse> GetBattleStateAsync(CancellationToken ct = default)
+		=> ExchangeAsync<BattleStateResponse>(new GetBattleStateRequest(), ct);
+
 	private async Task<TResponse> ExchangeAsync<TResponse>(ClientMessage request, CancellationToken ct)
 		where TResponse : ServerMessage
 	{
