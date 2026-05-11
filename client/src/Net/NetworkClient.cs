@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using Godot;
 using GuildOfGreed.Shared.Net;
 
 // Тонкий request/response клиент к серверу. Сейчас сервер не шлёт
@@ -20,12 +21,18 @@ public class NetworkClient : IDisposable
 
 	private TcpClient _tcp;
 	private SslStream _ssl;
+	private string _host;
+	private int _port;
+	private bool _pinMismatch;
 
 	public bool IsConnected => _tcp?.Connected == true;
 
 	public async Task ConnectAsync(string host, int port, CancellationToken ct = default)
 	{
 		Dispose();
+		_host = host;
+		_port = port;
+		_pinMismatch = false;
 		_tcp = new TcpClient();
 		await _tcp.ConnectAsync(host, port, ct).ConfigureAwait(false);
 
@@ -37,13 +44,45 @@ public class NetworkClient : IDisposable
 			                    | System.Security.Authentication.SslProtocols.Tls13,
 			RemoteCertificateValidationCallback = ValidateRemote,
 		};
-		await _ssl.AuthenticateAsClientAsync(options, ct).ConfigureAwait(false);
+		try
+		{
+			await _ssl.AuthenticateAsClientAsync(options, ct).ConfigureAwait(false);
+		}
+		catch (Exception) when (_pinMismatch)
+		{
+			throw new TlsPinMismatchException(_host, _port);
+		}
 	}
 
-	// На dev принимаем self-signed сертификат сервера. В production эта функция
-	// должна вернуть chain.Build() && подтверждённый CN/SAN.
-	private static bool ValidateRemote(object sender, X509Certificate cert,
-		X509Chain chain, SslPolicyErrors errors) => true;
+	// TLS validation:
+	//   1. errors == None → cert валиден по системному CA chain. Доверяем без pin.
+	//   2. Иначе (self-signed / unknown CA): сверяемся со ServerTrustStore.
+	//      - Нет записи → TOFU: сохраняем thumbprint, доверяем (первое подключение
+	//        предполагается в безопасной среде — dev-машина / setup).
+	//      - Совпадает → доверяем.
+	//      - Не совпадает → отказ. Возможный MITM; пользователь должен явно
+	//        сбросить доверие через ConnectingView.
+	private bool ValidateRemote(object sender, System.Security.Cryptography.X509Certificates.X509Certificate cert,
+		X509Chain chain, SslPolicyErrors errors)
+	{
+		if (errors == SslPolicyErrors.None) return true;
+		if (cert is not X509Certificate2 cert2) return false;
+
+		string thumbprint = cert2.Thumbprint;
+		if (ServerTrustStore.Matches(_host, _port, thumbprint)) return true;
+
+		var pinned = ServerTrustStore.Get(_host, _port);
+		if (pinned == null)
+		{
+			GD.Print($"NetworkClient: TOFU-pinning self-signed cert for {_host}:{_port} thumbprint={thumbprint}");
+			ServerTrustStore.Set(_host, _port, thumbprint);
+			return true;
+		}
+
+		GD.PrintErr($"NetworkClient: TLS pin mismatch for {_host}:{_port} — expected {pinned}, got {thumbprint}");
+		_pinMismatch = true;
+		return false;
+	}
 
 	public async Task<ServerWelcome> HandshakeAsync(CancellationToken ct = default)
 	{
@@ -122,5 +161,21 @@ public class ServerException : Exception
 	public ServerException(string code, string message) : base(message)
 	{
 		Code = code;
+	}
+}
+
+// TLS pin mismatch — у сервера thumbprint cert не совпадает с тем, что
+// сохранён локально. Возможна MITM-атака или сервер перевыпустил сертификат.
+// UI должен предложить кнопку "сбросить доверие", после чего следующий
+// connect снова TOFU-pinнет.
+public class TlsPinMismatchException : Exception
+{
+	public string Host { get; }
+	public int Port { get; }
+	public TlsPinMismatchException(string host, int port)
+		: base($"TLS pin mismatch for {host}:{port}")
+	{
+		Host = host;
+		Port = port;
 	}
 }

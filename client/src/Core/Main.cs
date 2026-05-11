@@ -84,6 +84,10 @@ public partial class Main : Control
 
 			ShowAuth();
 		}
+		catch (TlsPinMismatchException ex)
+		{
+			view.SetPinMismatch(ex.Host, ex.Port);
+		}
 		catch (Exception ex)
 		{
 			view.SetError($"Не удалось подключиться: {ex.Message}");

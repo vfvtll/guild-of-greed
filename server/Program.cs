@@ -24,7 +24,9 @@ try
 	Logger.Info($"sqlite ready at {NetworkConfig.DatabasePath}");
 
 	var cert = TlsCertificate.LoadOrCreate(NetworkConfig.CertificatePath);
-	Logger.Info($"tls cert {cert.Subject} (thumbprint {cert.Thumbprint})");
+	Logger.Info($"tls cert {cert.Subject}");
+	Logger.Info($"tls thumbprint (SHA-1) {cert.Thumbprint}");
+	Logger.Info("       ^ copy this if new client refuses to TOFU-pin automatically");
 
 	var host = IPAddress.Parse(NetworkConfig.Host);
 	var listener = new Listener(host, NetworkConfig.Port, cert, store, cts.Token);

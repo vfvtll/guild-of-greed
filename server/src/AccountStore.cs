@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using GuildOfGreed.Server.Db;
 using GuildOfGreed.Shared.Auth;
 using GuildOfGreed.Shared.Crypto;
 using GuildOfGreed.Shared.Domain;
@@ -35,38 +36,11 @@ public class AccountStore : IDisposable
 		{
 			DataSource = databasePath,
 			Mode = SqliteOpenMode.ReadWriteCreate,
+			ForeignKeys = true,   // включает ON DELETE CASCADE из схемы.
 		}.ToString();
 		_conn = new SqliteConnection(connStr);
 		_conn.Open();
-		EnsureSchema();
-	}
-
-	private void EnsureSchema()
-	{
-		using var cmd = _conn.CreateCommand();
-		cmd.CommandText = """
-			CREATE TABLE IF NOT EXISTS accounts (
-				id BLOB PRIMARY KEY,
-				login TEXT UNIQUE NOT NULL COLLATE NOCASE,
-				email TEXT UNIQUE NOT NULL COLLATE NOCASE,
-				password_hash TEXT NOT NULL,
-				created_at INTEGER NOT NULL
-			);
-			CREATE TABLE IF NOT EXISTS sessions (
-				token TEXT PRIMARY KEY,
-				account_id BLOB NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-				issued_at INTEGER NOT NULL,
-				expires_at INTEGER NOT NULL
-			);
-			CREATE TABLE IF NOT EXISTS characters (
-				id BLOB PRIMARY KEY,
-				account_id BLOB NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-				character_json TEXT NOT NULL
-			);
-			CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id);
-			CREATE INDEX IF NOT EXISTS idx_sessions_account   ON sessions(account_id);
-		""";
-		cmd.ExecuteNonQuery();
+		MigrationRunner.Apply(_conn);
 	}
 
 	// === Accounts =============================================================
