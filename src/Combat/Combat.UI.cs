@@ -6,7 +6,7 @@ using System.Linq;
 public partial class Combat
 {
 	// === UI узлы ===
-	private Button _loadoutButton, _chestButton, _restartButton, _endTurnButton;
+	private Button _exitButton, _endTurnButton;
 	private Label _playerNameLabel, _hpLabel, _mpLabel, _statsLabel, _blockLabel, _buffsLabel;
 	private ProgressBar _hpBar, _mpBar;
 	private HBoxContainer _enemyArea;
@@ -29,25 +29,10 @@ public partial class Combat
 		top.AddThemeConstantOverride("separation", 10);
 		AddChild(top);
 
-		_loadoutButton = new Button { Text = Lang.T("ui.combat.weapon") };
-		UIStyle.StyleButton(_loadoutButton);
-		_loadoutButton.Pressed += OnLoadoutPressed;
-		top.AddChild(_loadoutButton);
-
-		_chestButton = new Button { Text = "🛡 Нагрудник" };
-		UIStyle.StyleButton(_chestButton);
-		_chestButton.Pressed += OnChestPressed;
-		top.AddChild(_chestButton);
-
-		var locationButton = new Button { Text = Lang.T("ui.combat.location") };
-		UIStyle.StyleButton(locationButton);
-		locationButton.Pressed += OnLocationPressed;
-		top.AddChild(locationButton);
-
-		_restartButton = new Button { Text = Lang.T("ui.combat.restart") };
-		UIStyle.StyleButton(_restartButton);
-		_restartButton.Pressed += OnRestartPressed;
-		top.AddChild(_restartButton);
+		_exitButton = new Button { Text = "🏳 Бежать" };
+		UIStyle.StyleButton(_exitButton);
+		_exitButton.Pressed += OnExitPressed;
+		top.AddChild(_exitButton);
 
 		var inventoryBtn = new Button { Text = "🎒 Инвентарь" };
 		UIStyle.StyleButton(inventoryBtn);
@@ -253,9 +238,26 @@ public partial class Combat
 		_discardCountLabel.Text = $"{Lang.T("ui.combat.discard")}: {_discard.Count}";
 
 		RefreshPotionsRow();
+		RefreshExitButton();
 
 		RefreshEnemyArea();
 		RefreshHand();
+	}
+
+	private void RefreshExitButton()
+	{
+		if (!_combatOver)
+		{
+			_exitButton.Text = "🏳 Бежать";
+		}
+		else if (_victory)
+		{
+			_exitButton.Text = "✅ На карту →";
+		}
+		else
+		{
+			_exitButton.Text = "💀 Выйти из подземелья";
+		}
 	}
 
 	// Динамически перестраиваем кнопки зелий: показываем все типы, что

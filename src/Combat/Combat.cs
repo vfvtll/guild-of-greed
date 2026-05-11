@@ -16,12 +16,19 @@ public partial class Combat : Control
 	[Signal]
 	public delegate void ResetCharacterRequestedEventHandler();
 
+	// Сигнал наверх когда бой завершён.
+	//   advance=true  — победа, продвигаем по карте к этому узлу.
+	//   advance=false — поражение или ручной выход; узел не помечается пройденным.
+	[Signal]
+	public delegate void CombatExitRequestedEventHandler(bool advance);
+
 	// === Состояние боя (поля) ===
 	private List<string> _deck = new();
 	private List<string> _hand = new();
 	private List<string> _discard = new();
 	private List<EnemyData> _encounter = new();
 	private bool _combatOver = false;
+	private bool _victory = false;       // Бой завершён победой (для UX exit-кнопки).
 	private int _turnCount = 0;
 
 	// Индекс выбранной карты в _hand (для режима выбора цели). -1 = ничего не выбрано.
@@ -48,12 +55,13 @@ public partial class Combat : Control
 	private void StartNewCombat()
 	{
 		_combatOver = false;
+		_victory = false;
 		_turnCount = 0;
 		_selectedHandIndex = -1;
 		_targetingBanner.Visible = false;
 		GameData.Instance.Character.ResetForCombat();
 
-		_encounter = GameData.Instance.SpawnEnemies();
+		_encounter = GameData.Instance.SpawnForCurrentNode();
 		foreach (var e in _encounter) e.RollIntent();
 
 		_deck = GameData.Instance.CurrentDeckIds();
@@ -64,8 +72,9 @@ public partial class Combat : Control
 
 		var pc = GameData.Instance.Character;
 		ClearLog();
-		Log($"[b]=== {GameData.Instance.CurrentLocationName()} — {GameData.Instance.CurrentLoadoutName()} ===[/b]");
-		Log($"[i]{GameData.Instance.CurrentLocationHint()}[/i]");
+		var node = GameData.Instance.CurrentRun?.CurrentNode();
+		string nodeLabel = node?.Type == MapNodeType.Boss ? "БОСС" : "Стычка";
+		Log($"[b]=== {GameData.Instance.CurrentLocationName()} — {nodeLabel} ===[/b]");
 		Log($"Противников: {_encounter.Count}");
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
 		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");
@@ -179,25 +188,23 @@ public partial class Combat : Control
 	private void OnAllEnemiesDead()
 	{
 		_combatOver = true;
+		_victory = true;
 		_endTurnButton.Disabled = true;
 		Log($"[color=#7f7][b]{Lang.T("log.encounter_cleared")}[/b][/color]");
-		Log("[color=#7f7]Лут (демо): +0 (для теста экстракции реализуем позже).[/color]");
 	}
 
 	// =====================================================================
 	// Кнопки
 	// =====================================================================
 
-	private void OnLoadoutPressed()
+	// Единственная кнопка выхода: меняет смысл по состоянию.
+	//   В бою          — «Бежать»: возврат на карту, узел не помечается пройденным.
+	//   После победы   — «На карту →»: продвигаемся к этому узлу.
+	//   После смерти   — «Выйти из подземелья»: run прерывается.
+	private void OnExitPressed()
 	{
-		GameData.Instance.CycleLoadout();
-		StartNewCombat();
-	}
-
-	private void OnChestPressed()
-	{
-		GameData.Instance.CycleChest();
-		StartNewCombat();
+		bool advance = _combatOver && _victory;
+		EmitSignal(SignalName.CombatExitRequested, advance);
 	}
 
 	// Использовать зелье из инвентаря (HP / MP / т.д.).
@@ -222,18 +229,10 @@ public partial class Combat : Control
 		RefreshUI();
 	}
 
-	private void OnRestartPressed() => StartNewCombat();
-
 	private void OnResetCharacterPressed()
 	{
 		// Делегируем удаление и переход в CharacterCreation роутеру (Main.cs).
 		EmitSignal(SignalName.ResetCharacterRequested);
-	}
-
-	private void OnLocationPressed()
-	{
-		GameData.Instance.CycleLocation();
-		StartNewCombat();
 	}
 
 	// Открывает модальный оверлей инвентаря поверх боя.

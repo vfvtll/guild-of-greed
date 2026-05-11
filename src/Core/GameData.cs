@@ -13,6 +13,10 @@ public partial class GameData : Node
 	public int SelectedChest = 2;
 	public int SelectedLocation = 0;
 
+	// Карта текущего забега. null = игрок не в подземелье (на экране выбора локации
+	// или в главном меню). Создаётся StartRun, обнуляется EndRun.
+	public RunMap CurrentRun { get; private set; }
+
 	public class Loadout
 	{
 		public string Name;
@@ -28,7 +32,8 @@ public partial class GameData : Node
 		new Loadout { Name = "Маг (посох)",          WeaponId = "staff_low",    Deck = "mage",    Hint = "Высокая магическая атака" },
 	};
 
-	// Доступные нагрудники для CycleChest (тестового перебора).
+	// Список нагрудников: индекс SelectedChest определяет дефолтный
+	// нагрудник нового персонажа в EnsureDefaults.
 	public static readonly List<string> ChestList = new()
 	{
 		"robe_chest_power_low",
@@ -117,7 +122,7 @@ public partial class GameData : Node
 	}
 
 	// Резолв: ID → реальный объект. Вызывается после SetCharacter и после
-	// смены экипировки (CycleLoadout/CycleChest/equip из инвентаря).
+	// смены экипировки (equip из инвентаря).
 	private void ResolveEquipment()
 	{
 		if (Character == null) return;
@@ -131,34 +136,24 @@ public partial class GameData : Node
 		Character.Ring2  = ItemsDB.GetArmor(Character.EquippedRing2Id)?.Clone();
 	}
 
-	// === Циклирование (тестовое — будущий инвентарь это заменит) ===
-	public void CycleLoadout()
+	// === Run lifecycle (карта подземелья) ===
+	// StartRun вызывается из LocationSelectView при входе игрока в локацию.
+	// Карта эфемерная — не сохраняется между сессиями.
+	public void StartRun(int locationIndex)
 	{
-		SelectedLoadout = (SelectedLoadout + 1) % Loadouts.Count;
-		if (Character != null)
-		{
-			Character.EquippedWeaponId = Loadouts[SelectedLoadout].WeaponId;
-			ResolveEquipment();
-		}
+		if (locationIndex < 0 || locationIndex >= LocationNames.Length) locationIndex = 0;
+		SelectedLocation = locationIndex;
+		CurrentRun = MapGenerator.Generate(locationIndex);
 	}
 
-	public void CycleChest()
-	{
-		SelectedChest = (SelectedChest + 1) % ChestList.Count;
-		if (Character != null)
-		{
-			var armorId = ChestList[SelectedChest];
-			// 50% шанс брони с суффиксом — для демо.
-			var rolled = Rng.Chance(0.5f)
-				? ItemsDB.RollArmorWithSuffix(armorId)
-				: ItemsDB.GetArmor(armorId)?.Clone();
-			Character.EquippedChestId = armorId;
-			Character.Chest = rolled;
-		}
-	}
+	public void EndRun() => CurrentRun = null;
 
-	public void CycleLocation()
-		=> SelectedLocation = (SelectedLocation + 1) % LocationNames.Length;
+	public void AdvanceTo(int nodeId)
+	{
+		if (CurrentRun == null) return;
+		if (!CurrentRun.CanAdvanceTo(nodeId)) return;
+		CurrentRun.Advance(nodeId);
+	}
 
 	// === Equip / unequip из инвентаря ===
 	// Берём предмет из инвентаря и надеваем. Если в слоте уже что-то есть,
@@ -287,24 +282,40 @@ public partial class GameData : Node
 		return new List<string>(kind == "warrior" ? CardsDB.WarriorDeck : CardsDB.MageDeck);
 	}
 
-	public string CurrentLoadoutName() => Loadouts[SelectedLoadout].Name;
-	public string CurrentLoadoutHint() => Loadouts[SelectedLoadout].Hint;
 	public string CurrentLocationName() => LocationNames[SelectedLocation];
-	public string CurrentLocationHint() => LocationHints[SelectedLocation];
 
-	public List<EnemyData> SpawnEnemies()
+	// Спавн врагов для текущего узла карты. Если CurrentRun == null
+	// (на прототипе — старый запуск без карты), фоллбек к одному гоблину.
+	public List<EnemyData> SpawnForCurrentNode()
 	{
 		var list = new List<EnemyData>();
+		var node = CurrentRun?.CurrentNode();
+		if (node == null)
+		{
+			list.Add(EnemyData.CreateGoblin());
+			return list;
+		}
+
+		if (node.Type == MapNodeType.Boss)
+		{
+			list.Add(EnemyData.CreateBoss());
+			return list;
+		}
+
+		// Battle (и на этом инкременте — Elite, пока без отдельных моделей):
+		// набор врагов зависит от локации. Не пять goblin'ов разом — это был
+		// формат "вся локация = один бой". Теперь локация = много узлов.
 		switch (SelectedLocation)
 		{
 			case 0:
 				list.Add(EnemyData.CreateGoblin());
 				break;
 			case 1:
-				for (int i = 0; i < 5; i++) list.Add(EnemyData.CreateForestGoblin());
+				list.Add(EnemyData.CreateForestGoblin());
+				list.Add(EnemyData.CreateForestGoblin());
 				break;
 			case 2:
-				list.Add(EnemyData.CreateBoss());
+				list.Add(EnemyData.CreateGoblin());
 				break;
 			default:
 				list.Add(EnemyData.CreateGoblin());
