@@ -25,6 +25,10 @@ public enum MapNodeType
 	Chest,
 	Event,
 	Boss,
+	// Стартовый бой нового персонажа: один тренировочный манекен, с которого
+	// гарантированно падает стартовый меч и комплект кожаной брони. Не входит
+	// в обычные RunMap — запускается напрямую из Main после CreateCharacter.
+	Tutorial,
 }
 
 public class MapNode

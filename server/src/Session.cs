@@ -247,6 +247,7 @@ public class Session
 			Id = Guid.NewGuid(),
 			CharacterName = r.CharacterName ?? "",
 			Str = r.Str, Int = r.Int, Con = r.Con, Wit = r.Wit, Men = r.Men, Dex = r.Dex,
+			IsNewCharacter = true,
 		};
 		// Новый персонаж должен начать с полным HP/MP (поля persist'ятся).
 		ch.ResetForCombat();
@@ -299,11 +300,12 @@ public class Session
 
 		character.ResolveEquipment();   // тянем Weapon/Armor по EquippedXxxId — нужно для расчётов.
 
-		var enemies = EnemyData.SpawnFor(r.LocationIndex, (MapNodeType)r.NodeType);
+		var nodeType = (MapNodeType)r.NodeType;
+		var enemies = EnemyData.SpawnFor(r.LocationIndex, nodeType);
 		var deck = CardsDB.DeckFor(character);
 		int seed = _serverRng.Next();
 
-		_battle = new BattleSession(character, enemies, deck, seed);
+		_battle = new BattleSession(character, enemies, deck, seed, nodeType);
 		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
 			$"seed={seed} enemies={enemies.Count}");
 
@@ -334,6 +336,11 @@ public class Session
 			// Loot loss / экстракция-штраф — отдельный И5в.9+.
 			if (_battle.Character.CurrentHp <= 0)
 				_battle.Character.ResetForCombat();
+
+			// И6.1: победа в стартовом бою (Tutorial) снимает флаг IsNewCharacter.
+			// При поражении флаг сохраняется — стартовый бой будет повторён.
+			if (victory && _battle.NodeType == MapNodeType.Tutorial)
+				_battle.Character.IsNewCharacter = false;
 
 			// И5в.5 persistence: сохраняем character_json с актуальным
 			// инвентарём, эффектами, HP/MP. Engine уже мутировал state.Player.

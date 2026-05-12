@@ -31,6 +31,12 @@ public partial class Combat : Control
 	// нет нормальных конструкторов с параметрами.
 	public NetworkClient Net { get; set; }
 
+	// Override'ы для боёв вне забега (стартовый Tutorial-бой). Когда заданы —
+	// игнорируют GameData.CurrentRun. Если null — берётся обычный путь
+	// (SelectedLocation + текущий узел карты).
+	public int? LocationOverride { get; set; }
+	public int? NodeTypeOverride { get; set; }
+
 	// === Боевое состояние — через shared engine ===
 	private BattleState _state;
 
@@ -60,8 +66,8 @@ public partial class Combat : Control
 		_targetingBanner.Visible = false;
 
 		var node = GameData.Instance.CurrentRun?.CurrentNode();
-		int locationIndex = GameData.Instance.SelectedLocation;
-		int nodeType = (int)(node?.Type ?? MapNodeType.Battle);
+		int locationIndex = LocationOverride ?? GameData.Instance.SelectedLocation;
+		int nodeType = NodeTypeOverride ?? (int)(node?.Type ?? MapNodeType.Battle);
 
 		BattleStartedResponse resp;
 		try
@@ -108,8 +114,12 @@ public partial class Combat : Control
 	{
 		var pc = _state.Player;
 		var node = GameData.Instance.CurrentRun?.CurrentNode();
-		string nodeLabel = node?.Type == MapNodeType.Boss ? "БОСС" : "Стычка";
-		Log($"[b]=== {GameData.Instance.CurrentLocationName()} — {nodeLabel} ===[/b]");
+		bool isTutorial = NodeTypeOverride == (int)MapNodeType.Tutorial;
+		string nodeLabel = isTutorial ? "ОБУЧЕНИЕ"
+			: node?.Type == MapNodeType.Boss ? "БОСС"
+			: "Стычка";
+		string locationLabel = isTutorial ? "Опушка леса" : GameData.Instance.CurrentLocationName();
+		Log($"[b]=== {locationLabel} — {nodeLabel} ===[/b]");
 		Log($"Противников: {_state.Enemies.Count}");
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
 		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");

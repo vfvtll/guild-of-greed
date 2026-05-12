@@ -82,10 +82,16 @@ public partial class GameData : Node
 		ResolveEquipment();
 	}
 
-	// Если персонаж только что создан (или сейв старый, без полей экипировки),
-	// проставляем стартовые айтемы и зелья.
+	// Бэкфилл для старых сейвов: до Инк.1 экипировка и стартовый набор выдавались
+	// клиентом всем новым персонажам. После Инк.1 новый персонаж (IsNewCharacter=true)
+	// начинает голым — меч и броня падают со стартового тренировочного боя.
+	// Эта функция теперь трогает только legacy-сейвы, у которых IsNewCharacter=false
+	// (default до миграции) и при этом пустые поля экипировки — значит persisted
+	// до отделения нового флоу. Им проставляем дефолты, чтобы не сломать сейв.
 	private void EnsureDefaults(CharacterData ch)
 	{
+		if (ch.IsNewCharacter) return;
+
 		if (string.IsNullOrEmpty(ch.EquippedWeaponId))
 			ch.EquippedWeaponId = Loadouts[SelectedLoadout].WeaponId;
 		if (string.IsNullOrEmpty(ch.EquippedChestId))
@@ -97,7 +103,7 @@ public partial class GameData : Node
 		if (string.IsNullOrEmpty(ch.EquippedBootsId))
 			ch.EquippedBootsId = DefaultBootsId;
 
-		// Стартовый набор для нового перса с пустым инвентарём.
+		// Стартовый набор для старого перса с пустым инвентарём.
 		if (ch.Inventory != null && ch.Inventory.Slots.Count == 0)
 		{
 			AddItem(ch, "potion_hp_small", 3);

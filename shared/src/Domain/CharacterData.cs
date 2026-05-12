@@ -27,6 +27,12 @@ public class CharacterData
 	public string Grade = "E";
 	public int Exp = 0;
 
+	// true = персонаж только что создан и ещё не прошёл стартовый бой/обучение.
+	// Default = false, чтобы старые сейвы (до этого поля) не получили повторный
+	// тутор. Серверный HandleCreateCharacter явно выставляет true для новых.
+	// Сбрасывается в false после победы в Tutorial-узле + UpdateCharacter.
+	public bool IsNewCharacter = false;
+
 	// Статы (35..45 + распределённые игроком 10 очков).
 	public int Str;
 	public int Int;

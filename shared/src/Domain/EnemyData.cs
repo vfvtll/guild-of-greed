@@ -27,6 +27,11 @@ public class EnemyData
 	public static List<EnemyData> SpawnFor(int locationIndex, MapNodeType nodeType)
 	{
 		var list = new List<EnemyData>();
+		if (nodeType == MapNodeType.Tutorial)
+		{
+			list.Add(CreateTrainingDummy());
+			return list;
+		}
 		if (nodeType == MapNodeType.Boss)
 		{
 			list.Add(CreateBoss());
@@ -40,6 +45,39 @@ public class EnemyData
 			default: list.Add(CreateGoblin()); break;
 		}
 		return list;
+	}
+
+	// Стартовый бой нового персонажа: волк-подранок на опушке леса.
+	// HP/PhysDef рассчитаны так, чтобы голый персонаж (без оружия, Str~40) убил
+	// его за 2-3 хода картами "strike" из стандартной WarriorDeck.
+	// Lut гарантированный — это единственный способ выдать игроку стартовое
+	// оружие и броню (EnsureDefaults для нового персонажа их не выдаёт).
+	public static EnemyData CreateTrainingDummy()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Тощий волк",
+			MaxHp = 28,
+			CurrentHp = 28,
+			PhysDef = 0,
+			MagicDef = 0,
+		};
+		e.Intents.Add(new Intent { Type = "attack", Amount = 4, Name = "Укус" });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 6, Name = "Бросок" });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 3, Name = "Скалит зубы" });
+
+		// Гарантированный стартовый набор: меч + полный комплект кожанки + амулет + пара зелий.
+		// Все Chance=1.0 — рандом не влияет, поэтому клиент и сервер получат
+		// одинаковый лут даже не разворачивая RNG (он всё равно крутится в Rng.Chance).
+		e.LootTable.Add(new LootEntry { ItemId = "sword_1h_low",           Chance = 1.0f });
+		e.LootTable.Add(new LootEntry { ItemId = "light_chest_strength_low", Chance = 1.0f });
+		e.LootTable.Add(new LootEntry { ItemId = "light_helmet_low",       Chance = 1.0f });
+		e.LootTable.Add(new LootEntry { ItemId = "light_gloves_low",       Chance = 1.0f });
+		e.LootTable.Add(new LootEntry { ItemId = "light_boots_low",        Chance = 1.0f });
+		e.LootTable.Add(new LootEntry { ItemId = "amulet_might_low",       Chance = 1.0f });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small",        Chance = 1.0f, MinCount = 2, MaxCount = 2 });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_small",        Chance = 1.0f });
+		return e;
 	}
 
 	// Слабый гоблин для леса — 5 шт. атакуют разом, поэтому каждый сильно слабее.

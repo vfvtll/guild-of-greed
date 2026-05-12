@@ -263,13 +263,91 @@ public partial class Main : Control
 			if (!resp.Success)
 			{
 				GD.PrintErr($"CreateCharacter failed: {resp.Error}");
+				ShowCharacterSelect();
+				return;
 			}
+
+			// Сразу выбираем созданного персонажа и кидаем в стартовый бой —
+			// игрок не должен видеть промежуточный экран со списком слотов.
+			var selectResp = await _net.SelectCharacterAsync(resp.CharacterId);
+			if (!selectResp.Success)
+			{
+				GD.PrintErr($"SelectCharacter after create failed: {selectResp.Error}");
+				ShowCharacterSelect();
+				return;
+			}
+			var character = JsonSerializer.Deserialize<CharacterData>(selectResp.CharacterJson,
+				new JsonSerializerOptions { IncludeFields = true });
+			GameData.Instance.SetCharacter(character);
+			ShowStarterBattle();
 		}
 		catch (Exception ex)
 		{
 			GD.PrintErr($"CreateCharacter exception: {ex.Message}");
+			ShowCharacterSelect();
 		}
-		ShowCharacterSelect();
+	}
+
+	// =====================================================================
+	// Стартовый бой (Tutorial)
+	// =====================================================================
+
+	private void ShowStarterBattle()
+	{
+		// Никакого StartRun: RunMap не создаётся, и Combat использует
+		// LocationOverride/NodeTypeOverride. После боя — обычный LocationSelect.
+		GameData.Instance.EndRun();
+		ClearContent();
+		var combat = new Combat
+		{
+			Net = _net,
+			LocationOverride = 1,                          // "Тёмный лес"
+			NodeTypeOverride = (int)MapNodeType.Tutorial,
+		};
+		combat.ResetCharacterRequested += OnResetCharacterFromGame;
+		combat.CombatExitRequested += OnStarterCombatExit;
+		AddChild(combat);
+	}
+
+	private void OnStarterCombatExit(bool advance)
+	{
+		var character = GameData.Instance.Character;
+		bool died = character != null && character.CurrentHp <= 0;
+
+		// При поражении (или ручном Flee) — повторяем стартовый бой:
+		// без оружия не пройти дальше, а флаг IsNewCharacter ещё стоит.
+		if (died || !advance)
+		{
+			ShowStarterBattle();
+			return;
+		}
+		// Победа: сервер уже сбросил IsNewCharacter и положил лут в инвентарь.
+		// Локально тоже обнуляем флаг — иначе при повторном SetCharacter в
+		// этой сессии EnsureDefaults будет считать персонажа новым.
+		if (character != null) character.IsNewCharacter = false;
+		ShowEquipmentTutorial();
+	}
+
+	// =====================================================================
+	// Туториал по экипировке (после стартового боя)
+	// =====================================================================
+
+	private void ShowEquipmentTutorial()
+	{
+		ClearContent();
+		var view = new EquipmentTutorialView();
+		view.OpenInventoryRequested += OnTutorialOpenInventory;
+		view.SkipRequested += ShowLocationSelect;
+		AddChild(view);
+	}
+
+	private void OnTutorialOpenInventory()
+	{
+		// Открываем существующий InventoryOverlay поверх туториала. Когда игрок
+		// закроет инвентарь — уходим в LocationSelect (без второго подтверждения).
+		var overlay = new InventoryOverlay { ReadOnly = false };
+		overlay.Closed += ShowLocationSelect;
+		AddChild(overlay);
 	}
 
 	// =====================================================================
