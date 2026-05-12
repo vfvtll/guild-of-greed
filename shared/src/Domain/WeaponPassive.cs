@@ -1,23 +1,33 @@
 namespace GuildOfGreed.Shared.Domain;
 
-// Уникальные пассивные эффекты оружия. Каркас — реальная игровая логика
-// ещё не подключена. Согласовано 2026-05-12:
-//   - knife              — повышенный crit (chance/damage).
-//   - sword_1h, sword_2h — шанс наложить bleeding effect при ударе.
-//   - staff              — без уник.эффекта (магия покрыта статами).
-//   - в будущем          — элементальный урон/резисты (light/dark/poison)
-//                          через отдельные AffixStatKind или собственный enum.
+// Уникальный пассивный эффект оружия. POCO с параметром Magnitude —
+// разные оружия одного типа могут иметь разную силу эффекта.
 //
-// Сейчас этот enum заполняется в WeaponData.Passives при определении оружия
-// в ItemsDB, но никакой engine-логики (бой, описания) к нему не подключено.
-// Это сделано отдельным инкрементом, когда понадобятся реальные эффекты.
+// Согласовано 2026-05-12:
+//   - bleed_on_hit (двуручные мечи): каждый физический удар добавляет
+//     bleed.stack врагу = Magnitude% от нанесённого по HP урона. В конце
+//     хода врага стак уменьшается на enemy.HpRegen и наносит урон.
+//     Стак НЕ сбрасывается между ходами — копится.
+//   - crit_bonus (ножи): зарезервировано, реализации пока нет.
+//   - mana_leech, элементальные — будущие итерации.
 //
-// ID сохраняются в JSON, поэтому новые значения добавлять ТОЛЬКО в конец
-// (см. CODING_STANDARDS §11 для аналогичной защиты в enum'ах).
-public enum WeaponPassive
+// Kind — английский snake_case идентификатор. Magnitude — целое число,
+// семантика зависит от Kind:
+//   bleed_on_hit: процент от урона (5 = 5%).
+//   crit_bonus:   процент к шансу/урону крита (TODO).
+public class WeaponPassive
 {
-	None         = 0,
-	CritBonus    = 1,   // +шанс/+урон крита. Используется ножами.
-	BleedOnHit   = 2,   // Шанс bleeding-эффекта при физ.ударе. Мечи.
-	// TODO: ManaLeechOnHit, ElementalLight, ElementalDark, ElementalPoison, ...
+	public string Kind;
+	public int Magnitude;
+
+	public WeaponPassive() { }
+	public WeaponPassive(string kind, int magnitude)
+	{
+		Kind = kind; Magnitude = magnitude;
+	}
+
+	// Известные Kind'ы. Хранить как const'ы, чтобы typo в ItemsDB ловила
+	// IDE/grep, а не дебаг боя.
+	public const string BleedOnHit = "bleed_on_hit";
+	public const string CritBonus  = "crit_bonus";
 }

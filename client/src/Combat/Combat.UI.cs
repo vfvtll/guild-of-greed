@@ -147,7 +147,9 @@ public partial class Combat
 			Size = new Vector2(180, 50),
 		};
 		UIStyle.StyleButton(_endTurnButton, primary: true);
-		_endTurnButton.Pressed += OnEndTurnPressed;
+		// Один handler с переключаемой ролью: во время боя — "Конец хода",
+		// после победы — "Переход на карту". См. OnTurnOrAdvancePressed.
+		_endTurnButton.Pressed += OnTurnOrAdvancePressed;
 		AddChild(_endTurnButton);
 	}
 

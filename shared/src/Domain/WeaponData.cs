@@ -35,10 +35,20 @@ public class WeaponData
 	// Аффиксы экземпляра (И6.2). См. ArmorData.Affixes для семантики.
 	public List<AppliedAffix> Affixes = new();
 
-	// Уникальные пассивные эффекты по типу оружия (И6.2-E, каркас).
-	// Заполняется в ItemsDB при определении оружия. Боевая интеграция —
-	// отдельным инкрементом; сейчас читается только для отображения в тултипе.
+	// Уникальные пассивные эффекты по типу оружия. POCO {Kind, Magnitude} —
+	// разные экземпляры одного типа могут иметь разную силу.
+	// Известные Kind'ы: см. константы в WeaponPassive.
 	public List<WeaponPassive> Passives = new();
+
+	// Сумма Magnitude всех passive'ов заданного Kind. Используется
+	// CombatEngine для применения эффектов; вернёт 0 если такого нет.
+	public int PassiveMagnitude(string kind)
+	{
+		int sum = 0;
+		foreach (var p in Passives)
+			if (p != null && p.Kind == kind) sum += p.Magnitude;
+		return sum;
+	}
 
 	public WeaponData Clone()
 	{

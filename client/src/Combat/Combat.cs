@@ -307,10 +307,27 @@ public partial class Combat : Control
 					Log($"[color=#f44][b]{Lang.T("log.player_dead")}[/b][/color]");
 					break;
 
+				case BattleEventType.BleedStacked:
+					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
+						Log($"[color=#f55]🩸 {_state.Enemies[ev.EnemyIndex].EnemyName}: +{ev.Amount} кровотечения (стак {_state.Enemies[ev.EnemyIndex].BleedStack})[/color]");
+					break;
+
+				case BattleEventType.BleedTicked:
+					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
+						Log($"[color=#f55]🩸 {_state.Enemies[ev.EnemyIndex].EnemyName} — кровотечение: −{ev.Amount} HP[/color]");
+					break;
+
 				case BattleEventType.BattleEnded:
-					_endTurnButton.Disabled = true;
 					if (ev.Victory)
+					{
+						_endTurnButton.Text = "🗺 Переход на карту";
+						_endTurnButton.Disabled = false;
 						Log($"[color=#7f7][b]{Lang.T("log.encounter_cleared")}[/b][/color]");
+					}
+					else
+					{
+						_endTurnButton.Disabled = true;
+					}
 					break;
 			}
 		}
@@ -320,8 +337,15 @@ public partial class Combat : Control
 	// Кнопки и user input
 	// =====================================================================
 
-	private async void OnEndTurnPressed()
+	private async void OnTurnOrAdvancePressed()
 	{
+		// После победы кнопка превращается в "Переход на карту" — эмитим
+		// exit с advance=true (как обычный CombatExit при победе).
+		if (_state != null && _state.CombatOver && _state.Victory)
+		{
+			EmitSignal(SignalName.CombatExitRequested, true);
+			return;
+		}
 		if (_state == null || _state.CombatOver || _busy) return;
 		CancelTargeting();
 		await ApplyActionAsync(new BattleAction { Type = BattleActionType.EndTurn }, playedView: null);

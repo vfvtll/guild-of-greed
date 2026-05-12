@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 7;   // I6.2-D: сеты (ArmorData.SetId), SetsDB, активные бонусы.
+	public const int Current = 8;   // I6.3: bleed-механика (WeaponPassive class, EnemyData.BleedStack/HpRegen, BleedStacked/BleedTicked).
 }

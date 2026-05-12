@@ -33,6 +33,9 @@ public enum BattleEventType
 	EnemyAction,
 	BattleEnded,
 	LootDropped,
+	// И6.2-E: кровотечение от двуручника.
+	BleedStacked,   // +N в стак на враге (после удара)
+	BleedTicked,    // в конце хода врага: N урона от bleed (после вычета HpRegen)
 }
 
 public class BattleEvent

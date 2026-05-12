@@ -103,7 +103,7 @@ public partial class EnemyView : PanelContainer
 		_hpLabel.Text = $"ХП: {Enemy.CurrentHp}/{Enemy.MaxHp}";
 		_intentLabel.Text = dead ? "—" : Enemy.DescribeIntent();
 		_blockLabel.Text = Enemy.CurrentBlock > 0 ? $"🛡 {Enemy.CurrentBlock}" : "";
-		_effectsLabel.Text = DescribeEffects(Enemy.Effects);
+		_effectsLabel.Text = DescribeEffects(Enemy.Effects, Enemy.BleedStack);
 	}
 
 	private void ApplyStyle(bool hovered)
@@ -153,10 +153,10 @@ public partial class EnemyView : PanelContainer
 			EmitSignal(SignalName.EnemyClicked, this);
 	}
 
-	private static string DescribeEffects(List<StatusEffect> effects)
+	private static string DescribeEffects(List<StatusEffect> effects, int bleedStack)
 	{
-		if (effects.Count == 0) return "";
 		var parts = new List<string>();
+		if (bleedStack > 0) parts.Add($"🩸 {bleedStack}");
 		foreach (var e in effects)
 		{
 			parts.Add(e.Type switch
@@ -165,6 +165,6 @@ public partial class EnemyView : PanelContainer
 				_                => $"{e.Id} ({e.Remaining})",
 			});
 		}
-		return string.Join(", ", parts);
+		return parts.Count == 0 ? "" : string.Join(", ", parts);
 	}
 }

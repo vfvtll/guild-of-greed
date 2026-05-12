@@ -261,6 +261,51 @@ public static class CombatEngine
 				e.Remaining--;
 				if (e.Remaining <= 0) enemy.Effects.RemoveAt(i);
 			}
+
+			// Кровотечение (И6.2-E). Регенерация снимает часть стака; остаток
+			// наносит урон по HP (игнорирует Block/PhysDef). Стак не сбрасывается.
+			TickBleed(state, events, enemy);
+			if (state.Player.CurrentHp <= 0)
+			{
+				// Защита от parade-case: bleed не бьёт игрока, но если игрок
+				// умер от удара врага выше — уже return'нули. Здесь ничего.
+			}
+		}
+
+		// Если враг помер от bleed-тика — добиваем драматургию (event/loot).
+		// AllEnemiesDead будет проверен на следующем шаге BeginPlayerTurn.
+	}
+
+	private static void TickBleed(BattleState state, List<BattleEvent> events, EnemyData enemy)
+	{
+		if (enemy.BleedStack <= 0) return;
+		// Регенерация съедает часть стака. Остаток ляжет уроном.
+		enemy.BleedStack = Math.Max(0, enemy.BleedStack - enemy.HpRegen);
+		if (enemy.BleedStack <= 0) return;
+		int dmg = Math.Min(enemy.BleedStack, enemy.CurrentHp);
+		enemy.CurrentHp -= dmg;
+		events.Add(new BattleEvent
+		{
+			Type = BattleEventType.BleedTicked,
+			EnemyIndex = state.Enemies.IndexOf(enemy),
+			Amount = dmg,
+		});
+		if (enemy.CurrentHp <= 0)
+		{
+			events.Add(new BattleEvent
+			{
+				Type = BattleEventType.EnemyDied,
+				EnemyIndex = state.Enemies.IndexOf(enemy),
+			});
+			var dropped = DropLoot(state, enemy);
+			if (dropped.Count > 0)
+				events.Add(new BattleEvent { Type = BattleEventType.LootDropped, DroppedItems = dropped });
+			if (AllEnemiesDead(state))
+			{
+				state.CombatOver = true;
+				state.Victory = true;
+				events.Add(new BattleEvent { Type = BattleEventType.BattleEnded, Victory = true });
+			}
 		}
 	}
 
@@ -411,6 +456,7 @@ public static class CombatEngine
 			enemy.CurrentBlock -= absorbed;
 			dmg -= absorbed;
 		}
+		int hpDamage = Math.Min(dmg, enemy.CurrentHp);
 		enemy.CurrentHp = Math.Max(0, enemy.CurrentHp - dmg);
 		events.Add(new BattleEvent
 		{
@@ -420,6 +466,36 @@ public static class CombatEngine
 			IsCrit = isCrit,
 			IsPhys = isPhys,
 		});
+
+		// Bleed-накопление (И6.3). Только физический урон по HP (после
+		// защиты+блока) и только если оружие игрока имеет bleed_on_hit.
+		//
+		// Гиперболическая формула с насыщением:
+		//   bleed_add = hpDamage² × Magnitude / (100 × (hpDamage + K))
+		// При малом уроне (hpDamage << K) растёт почти квадратично — слабые
+		// удары почти не bleed'ят. При большом (hpDamage >> K) выходит на
+		// линейную асимптоту bleed → hpDamage × Magnitude/100 — bleed НИКОГДА
+		// не превышает Magnitude% от удара, какой бы огромный удар ни был.
+		// Один удар на 1000 даёт ~2.5× больше bleed, чем десять по 100.
+		const int BleedSaturationK = 200;
+		if (isPhys && hpDamage > 0 && state.Player.Weapon != null)
+		{
+			int mag = state.Player.Weapon.PassiveMagnitude(WeaponPassive.BleedOnHit);
+			if (mag > 0)
+			{
+				long add = (long)hpDamage * hpDamage * mag / (100L * (hpDamage + BleedSaturationK));
+				if (add > 0)
+				{
+					enemy.BleedStack += (int)add;
+					events.Add(new BattleEvent
+					{
+						Type = BattleEventType.BleedStacked,
+						EnemyIndex = enemyIndex,
+						Amount = (int)add,
+					});
+				}
+			}
+		}
 
 		if (enemy.CurrentHp <= 0)
 		{

@@ -14,11 +14,21 @@ public class EnemyData
 	public int CurrentHp = 60;
 	public int PhysDef = 0;
 	public int MagicDef = 0;
+	// Регенерация в начале хода врага. Сначала тратится на снижение
+	// BleedStack, остаток (если есть) восстанавливает HP. Default=0 для
+	// большинства врагов — bleed их растирает в порошок без сопротивления.
+	public int HpRegen = 0;
 	public int CurrentBlock = 0;
 	public List<StatusEffect> Effects = new();
 	public List<Intent> Intents = new();
 	public Intent NextIntent;
 	public List<LootEntry> LootTable = new();
+	// Стак кровотечения (И6.2-E). Каждый физ.удар оружием с
+	// WeaponPassive.BleedOnHit добавляет magnitude% от нанесённого по HP
+	// урона. В конце хода врага стак вычитает HpRegen и наносит остаток
+	// как урон по HP (игнорируя PhysDef/Block). Стак НЕ сбрасывается —
+	// продолжает копиться между ходами.
+	public int BleedStack = 0;
 
 	// Спавн encounter'а для узла на карте. Используется и клиентом
 	// (GameData.SpawnForCurrentNode → display), и сервером (BattleSession

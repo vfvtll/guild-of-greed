@@ -20,7 +20,9 @@ public static class ItemsDB
 			PhysMult = 1.0f, MagicMult = 0.5f,
 			ExtraDraw = 1,
 			CritEveryNAttacks = 10,
-			Passives = new() { WeaponPassive.BleedOnHit },
+			// Одноручный меч: уникальная пассивка — это сам ExtraDraw=1
+			// (доп.карта в начале хода). Отдельный bleed-эффект здесь не
+			// катится, чтобы он остался "фирменной" чертой двуручников.
 		},
 		["sword_2h_low"] = new()
 		{
@@ -29,7 +31,13 @@ public static class ItemsDB
 			PhysAtk = 8, MagicAtk = 0,
 			PhysMult = 1.3f, MagicMult = 0.4f,
 			CritEveryNAttacks = 12,
-			Passives = new() { WeaponPassive.BleedOnHit },
+			// Двуручник — "разрез": гиперболическая формула с насыщением.
+			// bleed = dmg² × Magnitude / (100 × (dmg + 200))
+			// Magnitude — асимптотический процент урона: в пределе bleed
+			// стремится к Magnitude% от одиночного удара (на сверхбольшом
+			// dmg). 50 даёт sane baseline: удар 100 → +16 bleed, удар 1000
+			// → +416 bleed (~42% удара, ~2.6× больше серии 10×100).
+			Passives = new() { new WeaponPassive(WeaponPassive.BleedOnHit, 50) },
 		},
 		["staff_low"] = new()
 		{
@@ -233,14 +241,17 @@ public static class ItemsDB
 		return $"{w.Name}: {string.Join(", ", parts)}";
 	}
 
-	// Описание уник.эффекта оружия для тултипов. Каркас (И6.2-E): пассивки
-	// сейчас не имеют боевой реализации, но показываются в UI как обещание.
-	public static string DescribePassive(WeaponPassive p) => p switch
+	// Описание уник.эффекта оружия для тултипов и LogIntro.
+	public static string DescribePassive(WeaponPassive p)
 	{
-		WeaponPassive.CritBonus  => "повышенный крит",
-		WeaponPassive.BleedOnHit => "шанс кровотечения",
-		_                         => null,
-	};
+		if (p == null || string.IsNullOrEmpty(p.Kind)) return null;
+		return p.Kind switch
+		{
+			WeaponPassive.BleedOnHit => "разрез (кровотечение растёт с силой удара)",
+			WeaponPassive.CritBonus  => $"+{p.Magnitude}% к криту",
+			_                         => null,
+		};
+	}
 
 	public static string DescribeArmor(ArmorData a)
 	{
