@@ -94,14 +94,14 @@ public partial class InventoryOverlay : Control
 		RefreshSummary(ch);
 
 		ClearChildren(_equipmentList);
-		_equipmentList.AddChild(MakeSlotRow("⚔",  "Оружие",   ch.EquippedWeaponId, () => UnequipWeapon()));
-		_equipmentList.AddChild(MakeSlotRow("👕", "Грудь",    ch.EquippedChestId,  () => UnequipArmor(ArmorSlot.Chest)));
-		_equipmentList.AddChild(MakeSlotRow("⛑",  "Шлем",     ch.EquippedHelmetId, () => UnequipArmor(ArmorSlot.Helmet)));
-		_equipmentList.AddChild(MakeSlotRow("🧤", "Перчатки", ch.EquippedGlovesId, () => UnequipArmor(ArmorSlot.Gloves)));
-		_equipmentList.AddChild(MakeSlotRow("👢", "Сапоги",   ch.EquippedBootsId,  () => UnequipArmor(ArmorSlot.Boots)));
-		_equipmentList.AddChild(MakeSlotRow("📿", "Амулет",   ch.EquippedAmuletId, () => UnequipArmor(ArmorSlot.Amulet)));
-		_equipmentList.AddChild(MakeSlotRow("💍", "Кольцо 1", ch.EquippedRing1Id,  () => UnequipArmor(ArmorSlot.Ring1)));
-		_equipmentList.AddChild(MakeSlotRow("💍", "Кольцо 2", ch.EquippedRing2Id,  () => UnequipArmor(ArmorSlot.Ring2)));
+		_equipmentList.AddChild(MakeWeaponSlotRow("⚔",  "Оружие",   ch.Weapon, () => UnequipWeapon()));
+		_equipmentList.AddChild(MakeArmorSlotRow("👕", "Грудь",    ch.Chest,  () => UnequipArmor(ArmorSlot.Chest)));
+		_equipmentList.AddChild(MakeArmorSlotRow("⛑",  "Шлем",     ch.Helmet, () => UnequipArmor(ArmorSlot.Helmet)));
+		_equipmentList.AddChild(MakeArmorSlotRow("🧤", "Перчатки", ch.Gloves, () => UnequipArmor(ArmorSlot.Gloves)));
+		_equipmentList.AddChild(MakeArmorSlotRow("👢", "Сапоги",   ch.Boots,  () => UnequipArmor(ArmorSlot.Boots)));
+		_equipmentList.AddChild(MakeArmorSlotRow("📿", "Амулет",   ch.Amulet, () => UnequipArmor(ArmorSlot.Amulet)));
+		_equipmentList.AddChild(MakeArmorSlotRow("💍", "Кольцо 1", ch.Ring1,  () => UnequipArmor(ArmorSlot.Ring1)));
+		_equipmentList.AddChild(MakeArmorSlotRow("💍", "Кольцо 2", ch.Ring2,  () => UnequipArmor(ArmorSlot.Ring2)));
 
 		ClearChildren(_inventoryGrid);
 		int total = Inventory.Capacity;
@@ -110,8 +110,8 @@ public partial class InventoryOverlay : Control
 		{
 			if (i < slots.Count)
 			{
-				var st = slots[i];
-				_inventoryGrid.AddChild(MakeItemCard(st.ItemId, st.Count, () => UseInventorySlot(st.ItemId)));
+				int idx = i;
+				_inventoryGrid.AddChild(MakeItemCard(slots[i], () => UseInventorySlot(idx)));
 			}
 			else
 			{
@@ -160,21 +160,28 @@ public partial class InventoryOverlay : Control
 		Refresh();
 	}
 
-	private void UseInventorySlot(string itemId)
+	private void UseInventorySlot(int slotIndex)
 	{
 		if (BlockedByReadOnly()) return;
-		if (PotionsDB.Get(itemId) != null)
+		var slots = GameData.Instance.Character?.Inventory?.Slots;
+		if (slots == null || slotIndex < 0 || slotIndex >= slots.Count) return;
+		var st = slots[slotIndex];
+
+		// Зелье — пьём. Только для стак-предметов: instance не бывает зельем.
+		if (st.WeaponInstance == null && st.ArmorInstance == null
+			&& PotionsDB.Get(st.ItemId) != null)
 		{
-			if (GameData.Instance.UsePotion(itemId))
+			if (GameData.Instance.UsePotion(st.ItemId))
 				SetStatus("Зелье выпито.", error: false);
 			else SetStatus("Не удалось применить зелье.", error: true);
+			Refresh();
+			return;
 		}
-		else
-		{
-			if (GameData.Instance.EquipFromInventory(itemId))
-				SetStatus("Надето.", error: false);
-			else SetStatus("Не удалось надеть.", error: true);
-		}
+
+		// Оружие/броня — надеваем.
+		if (GameData.Instance.EquipFromInventory(slotIndex))
+			SetStatus("Надето.", error: false);
+		else SetStatus("Не удалось надеть.", error: true);
 		Refresh();
 	}
 

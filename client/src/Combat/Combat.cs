@@ -203,7 +203,6 @@ public partial class Combat : Control
 		var newPlayer = System.Text.Json.JsonSerializer.Deserialize<CharacterData>(snap.PlayerJson, jsonOpts);
 		var newEnemies = System.Text.Json.JsonSerializer.Deserialize<List<EnemyData>>(snap.EnemiesJson, jsonOpts);
 		if (newPlayer == null || newEnemies == null) return;
-		newPlayer.ResolveEquipment();
 
 		// Replace global Character reference — UI слои (LocationSelectView и
 		// MapView) читают GameData.Character, _state.Player должен указывать туда же.

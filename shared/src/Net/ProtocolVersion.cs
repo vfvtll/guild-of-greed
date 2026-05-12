@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 5;   // I6.1: CharacterData.IsNewCharacter (стартовый бой).
+	public const int Current = 6;   // I6.2: 6 редкостей, AppliedAffix, удалена старая SuffixId/SuffixName.
 }

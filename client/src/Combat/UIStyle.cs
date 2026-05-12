@@ -33,18 +33,23 @@ public static class UIStyle
 	public static readonly Color DangerRed     = new(1.00f, 0.45f, 0.45f);
 	public static readonly Color OutlineBlack  = new(0, 0, 0);
 
-	// === Палитра редкости предметов ===
-	public static readonly Color RarityCommon   = new(0.65f, 0.62f, 0.55f);
-	public static readonly Color RarityUncommon = new(0.45f, 0.95f, 0.50f);
-	public static readonly Color RarityRare     = new(0.40f, 0.65f, 1.00f);
-	public static readonly Color RarityEpic     = new(0.78f, 0.45f, 1.00f);
+	// === Палитра редкости предметов (6 ступеней, И6.2) ===
+	// Цвета подобраны на затемнённом фоне UI; контраст с UIStyle.PanelBg ~5:1.
+	public static readonly Color RarityCommon    = new(0.65f, 0.62f, 0.55f);
+	public static readonly Color RarityUncommon  = new(0.45f, 0.95f, 0.50f);
+	public static readonly Color RarityRare      = new(0.40f, 0.65f, 1.00f);
+	public static readonly Color RarityHeroic    = new(1.00f, 0.55f, 0.25f);  // оранжевый — между синим и фиолетовым
+	public static readonly Color RarityEpic      = new(0.78f, 0.45f, 1.00f);
+	public static readonly Color RarityLegendary = new(1.00f, 0.85f, 0.20f);  // ярко-золотой
 
 	public static Color RarityColor(ItemRarity r) => r switch
 	{
-		ItemRarity.Uncommon => RarityUncommon,
-		ItemRarity.Rare     => RarityRare,
-		ItemRarity.Epic     => RarityEpic,
-		_                   => RarityCommon,
+		ItemRarity.Uncommon  => RarityUncommon,
+		ItemRarity.Rare      => RarityRare,
+		ItemRarity.Heroic    => RarityHeroic,
+		ItemRarity.Epic      => RarityEpic,
+		ItemRarity.Legendary => RarityLegendary,
+		_                    => RarityCommon,
 	};
 
 	// =====================================================================

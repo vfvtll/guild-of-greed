@@ -1,9 +1,16 @@
+using System.Collections.Generic;
+
 namespace GuildOfGreed.Shared.Domain;
 
 // POCO-описание одной части брони. Лежит в Domain потому что CharacterData
 // держит ссылки на ArmorData как на 4 надетых куска.
 //
 // Конкретные экземпляры — в Data/ItemsDB.cs (статический реестр).
+//
+// Поля Phys*/Magic*/MpMax*/Hp*/ExtraDraw — БАЗОВЫЕ значения предмета. К ним
+// сверху накатываются аффиксы (Affixes — префиксы и суффиксы из AffixesDB).
+// Расчёт эффективных стат-вкладов делается через AffixContribution helper'ы
+// в CharacterData.SumArmor*.
 public enum ArmorSlot
 {
 	Chest,    // тело
@@ -33,8 +40,15 @@ public class ArmorData
 	public int MpRegenBonus;
 	public int HpBonus;
 	public int ExtraDrawBonus;
-	public string SuffixId;
-	public string SuffixName;
+	// Аффиксы экземпляра (И6.2). Пустой список = базовый предмет без ролла
+	// (например стартовый light_chest_strength_low до того, как был улучшен).
+	public List<AppliedAffix> Affixes = new();
 
-	public ArmorData Clone() => (ArmorData)MemberwiseClone();
+	public ArmorData Clone()
+	{
+		var c = (ArmorData)MemberwiseClone();
+		c.Affixes = new List<AppliedAffix>(Affixes.Count);
+		foreach (var a in Affixes) c.Affixes.Add(a.Clone());
+		return c;
+	}
 }

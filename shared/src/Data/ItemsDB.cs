@@ -186,30 +186,6 @@ public static class ItemsDB
 	};
 
 	// =====================================================================
-	// Суффиксы — катаются на броню E grade при выпадении лута
-	// =====================================================================
-	public class Suffix
-	{
-		public string Name;
-		public int PhysAtkBonus;
-		public int MagicAtkBonus;
-		public int MpRegenBonus;
-		public int MpMaxBonus;
-		public int HpBonus;
-		public int ExtraDrawBonus;
-	}
-
-	public static readonly Dictionary<string, Suffix> Suffixes = new()
-	{
-		["of_power"]    = new() { Name = "Силы",      PhysAtkBonus = 3 },
-		["of_magic"]    = new() { Name = "Магии",     MagicAtkBonus = 3 },
-		["of_wisdom"]   = new() { Name = "Мудрости",  MpRegenBonus = 3 },
-		["of_mana"]     = new() { Name = "Маны",      MpMaxBonus = 20 },
-		["of_vitality"] = new() { Name = "Жизни",     HpBonus = 25 },
-		["of_drawing"]  = new() { Name = "Розыгрыша", ExtraDrawBonus = 1 },
-	};
-
-	// =====================================================================
 	// Доступ
 	// =====================================================================
 	public static WeaponData GetWeapon(string id)
@@ -218,24 +194,8 @@ public static class ItemsDB
 	public static ArmorData GetArmor(string id)
 		=> Armors.TryGetValue(id, out var a) ? a : null;
 
-	public static ArmorData RollArmorWithSuffix(string id)
-	{
-		var armor = GetArmor(id)?.Clone();
-		if (armor == null || armor.Grade != "E") return armor;
-		var keys = new List<string>(Suffixes.Keys);
-		var pick = Rng.Pick(keys);
-		var suf = Suffixes[pick];
-		armor.SuffixId = pick;
-		armor.SuffixName = suf.Name;
-		armor.PhysAtkBonus   += suf.PhysAtkBonus;
-		armor.MagicAtkBonus  += suf.MagicAtkBonus;
-		armor.MpRegenBonus   += suf.MpRegenBonus;
-		armor.MpMaxBonus     += suf.MpMaxBonus;
-		armor.HpBonus        += suf.HpBonus;
-		armor.ExtraDrawBonus += suf.ExtraDrawBonus;
-		armor.Name = $"{armor.Name} {suf.Name}";
-		return armor;
-	}
+	// Старая система суффиксов (ItemsDB.Suffixes + RollArmorWithSuffix)
+	// удалена в И6.2 — её заменил AffixesDB + ItemGenerator (Инк. C).
 
 	// =====================================================================
 	// Описания для UI
@@ -253,6 +213,7 @@ public static class ItemsDB
 		if (w.ExtraDraw > 0) parts.Add($"+{w.ExtraDraw} карта");
 		if (w.CritEveryNAttacks > 0 && w.CritEveryNAttacks < 999)
 			parts.Add($"крит каждые {w.CritEveryNAttacks}");
+		foreach (var a in w.Affixes) parts.Add(AffixesDB.DescribeShort(a));
 		return $"{w.Name}: {string.Join(", ", parts)}";
 	}
 
@@ -268,6 +229,7 @@ public static class ItemsDB
 		if (a.MagicAtkPct > 0)     parts.Add($"+{a.MagicAtkPct}% МагАтк");
 		if (a.HpBonus > 0)         parts.Add($"+{a.HpBonus} ХП");
 		if (a.ExtraDrawBonus > 0)  parts.Add($"+{a.ExtraDrawBonus} карта");
+		foreach (var af in a.Affixes) parts.Add(AffixesDB.DescribeShort(af));
 		return parts.Count == 0 ? a.Name : $"{a.Name}: {string.Join(", ", parts)}";
 	}
 

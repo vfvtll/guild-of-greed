@@ -146,24 +146,32 @@ public partial class InventoryOverlay
 	// Фабрики карточек слотов
 	// =====================================================================
 
-	private Control MakeSlotRow(string icon, string slotName, string itemId, Action onClick)
+	private Control MakeWeaponSlotRow(string icon, string slotName, WeaponData item, Action onClick)
 	{
-		string itemName = "—";
-		string detail = "(пусто)";
-		if (!string.IsNullOrEmpty(itemId))
-		{
-			var (name, det, _) = DescribeItem(itemId);
-			itemName = name;
-			detail = det;
-		}
+		string itemName = item?.Name ?? "—";
+		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeWeapon(item);
+		var rarity = item?.Rarity ?? ItemRarity.Common;
+		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
+	}
 
+	private Control MakeArmorSlotRow(string icon, string slotName, ArmorData item, Action onClick)
+	{
+		string itemName = item?.Name ?? "—";
+		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeArmor(item);
+		var rarity = item?.Rarity ?? ItemRarity.Common;
+		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
+	}
+
+	private Control BuildSlotRow(string icon, string slotName, string itemName, string detail,
+		bool isEmpty, ItemRarity rarity, Action onClick)
+	{
 		var panel = new PanelContainer { CustomMinimumSize = new Vector2(280, 48) };
 		var hovered = false;
-		ApplySlotStyle(panel, hovered, isEmpty: string.IsNullOrEmpty(itemId));
+		ApplySlotStyle(panel, hovered, isEmpty);
 		panel.MouseFilter = MouseFilterEnum.Stop;
 		panel.TooltipText = $"{slotName}: {itemName}\n{detail}";
-		panel.MouseEntered += () => { hovered = true; ApplySlotStyle(panel, hovered, string.IsNullOrEmpty(itemId)); };
-		panel.MouseExited  += () => { hovered = false; ApplySlotStyle(panel, hovered, string.IsNullOrEmpty(itemId)); };
+		panel.MouseEntered += () => { hovered = true; ApplySlotStyle(panel, hovered, isEmpty); };
+		panel.MouseExited  += () => { hovered = false; ApplySlotStyle(panel, hovered, isEmpty); };
 		panel.GuiInput += ev =>
 		{
 			if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
@@ -186,24 +194,46 @@ public partial class InventoryOverlay
 		var slotL = UIStyle.MakeLabel(slotName, 10, UIStyle.TextDim);
 		col.AddChild(slotL);
 
-		var nameL = UIStyle.MakeLabel(itemName, 12, UIStyle.TextPrimary);
+		var nameColor = isEmpty ? UIStyle.TextDim : UIStyle.RarityColor(rarity);
+		var nameL = UIStyle.MakeLabel(itemName, 12, nameColor);
 		nameL.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		col.AddChild(nameL);
 
 		return panel;
 	}
 
-	private Control MakeItemCard(string itemId, int count, Action onClick)
+	private Control MakeItemCard(InventoryStack stack, Action onClick)
 	{
-		var (name, detail, icon) = DescribeItem(itemId);
+		// Если в стаке instance — берём имя/детали с него, чтобы аффиксы попали
+		// в карточку. Иначе fallback на DescribeItem(baseId).
+		string name; string detail; string icon; ItemRarity rarity;
+		if (stack.WeaponInstance != null)
+		{
+			name = stack.WeaponInstance.Name;
+			detail = ItemsDB.DescribeWeapon(stack.WeaponInstance);
+			icon = "⚔";
+			rarity = stack.WeaponInstance.Rarity;
+		}
+		else if (stack.ArmorInstance != null)
+		{
+			name = stack.ArmorInstance.Name;
+			detail = ItemsDB.DescribeArmor(stack.ArmorInstance);
+			icon = SlotIcon(stack.ArmorInstance.Slot);
+			rarity = stack.ArmorInstance.Rarity;
+		}
+		else
+		{
+			(name, detail, icon) = DescribeItem(stack.ItemId);
+			rarity = GetItemRarity(stack.ItemId);
+		}
+
 		var ch = GameData.Instance.Character;
-		var rarity = GetItemRarity(itemId);
 
 		var panel = new PanelContainer { CustomMinimumSize = new Vector2(190, 56) };
 		var hovered = false;
 		ApplyItemStyle(panel, hovered, rarity);
 		panel.MouseFilter = MouseFilterEnum.Stop;
-		panel.TooltipText = BuildItemTooltip(itemId, name, detail, ch);
+		panel.TooltipText = BuildItemTooltip(stack, name, detail, ch);
 		panel.MouseEntered += () => { hovered = true; ApplyItemStyle(panel, hovered, rarity); };
 		panel.MouseExited  += () => { hovered = false; ApplyItemStyle(panel, hovered, rarity); };
 		panel.GuiInput += ev =>
@@ -221,14 +251,14 @@ public partial class InventoryOverlay
 		iconL.HorizontalAlignment = HorizontalAlignment.Center;
 		h.AddChild(iconL);
 
-		var nameL = UIStyle.MakeLabel(name, 11, UIStyle.TextPrimary);
+		var nameL = UIStyle.MakeLabel(name, 11, UIStyle.RarityColor(rarity));
 		nameL.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		nameL.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		h.AddChild(nameL);
 
-		if (count > 1)
+		if (stack.Count > 1)
 		{
-			var countL = UIStyle.MakeLabel($"×{count}", 14, UIStyle.WarnAmber);
+			var countL = UIStyle.MakeLabel($"×{stack.Count}", 14, UIStyle.WarnAmber);
 			h.AddChild(countL);
 		}
 

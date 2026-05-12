@@ -12,9 +12,10 @@ namespace GuildOfGreed.Shared.Domain;
 //   MEN — макс. МП
 //   DEX — блок, частота крита, множитель крита
 //
-// Сохраняется в JSON: имя, уровни, статы, ID-ы надетых предметов, инвентарь.
-// Не сохраняется ([JsonIgnore]): прямые ссылки на WeaponData/ArmorData
-// (резолвятся при загрузке через ItemsDB), боевое состояние (HP, MP, эффекты).
+// Сохраняется в JSON: имя, уровни, статы, экипировка (Weapon/Chest/etc.
+// инстансы с аффиксами), инвентарь, текущие HP/MP.
+// Не сохраняется ([JsonIgnore]): per-battle поля (CurrentBlock, Effects,
+// AttacksSinceLastCrit) — резолвятся в начале каждого боя.
 public class CharacterData
 {
 	// Стабильный идентификатор для серверной БД и для выбора слота.
@@ -41,28 +42,23 @@ public class CharacterData
 	public int Men;
 	public int Dex;
 
-	// === Экипировка (ID-ы; реальные объекты резолвятся через ResolveEquipment) ===
-	public string EquippedWeaponId = "";
-	public string EquippedChestId  = "";
-	public string EquippedHelmetId = "";
-	public string EquippedGlovesId = "";
-	public string EquippedBootsId  = "";
-	public string EquippedAmuletId = "";
-	public string EquippedRing1Id  = "";
-	public string EquippedRing2Id  = "";
+	// === Экипировка ===
+	// Хранится как полноценные instance-объекты (с аффиксами), а не как
+	// строковые Id. До И6.2 здесь были EquippedXxxId + резолв через
+	// CharacterEquipmentResolver — это теряло аффиксы при equip/unequip.
+	// Теперь сериализуется напрямую в JSON: вместе с предметом сохраняются
+	// и его роллнутые Affixes / Rarity.
+	public WeaponData Weapon;
+	public ArmorData Chest;
+	public ArmorData Helmet;
+	public ArmorData Gloves;
+	public ArmorData Boots;
+	public ArmorData Amulet;
+	public ArmorData Ring1;
+	public ArmorData Ring2;
 
 	// === Инвентарь (с лимитом по слотам) ===
 	public Inventory Inventory = new();
-
-	// === Прямые ссылки (рантайм, после ResolveEquipment) ===
-	[JsonIgnore] public WeaponData Weapon;
-	[JsonIgnore] public ArmorData Chest;
-	[JsonIgnore] public ArmorData Helmet;
-	[JsonIgnore] public ArmorData Gloves;
-	[JsonIgnore] public ArmorData Boots;
-	[JsonIgnore] public ArmorData Amulet;
-	[JsonIgnore] public ArmorData Ring1;
-	[JsonIgnore] public ArmorData Ring2;
 
 	// === Боевое состояние ===
 	// CurrentHp/CurrentMp — PERSIST между боями: расход здоровья и маны в одном
@@ -96,20 +92,68 @@ public class CharacterData
 
 	private static int RollStat() => Rng.Range(35, 46);
 
-	// === Производные параметры (с учётом всех 4 слотов брони) ===
-	public int MaxHp()    => 40 + Con * 2 + SumArmor(a => a.HpBonus);
-	public int MaxMp()    => 30 + Men + SumArmor(a => a.MpMaxBonus);
-	public int MpRegen()  => Wit / 3 + SumArmor(a => a.MpRegenBonus);
+	// === Производные параметры (с учётом всех 4 слотов брони + аффиксов) ===
+	//
+	// Аффиксы (И6.2): префиксы суммируются как плоские бонусы в `flat`,
+	// суффиксы как процентные — применяются ОДНИМ множителем в конце формулы.
+	// Формула: result = (base + flat) * (1 + suffixPct / 100).
+	// Round-half-to-even, но Min=0 чтобы не уйти в отрицательное.
+	public int MaxHp()    => ApplyAffix(40 + Con * 2 + SumArmor(a => a.HpBonus), AffixStatKind.Hp);
+	public int MaxMp()    => ApplyAffix(30 + Men + SumArmor(a => a.MpMaxBonus), AffixStatKind.Mp);
+	public int MpRegen()  => ApplyAffix(Wit / 3 + SumArmor(a => a.MpRegenBonus), AffixStatKind.MpRegen);
+	// HpRegen (И6.2) — новый ресурс. База 0 от персонажа, копится через аффиксы
+	// и (в будущем) через сеты. Тикает в начале хода игрока в CombatEngine.
+	public int HpRegen()  => ApplyAffix(0, AffixStatKind.HpRegen);
 	public int HandSize() => 5 + (Weapon?.ExtraDraw ?? 0) + SumArmor(a => a.ExtraDrawBonus);
 
 	public float PhysMult()      => Weapon?.PhysMult ?? 1.0f;
 	public float MagicMult()     => Weapon?.MagicMult ?? 1.0f;
 	public int   WeaponPhysAtk() => Weapon?.PhysAtk ?? 0;
 	public int   WeaponMagAtk()  => Weapon?.MagicAtk ?? 0;
-	public int   PhysAtkBonus()  => SumArmor(a => a.PhysAtkBonus);
-	public int   MagicAtkBonus() => SumArmor(a => a.MagicAtkBonus);
-	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct);
-	public int   PhysDef()       => SumArmor(a => a.PhysDef);
+	public int   PhysAtkBonus()  => SumArmor(a => a.PhysAtkBonus) + AffixFlat(AffixStatKind.PhysAtk);
+	public int   MagicAtkBonus() => SumArmor(a => a.MagicAtkBonus) + AffixFlat(AffixStatKind.MagAtk);
+	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct) + AffixPct(AffixStatKind.MagAtk);
+	public int   PhysAtkPct()    => AffixPct(AffixStatKind.PhysAtk);
+	public int   PhysDef()       => ApplyAffix(SumArmor(a => a.PhysDef), AffixStatKind.PhysDef);
+	public int   MagDef()        => ApplyAffix(0, AffixStatKind.MagDef);
+
+	// Сумма плоских префиксов выбранного типа со всех надетых предметов
+	// (оружие + броня + бижутерия). Использует и Weapon, и AllArmor.
+	public int AffixFlat(AffixStatKind kind)
+	{
+		int sum = 0;
+		if (Weapon != null)
+			foreach (var aff in Weapon.Affixes)
+				if (aff.Slot == AffixSlot.Prefix && aff.Kind == kind) sum += aff.Magnitude;
+		foreach (var armor in AllArmor())
+			foreach (var aff in armor.Affixes)
+				if (aff.Slot == AffixSlot.Prefix && aff.Kind == kind) sum += aff.Magnitude;
+		return sum;
+	}
+
+	// Сумма процентных суффиксов выбранного типа. Возвращает целое в процентах:
+	// 15 значит +15%. Применяется через ApplyAffix или вручную в Compute*.
+	public int AffixPct(AffixStatKind kind)
+	{
+		int sum = 0;
+		if (Weapon != null)
+			foreach (var aff in Weapon.Affixes)
+				if (aff.Slot == AffixSlot.Suffix && aff.Kind == kind) sum += aff.Magnitude;
+		foreach (var armor in AllArmor())
+			foreach (var aff in armor.Affixes)
+				if (aff.Slot == AffixSlot.Suffix && aff.Kind == kind) sum += aff.Magnitude;
+		return sum;
+	}
+
+	// (base + flat) * (1 + pct/100), округлено вниз с минимумом 0.
+	private int ApplyAffix(int baseValue, AffixStatKind kind)
+	{
+		int flat = AffixFlat(kind);
+		int pct  = AffixPct(kind);
+		double v = (baseValue + flat) * (1.0 + pct / 100.0);
+		if (v < 0) v = 0;
+		return (int)System.Math.Round(v);
+	}
 
 	// Итерация по всем надетым кускам брони + бижутерии (без null'ов).
 	public IEnumerable<ArmorData> AllArmor()

@@ -154,6 +154,18 @@ public static class CombatEngine
 				events.Add(new BattleEvent { Type = BattleEventType.MpRegenerated, Amount = delta });
 		}
 
+		// HpRegen (И6.2) — от аффиксов/сетов. У персонажа базы нет; если игрок
+		// ничего "регенерирующего" не надел, amount=0 и event не эмитится.
+		int hpRegen = state.Player.HpRegen();
+		if (hpRegen > 0)
+		{
+			int oldHp = state.Player.CurrentHp;
+			state.Player.CurrentHp = Math.Min(state.Player.MaxHp(), state.Player.CurrentHp + hpRegen);
+			int delta = state.Player.CurrentHp - oldHp;
+			if (delta > 0)
+				events.Add(new BattleEvent { Type = BattleEventType.HpHealed, Amount = delta });
+		}
+
 		// Блок не переносится между ходами игрока.
 		state.Player.CurrentBlock = 0;
 
@@ -439,16 +451,41 @@ public static class CombatEngine
 		foreach (var entry in enemy.LootTable)
 		{
 			if (!state.Rng.Chance(entry.Chance)) continue;
+
+			// Affixed-режим: ролл через ItemGenerator с детерминированным rng
+			// (для CSP). Каждая единица в counta — отдельный instance-слот.
+			// PotionsDB-предметы игнорируют флаг — стакаемые не имеют instance.
+			if (entry.Affixed && PotionsDB.Get(entry.ItemId) == null)
+			{
+				int countAffixed = state.Rng.Range(entry.MinCount, entry.MaxCount + 1);
+				for (int i = 0; i < countAffixed; i++)
+				{
+					if (state.Player.Inventory.IsFull) break;
+					var weapon = ItemGenerator.RollWeapon(entry.ItemId, state.Rng);
+					if (weapon != null)
+					{
+						state.Player.Inventory.TryAddInstance(weapon);
+						dropped.Add($"{entry.ItemId}*");
+						continue;
+					}
+					var armor = ItemGenerator.RollArmor(entry.ItemId, state.Rng);
+					if (armor != null)
+					{
+						state.Player.Inventory.TryAddInstance(armor);
+						dropped.Add($"{entry.ItemId}*");
+					}
+				}
+				continue;
+			}
+
 			int count = state.Rng.Range(entry.MinCount, entry.MaxCount + 1);
 			int maxStack = PotionsDB.Get(entry.ItemId) != null ? PotionMaxStack : 1;
 			if (state.Player.Inventory.TryAdd(entry.ItemId, count, maxStack))
 			{
-				// Записываем строкой "itemId×count" для удобства логирования view.
 				dropped.Add($"{entry.ItemId}×{count}");
 			}
-			// Если инвентарь полон — лут теряется (как в текущей Combat.DropLoot).
-			// Сейчас не emit'им отдельного события: для CSP достаточно
-			// факта inventory state, а UI лог покажет это через diff.
+			// Если инвентарь полон — лут теряется. Не эмитим отдельного event:
+			// для CSP достаточно факта inventory state.
 		}
 		return dropped;
 	}

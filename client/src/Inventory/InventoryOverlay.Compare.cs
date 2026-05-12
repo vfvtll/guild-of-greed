@@ -7,7 +7,7 @@ public partial class InventoryOverlay
 {
 	// Тултип для предмета в инвентаре. Включает название, краткие статы
 	// и diff против того, что сейчас надето в этом слоте.
-	private static string BuildItemTooltip(string itemId, string name, string detail, CharacterData ch)
+	private static string BuildItemTooltip(InventoryStack stack, string name, string detail, CharacterData ch)
 	{
 		var sb = new System.Text.StringBuilder();
 		sb.Append(name);
@@ -16,15 +16,17 @@ public partial class InventoryOverlay
 
 		if (ch == null) return sb.ToString();
 
-		var armor = ItemsDB.GetArmor(itemId);
-		if (armor != null)
+		// Если в стаке instance — сравниваем именно его, а не базу из ItemsDB
+		// (у instance аффиксы важны для сравнения).
+		ArmorData armor = stack.ArmorInstance ?? ItemsDB.GetArmor(stack.ItemId);
+		if (armor != null && stack.WeaponInstance == null)
 		{
 			var current = ch.GetArmorSlot(armor.Slot);
 			sb.Append("\n\nСравнение со слотом:\n");
 			sb.Append(CompareArmor(armor, current));
 			return sb.ToString();
 		}
-		var weapon = ItemsDB.GetWeapon(itemId);
+		WeaponData weapon = stack.WeaponInstance ?? ItemsDB.GetWeapon(stack.ItemId);
 		if (weapon != null)
 		{
 			sb.Append("\n\nСравнение с оружием:\n");

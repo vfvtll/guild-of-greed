@@ -72,38 +72,30 @@ public partial class GameData : Node
 		Session = new UserSession();
 	}
 
-	// Назначить активного персонажа: проставить дефолтную экипировку для нового
-	// персонажа и зарезолвить ID-ы в реальные WeaponData/ArmorData.
+	// Назначить активного персонажа. И6.2: экипировка теперь хранится как
+	// инстансы прямо в CharacterData — резолва не требуется.
 	public void SetCharacter(CharacterData character)
 	{
 		Character = character;
 		if (character == null) return;
 		EnsureDefaults(character);
-		ResolveEquipment();
 	}
 
-	// Бэкфилл для старых сейвов: до Инк.1 экипировка и стартовый набор выдавались
-	// клиентом всем новым персонажам. После Инк.1 новый персонаж (IsNewCharacter=true)
-	// начинает голым — меч и броня падают со стартового тренировочного боя.
-	// Эта функция теперь трогает только legacy-сейвы, у которых IsNewCharacter=false
-	// (default до миграции) и при этом пустые поля экипировки — значит persisted
-	// до отделения нового флоу. Им проставляем дефолты, чтобы не сломать сейв.
+	// Бэкфилл для legacy-сейвов (до И6.1): если IsNewCharacter=false и
+	// экипировка пустая — проставляем дефолтный лоадаут и стартовый набор.
+	// Новый персонаж (IsNewCharacter=true) приходит голый, получает экипу
+	// со стартового боя.
 	private void EnsureDefaults(CharacterData ch)
 	{
 		if (ch.IsNewCharacter) return;
 
-		if (string.IsNullOrEmpty(ch.EquippedWeaponId))
-			ch.EquippedWeaponId = Loadouts[SelectedLoadout].WeaponId;
-		if (string.IsNullOrEmpty(ch.EquippedChestId))
-			ch.EquippedChestId = ChestList[SelectedChest];
-		if (string.IsNullOrEmpty(ch.EquippedHelmetId))
-			ch.EquippedHelmetId = DefaultHelmetId;
-		if (string.IsNullOrEmpty(ch.EquippedGlovesId))
-			ch.EquippedGlovesId = DefaultGlovesId;
-		if (string.IsNullOrEmpty(ch.EquippedBootsId))
-			ch.EquippedBootsId = DefaultBootsId;
+		if (ch.Weapon == null) ch.Weapon = ItemsDB.GetWeapon(Loadouts[SelectedLoadout].WeaponId)?.Clone();
+		if (ch.Chest  == null) ch.Chest  = ItemsDB.GetArmor(ChestList[SelectedChest])?.Clone();
+		if (ch.Helmet == null) ch.Helmet = ItemsDB.GetArmor(DefaultHelmetId)?.Clone();
+		if (ch.Gloves == null) ch.Gloves = ItemsDB.GetArmor(DefaultGlovesId)?.Clone();
+		if (ch.Boots  == null) ch.Boots  = ItemsDB.GetArmor(DefaultBootsId)?.Clone();
 
-		// Стартовый набор для старого перса с пустым инвентарём.
+		// Стартовый набор для legacy-перса с пустым инвентарём.
 		if (ch.Inventory != null && ch.Inventory.Slots.Count == 0)
 		{
 			AddItem(ch, "potion_hp_small", 3);
@@ -116,7 +108,8 @@ public partial class GameData : Node
 	}
 
 	// Обёртка над Inventory.TryAdd — определяет maxStack по типу предмета.
-	// Вызывается из всех мест где надо положить лут в инвентарь.
+	// Используется только для стакаемых предметов (зелья) или базовых
+	// (без аффиксов) Id-предметов. Для аффиксированных — Inventory.TryAddInstance.
 	public bool AddItem(string itemId, int count = 1)
 	{
 		if (Character == null) return false;
@@ -128,11 +121,6 @@ public partial class GameData : Node
 		int maxStack = PotionsDB.Get(itemId) != null ? 9 : 1;
 		return ch.Inventory.TryAdd(itemId, count, maxStack);
 	}
-
-	// Резолв: ID → реальный объект. Вызывается после SetCharacter и после
-	// смены экипировки (equip из инвентаря). Сама логика живёт в shared,
-	// чтобы сервер её тоже использовал перед StartBattle.
-	private void ResolveEquipment() => Character?.ResolveEquipment();
 
 	// === Run lifecycle (карта подземелья) ===
 	// StartRun вызывается из LocationSelectView при входе игрока в локацию.
@@ -159,55 +147,57 @@ public partial class GameData : Node
 	}
 
 	// === Equip / unequip из инвентаря ===
-	// Берём предмет из инвентаря и надеваем. Если в слоте уже что-то есть,
-	// старое уходит в инвентарь (свап). Возвращает true при успехе.
-	public bool EquipFromInventory(string itemId)
+	//
+	// API работает по индексу слота инвентаря, потому что аффиксированные
+	// предметы — instance'ы (Inventory.Slots[i].WeaponInstance/ArmorInstance):
+	// два меча с разными аффиксами хранятся в разных слотах, по Id их
+	// различить нельзя. Стакаемые baseId-предметы тоже работают по индексу —
+	// при equip забирается одна штука из стека.
+	public bool EquipFromInventory(int slotIndex)
 	{
 		if (Character == null) return false;
-		if (!Character.Inventory.Has(itemId)) return false;
+		var slots = Character.Inventory.Slots;
+		if (slotIndex < 0 || slotIndex >= slots.Count) return false;
+		var st = slots[slotIndex];
 
-		var weapon = ItemsDB.GetWeapon(itemId);
-		if (weapon != null)
+		// Резолвим какой именно объект надеваем: instance-payload или свежий
+		// клон из ItemsDB по baseId. Для зелий — фейлим (надеть нельзя).
+		WeaponData asWeapon = st.WeaponInstance ?? ItemsDB.GetWeapon(st.ItemId)?.Clone();
+		ArmorData  asArmor  = st.ArmorInstance  ?? ItemsDB.GetArmor(st.ItemId)?.Clone();
+		if (asWeapon == null && asArmor == null) return false;
+
+		if (asWeapon != null)
 		{
-			Character.Inventory.Remove(itemId, 1);
-			if (!string.IsNullOrEmpty(Character.EquippedWeaponId))
-				AddItem(Character, Character.EquippedWeaponId, 1);
-			Character.EquippedWeaponId = itemId;
-			ResolveEquipment();
+			// Снимаем 1 шт из слота. Для instance — слот удаляется целиком,
+			// для baseId-стека — декрементируется Count.
+			TakeOneFromSlot(slotIndex);
+			// Старое оружие — обратно в инвентарь как instance.
+			if (Character.Weapon != null)
+				Character.Inventory.TryAddInstance(Character.Weapon);
+			Character.Weapon = asWeapon;
 			return true;
 		}
 
-		var armor = ItemsDB.GetArmor(itemId);
-		if (armor != null)
-		{
-			ArmorSlot target = armor.Slot;
-			// Кольца: если Slot=Ring1 а Ring1 занят и Ring2 пуст — кладём в Ring2.
-			if (target == ArmorSlot.Ring1
-				&& !string.IsNullOrEmpty(Character.EquippedRing1Id)
-				&& string.IsNullOrEmpty(Character.EquippedRing2Id))
-			{
-				target = ArmorSlot.Ring2;
-			}
-			Character.Inventory.Remove(itemId, 1);
-			string oldId = GetEquippedArmorId(target);
-			if (!string.IsNullOrEmpty(oldId)) AddItem(Character, oldId, 1);
-			SetEquippedArmorId(target, itemId);
-			ResolveEquipment();
-			return true;
-		}
+		// Броня.
+		ArmorSlot target = asArmor.Slot;
+		// Кольца: если в Ring1 уже занято, а Ring2 пуст — надеваем в Ring2.
+		if (target == ArmorSlot.Ring1 && Character.Ring1 != null && Character.Ring2 == null)
+			target = ArmorSlot.Ring2;
 
-		return false;
+		TakeOneFromSlot(slotIndex);
+		var old = Character.GetArmorSlot(target);
+		if (old != null) Character.Inventory.TryAddInstance(old);
+		Character.SetArmorSlot(target, asArmor);
+		return true;
 	}
 
-	// Снять оружие в инвентарь. Не пройдёт если инвентарь полный.
+	// Снять оружие в инвентарь. False если инвентарь полон или оружия нет.
 	public bool UnequipWeapon()
 	{
-		if (Character == null) return false;
-		if (string.IsNullOrEmpty(Character.EquippedWeaponId)) return false;
+		if (Character == null || Character.Weapon == null) return false;
 		if (Character.Inventory.IsFull) return false;
-		AddItem(Character, Character.EquippedWeaponId, 1);
-		Character.EquippedWeaponId = "";
-		ResolveEquipment();
+		Character.Inventory.TryAddInstance(Character.Weapon);
+		Character.Weapon = null;
 		return true;
 	}
 
@@ -215,39 +205,28 @@ public partial class GameData : Node
 	public bool UnequipSlot(ArmorSlot slot)
 	{
 		if (Character == null) return false;
-		string id = GetEquippedArmorId(slot);
-		if (string.IsNullOrEmpty(id)) return false;
+		var item = Character.GetArmorSlot(slot);
+		if (item == null) return false;
 		if (Character.Inventory.IsFull) return false;
-		AddItem(Character, id, 1);
-		SetEquippedArmorId(slot, "");
-		ResolveEquipment();
+		Character.Inventory.TryAddInstance(item);
+		Character.SetArmorSlot(slot, null);
 		return true;
 	}
 
-	private string GetEquippedArmorId(ArmorSlot slot) => slot switch
+	// Удалить 1 единицу из слота инвентаря. Для instance — удалить слот
+	// целиком; для стака — декремент.
+	private void TakeOneFromSlot(int slotIndex)
 	{
-		ArmorSlot.Chest  => Character.EquippedChestId,
-		ArmorSlot.Helmet => Character.EquippedHelmetId,
-		ArmorSlot.Gloves => Character.EquippedGlovesId,
-		ArmorSlot.Boots  => Character.EquippedBootsId,
-		ArmorSlot.Amulet => Character.EquippedAmuletId,
-		ArmorSlot.Ring1  => Character.EquippedRing1Id,
-		ArmorSlot.Ring2  => Character.EquippedRing2Id,
-		_                => "",
-	};
-
-	private void SetEquippedArmorId(ArmorSlot slot, string id)
-	{
-		switch (slot)
+		var slots = Character.Inventory.Slots;
+		if (slotIndex < 0 || slotIndex >= slots.Count) return;
+		var s = slots[slotIndex];
+		if (s.WeaponInstance != null || s.ArmorInstance != null)
 		{
-			case ArmorSlot.Chest:  Character.EquippedChestId  = id; break;
-			case ArmorSlot.Helmet: Character.EquippedHelmetId = id; break;
-			case ArmorSlot.Gloves: Character.EquippedGlovesId = id; break;
-			case ArmorSlot.Boots:  Character.EquippedBootsId  = id; break;
-			case ArmorSlot.Amulet: Character.EquippedAmuletId = id; break;
-			case ArmorSlot.Ring1:  Character.EquippedRing1Id  = id; break;
-			case ArmorSlot.Ring2:  Character.EquippedRing2Id  = id; break;
+			Character.Inventory.RemoveAt(slotIndex);
+			return;
 		}
+		s.Count--;
+		if (s.Count <= 0) Character.Inventory.RemoveAt(slotIndex);
 	}
 
 	// === Использование зелья ===

@@ -269,7 +269,6 @@ public class Session
 
 		// Миграция старых сейвов: до И5в.6 CurrentHp/MP были [JsonIgnore] и в
 		// БД лежат как 0. Без этого fix-up нельзя играть.
-		ch.ResolveEquipment();
 		if (ch.CurrentHp <= 0 || ch.CurrentMp <= 0)
 		{
 			ch.ResetForCombat();
@@ -298,7 +297,6 @@ public class Session
 		if (character == null)
 			return new BattleStartedResponse { Success = false, Error = "character_missing" };
 
-		character.ResolveEquipment();   // тянем Weapon/Armor по EquippedXxxId — нужно для расчётов.
 
 		var nodeType = (MapNodeType)r.NodeType;
 		var enemies = EnemyData.SpawnFor(r.LocationIndex, nodeType);

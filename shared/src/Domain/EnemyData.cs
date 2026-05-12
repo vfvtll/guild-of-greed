@@ -116,13 +116,16 @@ public class EnemyData
 		e.Intents.Add(new Intent { Type = "attack", Amount = 17, Name = "Сильный замах" });
 		e.Intents.Add(new Intent { Type = "block",  Amount = 7,  Name = "Уклонение" });
 
-		// Стандартный лут — гарантированно зелье, шанс на бижутерию.
+		// Стандартный лут — гарантированно зелье, шанс на бижутерию с аффиксами.
+		// Affixed=true на украшениях даёт рандомный rarity (по весам Grade=E:
+		// 80% Common, 20% Uncommon) и аффиксы по бюджету (Common=1суф,
+		// Uncommon=1преф+1суф).
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small",   Chance = 0.60f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_small",   Chance = 0.30f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_medium",  Chance = 0.10f });
-		e.LootTable.Add(new LootEntry { ItemId = "ring_power_low",    Chance = 0.05f });
-		e.LootTable.Add(new LootEntry { ItemId = "ring_focus_low",    Chance = 0.05f });
-		e.LootTable.Add(new LootEntry { ItemId = "amulet_might_low",  Chance = 0.03f });
+		e.LootTable.Add(new LootEntry { ItemId = "ring_power_low",    Chance = 0.15f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "ring_focus_low",    Chance = 0.10f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "amulet_might_low",  Chance = 0.08f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_strength",   Chance = 0.05f });
 		return e;
 	}
@@ -142,9 +145,10 @@ public class EnemyData
 		e.Intents.Add(new Intent { Type = "attack", Amount = 30, Name = "Сокрушающий удар" });
 		e.Intents.Add(new Intent { Type = "block",  Amount = 18, Name = "Кровавая стойка" });
 
-		// Босс — щедрый: гарантированно редкое кольцо, шанс на эпик.
-		e.LootTable.Add(new LootEntry { ItemId = "ring_blessed_low",  Chance = 1.00f });
-		e.LootTable.Add(new LootEntry { ItemId = "amulet_arcane_low", Chance = 0.40f });
+		// Босс — щедрый: оба украшения с аффиксами (Rarity катается по grade=E,
+		// но это редкие базы — обычно выпадает Uncommon с 1+1 аффиксом).
+		e.LootTable.Add(new LootEntry { ItemId = "ring_blessed_low",  Chance = 1.00f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "amulet_arcane_low", Chance = 0.40f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_full",       Chance = 0.50f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_medium",  Chance = 1.00f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_medium",  Chance = 1.00f });
@@ -197,10 +201,19 @@ public class EnemyData
 
 // Запись в таблице лута: с указанной вероятностью при смерти врага падает
 // MinCount..MaxCount единиц предмета itemId.
+//
+// Affixed (И6.2): если true и предмет — оружие/броня, при дропе проходит
+// через ItemGenerator.RollArmor/RollWeapon — катается случайная rarity по
+// весам RollRarity(grade) и аффиксы из AffixesDB по бюджету AffixBudget.
+// Зелья и базы без аффиксов игнорируют этот флаг (стакаемые предметы
+// держат только string Id в инвентаре, instance-данные негде хранить).
+//
+// CombatEngine.DropLoot реализует ролл (см. Combat.Cards.cs).
 public class LootEntry
 {
 	public string ItemId;
 	public float Chance = 1.0f;
 	public int MinCount = 1;
 	public int MaxCount = 1;
+	public bool Affixed = false;
 }

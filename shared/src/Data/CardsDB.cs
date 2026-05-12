@@ -74,7 +74,10 @@ public static class CardsDB
 	// одну и ту же колоду для одного игрока.
 	public static List<string> DeckFor(CharacterData character)
 	{
-		if (character?.EquippedWeaponId != null && character.EquippedWeaponId.Contains("staff"))
+		// Магическая колода — для всего что попадает в тип "staff" (посох).
+		// Подгрузка через character.Weapon (instance), а не Id — на случай
+		// нестандартных weapon-Id (например, легендарные посохи в будущем).
+		if (character?.Weapon?.Type == "staff")
 			return new List<string>(MageDeck);
 		return new List<string>(WarriorDeck);
 	}
@@ -86,13 +89,17 @@ public static class CardsDB
 	// =====================================================================
 
 	// Физ. урон до защиты и блока цели.
-	// Формула: (BaseDamage + STR/3 + Оружие.ФизАтк + Броня.ФизАтк) ×
-	//          Оружие.ФизМульт × (1 + ПроломБрони/100)
+	// Формула: (BaseDamage + STR/3 + Оружие.ФизАтк + Броня.ФизАтк + ПрефФизАтк)
+	//          × Оружие.ФизМульт × (1 + СуфФизАтк%/100) × (1 + ПроломБрони/100)
+	// PhysAtkBonus()/MagicAtkBonus() уже включают плоские префиксы аффиксов
+	// (см. CharacterData). PhysAtkPct() — суффиксы.
 	public static int ComputePhysDamage(CardData card, CharacterData p, EnemyData enemy)
 	{
 		if (p == null) return Math.Max(1, card.BaseDamage);
 		float baseAmt = card.BaseDamage + p.Str / 3f + p.WeaponPhysAtk() + p.PhysAtkBonus();
 		float raw = baseAmt * p.PhysMult();
+		// Суффиксы аффиксов на ФизАтк (мультипликативный).
+		raw *= 1f + p.PhysAtkPct() / 100f;
 		// Бафф эликсира ярости (potion_strength).
 		raw *= 1f + p.GetEffectAmount("phys_dmg_pct") / 100f;
 		// Дебаф пролома брони на враге.
@@ -102,8 +109,9 @@ public static class CardsDB
 	}
 
 	// Маг. урон до защиты и блока цели.
-	// Формула: (BaseDamage + INT/3 + Оружие.МагАтк + Броня.МагАтк) ×
-	//          Оружие.МагМульт × (1 + Броня.МагАтк%/100) × (1 + Бафф/100)
+	// Формула: (BaseDamage + INT/3 + Оружие.МагАтк + Броня.МагАтк + ПрефМагАтк)
+	//          × Оружие.МагМульт × (1 + СуфМагАтк%/100) × (1 + Бафф/100)
+	// MagicAtkPct() уже агрегирует и старый броневой %, и аффикс-суффиксы.
 	public static int ComputeMagicDamage(CardData card, CharacterData p, EnemyData enemy)
 	{
 		if (p == null) return Math.Max(1, card.BaseDamage);
