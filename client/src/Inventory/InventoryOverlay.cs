@@ -35,7 +35,7 @@ public partial class InventoryOverlay : Control
 	private Label _readOnlyHint;
 	private VBoxContainer _equipmentList;
 	private GridContainer _inventoryGrid;
-	private Label _summaryAtk, _summaryDef, _summaryCrit;
+	private Label _summaryAtk, _summaryDef, _summaryCrit, _summarySets;
 
 	// Для slide-in/out анимаций.
 	private PanelContainer _panel;
@@ -136,6 +136,40 @@ public partial class InventoryOverlay : Control
 			? $"🎯 Крит каждые {ch.EffectiveCritEveryN()} ат. × {ch.CritMultiplier():F2}"
 			: "🎯 Без оружия — нет крита";
 		_summaryCrit.Text = critText;
+		_summarySets.Text = BuildSetsSummary(ch);
+	}
+
+	// Текстовая сводка активных сетов: "🔗 Кожанка следопыта 4/4: +2 ФизАтк, +3 ФизЗащ, +15 ХП".
+	// Если ни один сет не активирован (нет соответствующих бонусов на пороге parts) —
+	// возвращает пустую строку, чтобы лишний пробел не съел место.
+	private static string BuildSetsSummary(CharacterData ch)
+	{
+		var active = ch.ActiveSets();
+		if (active.Count == 0) return "";
+		var lines = new System.Collections.Generic.List<string>();
+		foreach (var kv in active)
+		{
+			var set = SetsDB.Get(kv.Key);
+			if (set == null) continue;
+			int parts = kv.Value;
+			int total = set.PartIds.Count;
+			var bonuses = new System.Collections.Generic.List<string>();
+			foreach (var b in SetsDB.ActiveBonusesFor(set, parts))
+				bonuses.Add(FormatSetBonus(b));
+			if (bonuses.Count == 0)
+			{
+				lines.Add($"🔗 {set.Name} {parts}/{total} — нет активных бонусов");
+				continue;
+			}
+			lines.Add($"🔗 {set.Name} {parts}/{total}: {string.Join(", ", bonuses)}");
+		}
+		return string.Join("\n", lines);
+	}
+
+	private static string FormatSetBonus(SetBonus b)
+	{
+		string sign = b.IsPercent ? "%" : "";
+		return $"+{b.Magnitude}{sign} {AffixesDB.StatName(b.Kind)}";
 	}
 
 	// =====================================================================

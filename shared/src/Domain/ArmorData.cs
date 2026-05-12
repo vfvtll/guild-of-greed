@@ -40,6 +40,9 @@ public class ArmorData
 	public int MpRegenBonus;
 	public int HpBonus;
 	public int ExtraDrawBonus;
+	// Принадлежность к сету (И6.2 D-инкремент). Пустая строка = не в сете.
+	// SetsDB.GetBySetId(SetId) даёт описание комплекта и бонусы.
+	public string SetId = "";
 	// Аффиксы экземпляра (И6.2). Пустой список = базовый предмет без ролла
 	// (например стартовый light_chest_strength_low до того, как был улучшен).
 	public List<AppliedAffix> Affixes = new();

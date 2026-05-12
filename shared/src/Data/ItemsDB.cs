@@ -20,6 +20,7 @@ public static class ItemsDB
 			PhysMult = 1.0f, MagicMult = 0.5f,
 			ExtraDraw = 1,
 			CritEveryNAttacks = 10,
+			Passives = new() { WeaponPassive.BleedOnHit },
 		},
 		["sword_2h_low"] = new()
 		{
@@ -28,6 +29,7 @@ public static class ItemsDB
 			PhysAtk = 8, MagicAtk = 0,
 			PhysMult = 1.3f, MagicMult = 0.4f,
 			CritEveryNAttacks = 12,
+			Passives = new() { WeaponPassive.BleedOnHit },
 		},
 		["staff_low"] = new()
 		{
@@ -49,6 +51,7 @@ public static class ItemsDB
 		{
 			Id = "robe_chest_power_low", Name = "Роба силы", Type = "robe",
 			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
+			SetId = "robe_e_top",
 			PhysDef = 2,
 			MpMaxBonus = 30, MpRegenBonus = 2,
 			MagicAtkBonus = 5, MagicAtkPct = 5,
@@ -57,6 +60,7 @@ public static class ItemsDB
 		{
 			Id = "robe_chest_wisdom_low", Name = "Роба мудрости", Type = "robe",
 			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
+			SetId = "robe_e_mid",
 			PhysDef = 2,
 			MpMaxBonus = 30, MpRegenBonus = 6,
 		},
@@ -64,6 +68,7 @@ public static class ItemsDB
 		{
 			Id = "light_chest_strength_low", Name = "Кожаная броня силы", Type = "light",
 			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
+			SetId = "light_e_low",
 			PhysDef = 7,
 			MpRegenBonus = 1,
 			PhysAtkBonus = 4,
@@ -82,12 +87,14 @@ public static class ItemsDB
 		{
 			Id = "robe_helmet_low", Name = "Капюшон мага", Type = "robe",
 			Slot = ArmorSlot.Helmet, Grade = "E", Tier = "low",
+			SetId = "robe_e_mid",
 			PhysDef = 1, MpMaxBonus = 8, MagicAtkBonus = 2,
 		},
 		["light_helmet_low"] = new()
 		{
 			Id = "light_helmet_low", Name = "Кожаный шлем", Type = "light",
 			Slot = ArmorSlot.Helmet, Grade = "E", Tier = "low",
+			SetId = "light_e_low",
 			PhysDef = 2, HpBonus = 8,
 		},
 
@@ -96,12 +103,14 @@ public static class ItemsDB
 		{
 			Id = "robe_gloves_low", Name = "Перчатки мага", Type = "robe",
 			Slot = ArmorSlot.Gloves, Grade = "E", Tier = "low",
+			SetId = "robe_e_mid",
 			PhysDef = 1, MagicAtkBonus = 3,
 		},
 		["light_gloves_low"] = new()
 		{
 			Id = "light_gloves_low", Name = "Кожаные перчатки", Type = "light",
 			Slot = ArmorSlot.Gloves, Grade = "E", Tier = "low",
+			SetId = "light_e_low",
 			PhysDef = 2, PhysAtkBonus = 2,
 		},
 
@@ -110,12 +119,14 @@ public static class ItemsDB
 		{
 			Id = "robe_boots_low", Name = "Туфли мага", Type = "robe",
 			Slot = ArmorSlot.Boots, Grade = "E", Tier = "low",
+			SetId = "robe_e_mid",
 			PhysDef = 1, MpRegenBonus = 2,
 		},
 		["light_boots_low"] = new()
 		{
 			Id = "light_boots_low", Name = "Кожаные сапоги", Type = "light",
 			Slot = ArmorSlot.Boots, Grade = "E", Tier = "low",
+			SetId = "light_e_low",
 			PhysDef = 2, MpRegenBonus = 1, PhysAtkBonus = 1,
 		},
 
@@ -214,8 +225,22 @@ public static class ItemsDB
 		if (w.CritEveryNAttacks > 0 && w.CritEveryNAttacks < 999)
 			parts.Add($"крит каждые {w.CritEveryNAttacks}");
 		foreach (var a in w.Affixes) parts.Add(AffixesDB.DescribeShort(a));
+		foreach (var p in w.Passives)
+		{
+			var d = DescribePassive(p);
+			if (d != null) parts.Add(d);
+		}
 		return $"{w.Name}: {string.Join(", ", parts)}";
 	}
+
+	// Описание уник.эффекта оружия для тултипов. Каркас (И6.2-E): пассивки
+	// сейчас не имеют боевой реализации, но показываются в UI как обещание.
+	public static string DescribePassive(WeaponPassive p) => p switch
+	{
+		WeaponPassive.CritBonus  => "повышенный крит",
+		WeaponPassive.BleedOnHit => "шанс кровотечения",
+		_                         => null,
+	};
 
 	public static string DescribeArmor(ArmorData a)
 	{

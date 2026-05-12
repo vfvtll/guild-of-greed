@@ -110,10 +110,10 @@ public class CharacterData
 	public float MagicMult()     => Weapon?.MagicMult ?? 1.0f;
 	public int   WeaponPhysAtk() => Weapon?.PhysAtk ?? 0;
 	public int   WeaponMagAtk()  => Weapon?.MagicAtk ?? 0;
-	public int   PhysAtkBonus()  => SumArmor(a => a.PhysAtkBonus) + AffixFlat(AffixStatKind.PhysAtk);
-	public int   MagicAtkBonus() => SumArmor(a => a.MagicAtkBonus) + AffixFlat(AffixStatKind.MagAtk);
-	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct) + AffixPct(AffixStatKind.MagAtk);
-	public int   PhysAtkPct()    => AffixPct(AffixStatKind.PhysAtk);
+	public int   PhysAtkBonus()  => SumArmor(a => a.PhysAtkBonus) + AffixFlat(AffixStatKind.PhysAtk) + SetFlat(AffixStatKind.PhysAtk);
+	public int   MagicAtkBonus() => SumArmor(a => a.MagicAtkBonus) + AffixFlat(AffixStatKind.MagAtk) + SetFlat(AffixStatKind.MagAtk);
+	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct) + AffixPct(AffixStatKind.MagAtk) + SetPct(AffixStatKind.MagAtk);
+	public int   PhysAtkPct()    => AffixPct(AffixStatKind.PhysAtk) + SetPct(AffixStatKind.PhysAtk);
 	public int   PhysDef()       => ApplyAffix(SumArmor(a => a.PhysDef), AffixStatKind.PhysDef);
 	public int   MagDef()        => ApplyAffix(0, AffixStatKind.MagDef);
 
@@ -146,13 +146,55 @@ public class CharacterData
 	}
 
 	// (base + flat) * (1 + pct/100), округлено вниз с минимумом 0.
+	// flat = аффиксы + сеты; pct = аффиксы + сеты.
 	private int ApplyAffix(int baseValue, AffixStatKind kind)
 	{
-		int flat = AffixFlat(kind);
-		int pct  = AffixPct(kind);
+		int flat = AffixFlat(kind) + SetFlat(kind);
+		int pct  = AffixPct(kind)  + SetPct(kind);
 		double v = (baseValue + flat) * (1.0 + pct / 100.0);
 		if (v < 0) v = 0;
 		return (int)System.Math.Round(v);
+	}
+
+	// === Сеты (И6.2-D) =====================================================
+	// Активные сеты на персонаже = setId → число надетых частей этого сета.
+	// Подсчёт идёт только по AllArmor — оружие в сеты пока не входит.
+	public Dictionary<string, int> ActiveSets()
+	{
+		var counts = new Dictionary<string, int>();
+		foreach (var armor in AllArmor())
+		{
+			if (string.IsNullOrEmpty(armor.SetId)) continue;
+			counts.TryGetValue(armor.SetId, out int n);
+			counts[armor.SetId] = n + 1;
+		}
+		return counts;
+	}
+
+	public int SetFlat(AffixStatKind kind)
+	{
+		int sum = 0;
+		foreach (var kv in ActiveSets())
+		{
+			var set = SetsDB.Get(kv.Key);
+			if (set == null) continue;
+			foreach (var b in SetsDB.ActiveBonusesFor(set, kv.Value))
+				if (!b.IsPercent && b.Kind == kind) sum += b.Magnitude;
+		}
+		return sum;
+	}
+
+	public int SetPct(AffixStatKind kind)
+	{
+		int sum = 0;
+		foreach (var kv in ActiveSets())
+		{
+			var set = SetsDB.Get(kv.Key);
+			if (set == null) continue;
+			foreach (var b in SetsDB.ActiveBonusesFor(set, kv.Value))
+				if (b.IsPercent && b.Kind == kind) sum += b.Magnitude;
+		}
+		return sum;
 	}
 
 	// Итерация по всем надетым кускам брони + бижутерии (без null'ов).

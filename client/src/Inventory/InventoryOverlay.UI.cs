@@ -77,9 +77,12 @@ public partial class InventoryOverlay
 		_summaryAtk  = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
 		_summaryDef  = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
 		_summaryCrit = UIStyle.MakeLabel("", 13, UIStyle.WarnAmber);
+		_summarySets = UIStyle.MakeLabel("", 12, UIStyle.RarityUncommon);
+		_summarySets.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		summaryV.AddChild(_summaryAtk);
 		summaryV.AddChild(_summaryDef);
 		summaryV.AddChild(_summaryCrit);
+		summaryV.AddChild(_summarySets);
 
 		// Две колонки: надето слева, инвентарь справа.
 		var columns = new HBoxContainer();

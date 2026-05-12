@@ -35,6 +35,11 @@ public class WeaponData
 	// Аффиксы экземпляра (И6.2). См. ArmorData.Affixes для семантики.
 	public List<AppliedAffix> Affixes = new();
 
+	// Уникальные пассивные эффекты по типу оружия (И6.2-E, каркас).
+	// Заполняется в ItemsDB при определении оружия. Боевая интеграция —
+	// отдельным инкрементом; сейчас читается только для отображения в тултипе.
+	public List<WeaponPassive> Passives = new();
+
 	public WeaponData Clone()
 	{
 		var c = (WeaponData)MemberwiseClone();

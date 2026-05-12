@@ -21,6 +21,7 @@ public partial class InventoryOverlay
 		ArmorData armor = stack.ArmorInstance ?? ItemsDB.GetArmor(stack.ItemId);
 		if (armor != null && stack.WeaponInstance == null)
 		{
+			AppendSetInfo(sb, armor, ch);
 			var current = ch.GetArmorSlot(armor.Slot);
 			sb.Append("\n\nСравнение со слотом:\n");
 			sb.Append(CompareArmor(armor, current));
@@ -134,4 +135,26 @@ public partial class InventoryOverlay
 		ArmorSlot.Ring2  => "💍",
 		_                => "🛡",
 	};
+
+	// Если у предмета есть SetId — добавить в тултип имя сета и текущий
+	// прогресс (сколько частей уже надето из общего).
+	private static void AppendSetInfo(System.Text.StringBuilder sb, ArmorData armor, CharacterData ch)
+	{
+		if (armor == null || string.IsNullOrEmpty(armor.SetId)) return;
+		var set = SetsDB.Get(armor.SetId);
+		if (set == null) return;
+		int total = set.PartIds.Count;
+		int current = 0;
+		if (ch != null)
+		{
+			ch.ActiveSets().TryGetValue(set.Id, out current);
+		}
+		sb.Append($"\n\n🔗 Сет: {set.Name} ({current}/{total})");
+		foreach (var b in set.Bonuses)
+		{
+			string sign = b.IsPercent ? "%" : "";
+			string state = current >= b.RequiredParts ? "✓" : "·";
+			sb.Append($"\n  {state} ({b.RequiredParts}) +{b.Magnitude}{sign} {AffixesDB.StatName(b.Kind)}");
+		}
+	}
 }
