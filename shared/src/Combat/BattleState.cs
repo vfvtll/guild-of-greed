@@ -23,6 +23,12 @@ public class BattleState
 	public bool CombatOver;
 	public bool Victory;
 
+	// Счётчик атакующих маг.заклинаний, сыгранных в ТЕКУЩЕМ ходу игрока.
+	// Используется пассивом посоха (WeaponPassive.MagicChain) — каждое
+	// следующее даёт +Magnitude% урона и +Magnitude2% маны. Reset в
+	// CombatEngine.BeginPlayerTurn.
+	public int SpellsCastThisTurn;
+
 	// Per-battle seed. Сервер выдаёт его в BattleStarted; клиент использует
 	// для своего Rng. RngState и сам объект Rng отдельно — для удобства
 	// сериализации (если когда-нибудь будем восстанавливать бой после

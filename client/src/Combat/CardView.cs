@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
@@ -30,6 +31,10 @@ public partial class CardView : PanelContainer
 
 	private CharacterData _character;
 	private EnemyData _enemy;
+	// Контекст боя для актуального превью: рука (для пассива одноручника)
+	// и счётчик уже сыгранных атакующих маг.заклинаний (для пассива посоха).
+	private List<string> _hand;
+	private int _chainCount;
 
 	private Label _nameLabel;
 	private Label _costLabel;
@@ -116,12 +121,15 @@ public partial class CardView : PanelContainer
 		Refresh();
 	}
 
-	public void SetCard(string id, CharacterData character, EnemyData enemy = null)
+	public void SetCard(string id, CharacterData character, EnemyData enemy = null,
+		List<string> hand = null, int chainCount = 0)
 	{
 		CardId = id;
 		CardData = CardsDB.GetCard(id);
 		_character = character;
 		_enemy = enemy;
+		_hand = hand;
+		_chainCount = chainCount;
 		if (IsInsideTree())
 		{
 			Refresh();
@@ -149,7 +157,23 @@ public partial class CardView : PanelContainer
 	{
 		if (CardData == null) return;
 		_nameLabel.Text = CardData.Name;
-		_costLabel.Text = $"{CardData.Cost}MP";
+
+		// Стоимость с учётом пассива посоха (magic_chain): следующее
+		// атакующее маг.заклинание стоит дороже. Показываем актуальное
+		// значение, чтобы игрок видел реальный расход.
+		int actualCost = CardsDB.ComputeManaCost(CardData, _character, _chainCount);
+		if (actualCost != CardData.Cost)
+		{
+			// Розовый сигнализирует "стоит дороже из-за цепи".
+			_costLabel.Text = $"{actualCost}MP";
+			_costLabel.AddThemeColorOverride("font_color", new Color(1.0f, 0.55f, 0.85f));
+		}
+		else
+		{
+			_costLabel.Text = $"{CardData.Cost}MP";
+			_costLabel.AddThemeColorOverride("font_color", new Color(0.55f, 0.85f, 1.0f));
+		}
+
 		_iconLabel.Text = CardData.Icon ?? "?";
 		_iconLabel.AddThemeColorOverride("font_color", ArchetypeAccentColor());
 
@@ -164,7 +188,7 @@ public partial class CardView : PanelContainer
 			_typeLabel.AddThemeColorOverride("font_color", new Color(0.7f, 0.6f, 1.0f));
 		}
 
-		_descLabel.Text = CardsDB.DescribeCurrent(CardData, _character, _enemy);
+		_descLabel.Text = CardsDB.DescribeCurrent(CardData, _character, _enemy, _hand, _chainCount);
 		_infoLabel.TooltipText = CardsDB.DescribeFormula(CardData);
 	}
 

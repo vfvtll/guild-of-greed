@@ -22,9 +22,10 @@ public partial class Combat
 		var card = view.CardData;
 		var p = _state.Player;
 
-		if (p.CurrentMp < card.Cost)
+		int actualCost = CardsDB.ComputeManaCost(card, p, _state.SpellsCastThisTurn);
+		if (p.CurrentMp < actualCost)
 		{
-			Log($"[color=#888]Недостаточно маны: {card.Name} стоит {card.Cost}.[/color]");
+			Log($"[color=#888]Недостаточно маны: {card.Name} стоит {actualCost} MP.[/color]");
 			return;
 		}
 

@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 8;   // I6.3: bleed-механика (WeaponPassive class, EnemyData.BleedStack/HpRegen, BleedStacked/BleedTicked).
+	public const int Current = 9;   // I6.3-b: WeaponPassive.Magnitude2, power_per_non_attack, magic_chain, BattleState.SpellsCastThisTurn.
 }

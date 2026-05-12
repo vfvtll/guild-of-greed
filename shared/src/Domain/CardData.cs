@@ -24,4 +24,11 @@ public class CardData
 	public int Duration;
 	public string Effect;
 	public string Icon;        // emoji в центре карты
+
+	// Карта наносит прямой урон по врагу. Используется пассивами оружия
+	// (power_per_non_attack считает руки без attack-карт; magic_chain
+	// тикает только на attack маг.заклинаниях). В будущем заменится
+	// более богатой системой типов (см. roadmap).
+	public bool IsAttack => Effect == "damage_phys" || Effect == "damage_magic";
+	public bool IsMagicAttack => Effect == "damage_magic";
 }

@@ -392,14 +392,16 @@ public partial class Combat
 		var p = GameData.Instance.Character;
 		var firstAlive = _state.Enemies.FirstOrDefault(e => e.CurrentHp > 0);
 		bool over = _state.CombatOver;
+		int chain = _state.SpellsCastThisTurn;
 		for (int i = 0; i < _state.Hand.Count; i++)
 		{
 			var cardId = _state.Hand[i];
 			var view = new CardView();
 			_handContainer.AddChild(view);
-			view.SetCard(cardId, p, firstAlive);
+			view.SetCard(cardId, p, firstAlive, _state.Hand, chain);
 			var card = CardsDB.GetCard(cardId);
-			view.SetPlayable(p.CurrentMp >= card.Cost && !over);
+			int actualCost = CardsDB.ComputeManaCost(card, p, chain);
+			view.SetPlayable(p.CurrentMp >= actualCost && !over);
 			view.SetSelected(_selectedHandIndex == i);
 			view.CardClicked += OnCardClicked;
 		}

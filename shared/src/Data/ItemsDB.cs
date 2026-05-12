@@ -20,9 +20,10 @@ public static class ItemsDB
 			PhysMult = 1.0f, MagicMult = 0.5f,
 			ExtraDraw = 1,
 			CritEveryNAttacks = 10,
-			// Одноручный меч: уникальная пассивка — это сам ExtraDraw=1
-			// (доп.карта в начале хода). Отдельный bleed-эффект здесь не
-			// катится, чтобы он остался "фирменной" чертой двуручников.
+			// Одноручник — "стойка": каждая non-attack карта в руке (block,
+			// heal, debuff, buff) добавляет +Magnitude% к физ.урону текущей
+			// атакующей карты. Magnitude=10 → каждая non-attack даёт +10%.
+			Passives = new() { new WeaponPassive(WeaponPassive.PowerPerNonAttack, 10) },
 		},
 		["sword_2h_low"] = new()
 		{
@@ -46,6 +47,12 @@ public static class ItemsDB
 			PhysAtk = 1, MagicAtk = 10,
 			PhysMult = 0.4f, MagicMult = 1.5f,
 			CritEveryNAttacks = 20,
+			// Посох — "магическая цепь": каждое следующее атакующее
+			// маг.заклинание в одном ходу: Magnitude=+20% урона,
+			// Magnitude2=+30% маны. Счётчик в BattleState.SpellsCastThisTurn,
+			// reset в BeginPlayerTurn. Первая карта — без бонуса/штрафа,
+			// вторая 120/130%, третья 140/160%, четвёртая 160/190%, ...
+			Passives = new() { new WeaponPassive(WeaponPassive.MagicChain, 20, 30) },
 		},
 	};
 
@@ -247,9 +254,11 @@ public static class ItemsDB
 		if (p == null || string.IsNullOrEmpty(p.Kind)) return null;
 		return p.Kind switch
 		{
-			WeaponPassive.BleedOnHit => "разрез (кровотечение растёт с силой удара)",
-			WeaponPassive.CritBonus  => $"+{p.Magnitude}% к криту",
-			_                         => null,
+			WeaponPassive.BleedOnHit         => "разрез (кровотечение растёт с силой удара)",
+			WeaponPassive.PowerPerNonAttack  => $"+{p.Magnitude}% к атаке за каждую non-attack карту в руке",
+			WeaponPassive.MagicChain         => $"маг.цепь: каждое следующее заклинание +{p.Magnitude}% урона / +{p.Magnitude2}% маны",
+			WeaponPassive.CritBonus          => $"+{p.Magnitude}% к криту",
+			_                                 => null,
 		};
 	}
 

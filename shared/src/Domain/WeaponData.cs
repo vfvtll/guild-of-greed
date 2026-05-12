@@ -50,6 +50,15 @@ public class WeaponData
 		return sum;
 	}
 
+	// Возвращает первый passive с указанным Kind (нужен для механик с
+	// двумя параметрами — Magnitude + Magnitude2). Null если нет.
+	public WeaponPassive GetPassive(string kind)
+	{
+		foreach (var p in Passives)
+			if (p != null && p.Kind == kind) return p;
+		return null;
+	}
+
 	public WeaponData Clone()
 	{
 		var c = (WeaponData)MemberwiseClone();

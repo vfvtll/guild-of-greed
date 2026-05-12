@@ -91,15 +91,27 @@ public static class CardsDB
 	// Физ. урон до защиты и блока цели.
 	// Формула: (BaseDamage + STR/3 + Оружие.ФизАтк + Броня.ФизАтк + ПрефФизАтк)
 	//          × Оружие.ФизМульт × (1 + СуфФизАтк%/100) × (1 + ПроломБрони/100)
+	//          × (1 + N_nonAttack × PowerPerNonAttack/100)         ← И6.3
 	// PhysAtkBonus()/MagicAtkBonus() уже включают плоские префиксы аффиксов
 	// (см. CharacterData). PhysAtkPct() — суффиксы.
-	public static int ComputePhysDamage(CardData card, CharacterData p, EnemyData enemy)
+	//
+	// Optional `hand` — текущая рука игрока. Если передана, считается
+	// бонус от пассива одноручника (PowerPerNonAttack). null/пусто = бонус 0.
+	public static int ComputePhysDamage(CardData card, CharacterData p, EnemyData enemy,
+		List<string> hand = null)
 	{
 		if (p == null) return Math.Max(1, card.BaseDamage);
 		float baseAmt = card.BaseDamage + p.Str / 3f + p.WeaponPhysAtk() + p.PhysAtkBonus();
 		float raw = baseAmt * p.PhysMult();
 		// Суффиксы аффиксов на ФизАтк (мультипликативный).
 		raw *= 1f + p.PhysAtkPct() / 100f;
+		// Пассив одноручника: каждая non-attack карта в руке усиливает удар.
+		int perNonAttack = p.Weapon?.PassiveMagnitude(WeaponPassive.PowerPerNonAttack) ?? 0;
+		if (perNonAttack > 0 && hand != null && hand.Count > 0)
+		{
+			int nonAttack = CountNonAttack(hand);
+			raw *= 1f + nonAttack * perNonAttack / 100f;
+		}
 		// Бафф эликсира ярости (potion_strength).
 		raw *= 1f + p.GetEffectAmount("phys_dmg_pct") / 100f;
 		// Дебаф пролома брони на враге.
@@ -111,15 +123,49 @@ public static class CardsDB
 	// Маг. урон до защиты и блока цели.
 	// Формула: (BaseDamage + INT/3 + Оружие.МагАтк + Броня.МагАтк + ПрефМагАтк)
 	//          × Оружие.МагМульт × (1 + СуфМагАтк%/100) × (1 + Бафф/100)
-	// MagicAtkPct() уже агрегирует и старый броневой %, и аффикс-суффиксы.
-	public static int ComputeMagicDamage(CardData card, CharacterData p, EnemyData enemy)
+	//          × (1 + chainCount × MagicChain.Magnitude/100)        ← И6.3
+	// chainCount — сколько атакующих маг.заклинаний уже было в ЭТОМ ходу
+	// (т.е. для первого = 0, для второго = 1). Передаётся из CombatEngine.
+	public static int ComputeMagicDamage(CardData card, CharacterData p, EnemyData enemy,
+		int chainCount = 0)
 	{
 		if (p == null) return Math.Max(1, card.BaseDamage);
 		float baseAmt = card.BaseDamage + p.Int / 3f + p.WeaponMagAtk() + p.MagicAtkBonus();
 		float raw = baseAmt * p.MagicMult();
 		raw *= 1f + p.MagicAtkPct() / 100f;
 		raw *= 1f + p.GetEffectAmount("magic_dmg_pct") / 100f;
+		// Пассив посоха: каждое следующее заклинание +Magnitude% урона.
+		int chain = p.Weapon?.PassiveMagnitude(WeaponPassive.MagicChain) ?? 0;
+		if (chain > 0 && chainCount > 0)
+			raw *= 1f + chainCount * chain / 100f;
 		return Math.Max(1, (int)Math.Round(raw));
+	}
+
+	// Стоимость маны с учётом пассивов оружия. По умолчанию = card.Cost.
+	// Для посоха: каждое следующее атакующее маг.заклинание стоит +Magnitude2%.
+	public static int ComputeManaCost(CardData card, CharacterData p, int chainCount = 0)
+	{
+		if (card == null) return 0;
+		if (p == null) return card.Cost;
+		float cost = card.Cost;
+		if (card.IsMagicAttack)
+		{
+			var chain = p.Weapon?.GetPassive(WeaponPassive.MagicChain);
+			if (chain != null && chainCount > 0)
+				cost *= 1f + chainCount * chain.Magnitude2 / 100f;
+		}
+		return Math.Max(0, (int)Math.Round(cost));
+	}
+
+	private static int CountNonAttack(List<string> hand)
+	{
+		int n = 0;
+		foreach (var id in hand)
+		{
+			var c = GetCard(id);
+			if (c != null && !c.IsAttack) n++;
+		}
+		return n;
 	}
 
 	public static int ComputeBlock(CardData card, CharacterData p)
@@ -129,13 +175,15 @@ public static class CardsDB
 		=> card.Heal + (p?.Int ?? 0) / 3;
 
 	// Конкретный эффект для отображения на карте. Зависит от текущих
-	// статов, экипировки и активных эффектов цели.
-	public static string DescribeCurrent(CardData card, CharacterData p, EnemyData enemy)
+	// статов, экипировки и активных эффектов цели + контекста боя
+	// (рука для меча, chain для посоха).
+	public static string DescribeCurrent(CardData card, CharacterData p, EnemyData enemy,
+		List<string> hand = null, int chainCount = 0)
 	{
 		return card.Effect switch
 		{
-			"damage_phys"  => $"Урон: {ComputePhysDamage(card, p, enemy)} физ.",
-			"damage_magic" => $"Урон: {ComputeMagicDamage(card, p, enemy)} маг.",
+			"damage_phys"  => $"Урон: {ComputePhysDamage(card, p, enemy, hand)} физ.",
+			"damage_magic" => $"Урон: {ComputeMagicDamage(card, p, enemy, chainCount)} маг.",
 			"block"        => $"Блок: +{ComputeBlock(card, p)}",
 			"heal"         => $"Исцеление: +{ComputeHeal(card, p)} ХП",
 			"debuff_phys"  => $"Цель: +{card.AmountPct}% физ. урона\nна {card.Duration} хода",

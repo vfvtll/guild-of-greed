@@ -143,6 +143,8 @@ public static class CombatEngine
 	private static void BeginPlayerTurn(BattleState state, List<BattleEvent> events, bool regenMp)
 	{
 		state.TurnCount++;
+		// Reset цепочки маг.заклинаний (пассив посоха) на каждый новый ход.
+		state.SpellsCastThisTurn = 0;
 
 		if (regenMp)
 		{
@@ -349,7 +351,9 @@ public static class CombatEngine
 		string cardId = state.Hand[action.HandIndex];
 		var card = CardsDB.GetCard(cardId);
 		if (card == null) return events;
-		if (state.Player.CurrentMp < card.Cost) return events;
+		// Реальная стоимость может быть выше card.Cost из-за пассива посоха.
+		int actualCost = CardsDB.ComputeManaCost(card, state.Player, state.SpellsCastThisTurn);
+		if (state.Player.CurrentMp < actualCost) return events;
 
 		bool needsTarget = card.Effect is "damage_phys" or "damage_magic" or "debuff_phys";
 		EnemyData target = null;
@@ -360,16 +364,18 @@ public static class CombatEngine
 			if (target.CurrentHp <= 0) return events;
 		}
 
-		// Списываем MP.
-		state.Player.CurrentMp -= card.Cost;
-		events.Add(new BattleEvent { Type = BattleEventType.MpSpent, Amount = card.Cost });
+		// Списываем MP по актуальной стоимости.
+		state.Player.CurrentMp -= actualCost;
+		events.Add(new BattleEvent { Type = BattleEventType.MpSpent, Amount = actualCost });
 
 		// Применяем эффект карты.
 		switch (card.Effect)
 		{
 			case "damage_phys":
 			{
-				int dmg = CardsDB.ComputePhysDamage(card, state.Player, target);
+				// Считаем non-attack карты ДО снятия played-карты из руки —
+				// это даёт интуитивный bonus от текущего "защитного" набора.
+				int dmg = CardsDB.ComputePhysDamage(card, state.Player, target, state.Hand);
 				bool isCrit = state.Player.TryConsumeCrit();
 				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
 				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: true, isCrit);
@@ -377,10 +383,14 @@ public static class CombatEngine
 			}
 			case "damage_magic":
 			{
-				int dmg = CardsDB.ComputeMagicDamage(card, state.Player, target);
+				int chain = state.SpellsCastThisTurn;
+				int dmg = CardsDB.ComputeMagicDamage(card, state.Player, target, chain);
 				bool isCrit = state.Player.TryConsumeCrit();
 				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
 				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: false, isCrit);
+				// Инкрементим счётчик ТОЛЬКО для атакующих маг.заклинаний.
+				// Следующее заклинание в этом ходу получит +Magnitude% урона / +Magnitude2% маны.
+				state.SpellsCastThisTurn++;
 				break;
 			}
 			case "block":
