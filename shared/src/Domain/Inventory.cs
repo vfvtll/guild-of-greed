@@ -42,7 +42,7 @@ public class Inventory
 			foreach (var s in Slots)
 			{
 				if (s.ItemId != itemId) continue;
-				if (s.WeaponInstance != null || s.ArmorInstance != null) continue;
+				if (s.WeaponInstance != null || s.ArmorInstance != null || s.ShieldInstance != null) continue;
 				int free = maxStack - s.Count;
 				if (free <= 0) continue;
 				int put = count < free ? count : free;
@@ -89,6 +89,18 @@ public class Inventory
 		return true;
 	}
 
+	public bool TryAddInstance(ShieldData shield)
+	{
+		if (shield == null || IsFull) return false;
+		Slots.Add(new InventoryStack
+		{
+			ItemId = shield.Id,
+			Count = 1,
+			ShieldInstance = shield,
+		});
+		return true;
+	}
+
 	// Удалить count единиц стакаемого предмета по ItemId. Не трогает instance-слоты
 	// (потому что они уникальны и Id для них — лишь lookup-метка, не ключ удаления).
 	public int Remove(string itemId, int count = 1)
@@ -123,7 +135,7 @@ public class Inventory
 		foreach (var s in Slots)
 		{
 			if (s.ItemId != itemId) continue;
-			if (s.WeaponInstance != null || s.ArmorInstance != null) continue;
+			if (s.WeaponInstance != null || s.ArmorInstance != null || s.ShieldInstance != null) continue;
 			total += s.Count;
 		}
 		return total;
@@ -136,9 +148,9 @@ public class InventoryStack
 {
 	public string ItemId;
 	public int Count;
-	// И6.2: payload для аффиксированных предметов. Если не null — слот
-	// instance-based, Count=1, и его нельзя стакать. Один из двух полей
-	// (Weapon/Armor) — null; никогда оба не заполнены.
-	public WeaponData WeaponInstance;
-	public ArmorData ArmorInstance;
+	// Payload для instance-предметов. Не более одного из *Instance != null.
+	// При наличии instance Count всегда = 1 (нестакаемо).
+	public WeaponData WeaponInstance;     // И6.2
+	public ArmorData  ArmorInstance;      // И6.2
+	public ShieldData ShieldInstance;     // И6.4
 }

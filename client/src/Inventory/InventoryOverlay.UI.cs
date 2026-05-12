@@ -157,6 +157,52 @@ public partial class InventoryOverlay
 		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
 	}
 
+	private Control MakeShieldSlotRow(string icon, string slotName, ShieldData item, Action onClick)
+	{
+		string itemName = item?.Name ?? "—";
+		string detail   = item == null ? "(пусто)" : DescribeShield(item);
+		var rarity = item?.Rarity ?? ItemRarity.Common;
+		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
+	}
+
+	// Off-hand: одна строка, варьируется по состоянию.
+	//   weapon занят 2H → "Двуручное оружие — обе руки"
+	//   offhand != null → как WeaponSlotRow
+	//   shield  != null → как ShieldSlotRow
+	//   ничего → пустой слот "вторая рука свободна"
+	private Control MakeOffhandRow(CharacterData ch)
+	{
+		if (ch.Weapon != null && ch.Weapon.IsTwoHanded)
+			return BuildSlotRow("✊", "Вторая рука", "—",
+				"Двуручное оружие занимает обе руки", true, ItemRarity.Common, () => { });
+
+		if (ch.Offhand != null)
+			return MakeWeaponSlotRow("⚔", "Левая рука", ch.Offhand, () => UnequipOffhand());
+
+		if (ch.Shield != null)
+			return MakeShieldSlotRow("🛡", "Щит", ch.Shield, () => UnequipShield());
+
+		return BuildSlotRow("✊", "Левая рука", "—", "Можно вторую 1H-руку или щит",
+			true, ItemRarity.Common, () => { });
+	}
+
+	private static string DescribeShield(ShieldData s)
+	{
+		if (s == null) return "—";
+		var parts = new System.Collections.Generic.List<string>();
+		if (s.PhysDef > 0) parts.Add($"{s.PhysDef} ФизЗащ");
+		if (s.MagDef > 0)  parts.Add($"{s.MagDef} МагЗащ");
+		string effect = s.Type switch
+		{
+			ShieldType.Magic    => $"+{s.EffectMagnitude}% возврат маг.урона",
+			ShieldType.Physical => $"+{s.EffectMagnitude}% MaxHP в блок начала хода",
+			ShieldType.Balanced => $"+{s.EffectMagnitude}% counter-buff (1 ход)",
+			_                    => "",
+		};
+		if (!string.IsNullOrEmpty(effect)) parts.Add(effect);
+		return $"{s.Name}: {string.Join(", ", parts)}";
+	}
+
 	private Control MakeArmorSlotRow(string icon, string slotName, ArmorData item, Action onClick)
 	{
 		string itemName = item?.Name ?? "—";
@@ -224,10 +270,29 @@ public partial class InventoryOverlay
 			icon = SlotIcon(stack.ArmorInstance.Slot);
 			rarity = stack.ArmorInstance.Rarity;
 		}
+		else if (stack.ShieldInstance != null)
+		{
+			name = stack.ShieldInstance.Name;
+			detail = DescribeShield(stack.ShieldInstance);
+			icon = "🛡";
+			rarity = stack.ShieldInstance.Rarity;
+		}
 		else
 		{
-			(name, detail, icon) = DescribeItem(stack.ItemId);
-			rarity = GetItemRarity(stack.ItemId);
+			// Может быть базовым shieldId из ShieldsDB.
+			var sd = ShieldsDB.Get(stack.ItemId);
+			if (sd != null)
+			{
+				name = sd.Name;
+				detail = DescribeShield(sd);
+				icon = "🛡";
+				rarity = sd.Rarity;
+			}
+			else
+			{
+				(name, detail, icon) = DescribeItem(stack.ItemId);
+				rarity = GetItemRarity(stack.ItemId);
+			}
 		}
 
 		var ch = GameData.Instance.Character;

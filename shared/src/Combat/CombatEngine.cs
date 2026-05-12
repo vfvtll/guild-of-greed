@@ -171,6 +171,17 @@ public static class CombatEngine
 		// Блок не переносится между ходами игрока.
 		state.Player.CurrentBlock = 0;
 
+		// Physical shield (И6.4): в начале хода игрока даёт блок = MaxHp × Magnitude%.
+		if (state.Player.Shield != null && state.Player.Shield.Type == ShieldType.Physical)
+		{
+			int blockGained = state.Player.MaxHp() * state.Player.Shield.EffectMagnitude / 100;
+			if (blockGained > 0)
+			{
+				state.Player.CurrentBlock += blockGained;
+				events.Add(new BattleEvent { Type = BattleEventType.BlockGained, Amount = blockGained });
+			}
+		}
+
 		// Добор руки до HandSize.
 		DrawToHand(state, events, state.Player.HandSize());
 
@@ -224,8 +235,9 @@ public static class CombatEngine
 
 	private static void EnemyTurn(BattleState state, List<BattleEvent> events)
 	{
-		foreach (var enemy in state.Enemies)
+		for (int idx = 0; idx < state.Enemies.Count; idx++)
 		{
+			var enemy = state.Enemies[idx];
 			if (enemy.CurrentHp <= 0) continue;
 			enemy.CurrentBlock = 0;
 			var intent = enemy.NextIntent;
@@ -233,8 +245,14 @@ public static class CombatEngine
 
 			switch (intent.Type)
 			{
+				// "attack" — физический. "attack_magic" зарезервирован для
+				// будущих маг.врагов; magic_shield reflect и balanced
+				// counter-buff активируются только на маг.уроне.
 				case "attack":
-					ApplyDamageToPlayer(state, events, intent.Amount, intent.Name);
+				case "attack_magic":
+				{
+					bool isPhys = intent.Type != "attack_magic";
+					ApplyDamageToPlayer(state, events, intent.Amount, intent.Name, isPhys, idx);
 					if (state.Player.CurrentHp <= 0)
 					{
 						state.CombatOver = true;
@@ -244,12 +262,13 @@ public static class CombatEngine
 						return;
 					}
 					break;
+				}
 				case "block":
 					enemy.CurrentBlock += intent.Amount;
 					events.Add(new BattleEvent
 					{
 						Type = BattleEventType.EnemyAction,
-						EnemyIndex = state.Enemies.IndexOf(enemy),
+						EnemyIndex = idx,
 						Amount = intent.Amount,
 						IntentName = intent.Name,
 					});
@@ -312,21 +331,57 @@ public static class CombatEngine
 	}
 
 	private static void ApplyDamageToPlayer(BattleState state, List<BattleEvent> events,
-		int rawDamage, string intentName)
+		int rawDamage, string intentName, bool isPhys = true, int sourceEnemyIndex = -1)
 	{
 		int absorbed = Math.Min(state.Player.CurrentBlock, rawDamage);
 		state.Player.CurrentBlock -= absorbed;
 		int hpDamage = Math.Max(0, rawDamage - absorbed);
-		// Бронированный физический mitigation идёт через PhysDef. Сейчас намерение
-		// не разделяет phys/magic — копируем логику Combat.Cards: применяем PhysDef.
-		hpDamage = Math.Max(0, hpDamage - state.Player.PhysDef());
+		// Mitigation: PhysDef для физ.урона, MagDef для маг.
+		int defense = isPhys ? state.Player.PhysDef() : state.Player.MagDef();
+		hpDamage = Math.Max(0, hpDamage - defense);
 		state.Player.CurrentHp = Math.Max(0, state.Player.CurrentHp - hpDamage);
 		events.Add(new BattleEvent
 		{
 			Type = BattleEventType.DamageDealtToPlayer,
 			Amount = hpDamage,
 			IntentName = intentName,
+			IsPhys = isPhys,
 		});
+
+		// === Эффекты щита (И6.4) ===
+		var shield = state.Player.Shield;
+		if (shield == null || hpDamage <= 0) return;
+
+		// Magic shield: возврат N% от полученного маг.урона обратно источнику.
+		if (shield.Type == ShieldType.Magic && !isPhys && sourceEnemyIndex >= 0)
+		{
+			int reflect = hpDamage * shield.EffectMagnitude / 100;
+			if (reflect > 0 && sourceEnemyIndex < state.Enemies.Count)
+			{
+				var src = state.Enemies[sourceEnemyIndex];
+				if (src.CurrentHp > 0)
+				{
+					int actual = Math.Min(reflect, src.CurrentHp);
+					src.CurrentHp -= actual;
+					events.Add(new BattleEvent
+					{
+						Type = BattleEventType.DamageDealtToEnemy,
+						EnemyIndex = sourceEnemyIndex,
+						Amount = actual,
+						IsPhys = false,
+					});
+				}
+			}
+		}
+
+		// Balanced shield: counter-buff. Физ.удар → +Magnitude% маг.урона
+		// в следующем ходу; маг.удар → +Magnitude% физ.урона.
+		if (shield.Type == ShieldType.Balanced)
+		{
+			string buffType = isPhys ? "magic_dmg_pct" : "phys_dmg_pct";
+			state.Player.AddEffect("balanced_shield_buff", buffType,
+				shield.EffectMagnitude, shield.CounterBuffDuration);
+		}
 	}
 
 	private static void Shuffle<T>(List<T> list, RandomSource rng)

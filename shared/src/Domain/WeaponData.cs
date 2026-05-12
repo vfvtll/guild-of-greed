@@ -23,6 +23,9 @@ public class WeaponData
 	public string Grade;
 	public string Tier;
 	public ItemRarity Rarity = ItemRarity.Common;
+	// Двуручное — занимает обе руки. Off-hand слот недоступен.
+	// Одноручное — допускает второе 1H в off-hand или щит.
+	public bool IsTwoHanded;
 	public int PhysAtk;
 	public int MagicAtk;
 	public float PhysMult = 1.0f;

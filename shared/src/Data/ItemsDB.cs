@@ -15,7 +15,7 @@ public static class ItemsDB
 		["sword_1h_low"] = new()
 		{
 			Id = "sword_1h_low", Name = "Старый меч", Type = "sword_1h",
-			Grade = "E", Tier = "low",
+			Grade = "E", Tier = "low", IsTwoHanded = false,
 			PhysAtk = 4, MagicAtk = 0,
 			PhysMult = 1.0f, MagicMult = 0.5f,
 			ExtraDraw = 1,
@@ -28,7 +28,7 @@ public static class ItemsDB
 		["sword_2h_low"] = new()
 		{
 			Id = "sword_2h_low", Name = "Тяжёлый двуручник", Type = "sword_2h",
-			Grade = "E", Tier = "low",
+			Grade = "E", Tier = "low", IsTwoHanded = true,
 			PhysAtk = 8, MagicAtk = 0,
 			PhysMult = 1.3f, MagicMult = 0.4f,
 			CritEveryNAttacks = 12,
@@ -43,7 +43,7 @@ public static class ItemsDB
 		["staff_low"] = new()
 		{
 			Id = "staff_low", Name = "Посох ученика", Type = "staff",
-			Grade = "E", Tier = "low",
+			Grade = "E", Tier = "low", IsTwoHanded = true,
 			PhysAtk = 1, MagicAtk = 10,
 			PhysMult = 0.4f, MagicMult = 1.5f,
 			CritEveryNAttacks = 20,
@@ -53,6 +53,15 @@ public static class ItemsDB
 			// reset в BeginPlayerTurn. Первая карта — без бонуса/штрафа,
 			// вторая 120/130%, третья 140/160%, четвёртая 160/190%, ...
 			Passives = new() { new WeaponPassive(WeaponPassive.MagicChain, 20, 30) },
+		},
+		// Демо-1H для теста dual-wield. Пассивов нет (типа knife — TODO).
+		["dagger_low"] = new()
+		{
+			Id = "dagger_low", Name = "Кинжал бродяги", Type = "knife",
+			Grade = "E", Tier = "low", IsTwoHanded = false,
+			PhysAtk = 3, MagicAtk = 0,
+			PhysMult = 0.9f, MagicMult = 0.4f,
+			CritEveryNAttacks = 6,   // Сам по себе хороший crit.
 		},
 	};
 

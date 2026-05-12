@@ -95,6 +95,9 @@ public partial class InventoryOverlay : Control
 
 		ClearChildren(_equipmentList);
 		_equipmentList.AddChild(MakeWeaponSlotRow("⚔",  "Оружие",   ch.Weapon, () => UnequipWeapon()));
+		// Off-hand: либо второе одноручное (Offhand), либо щит (Shield),
+		// либо подсказка "вторая рука свободна" / "двуручное занимает обе".
+		_equipmentList.AddChild(MakeOffhandRow(ch));
 		_equipmentList.AddChild(MakeArmorSlotRow("👕", "Грудь",    ch.Chest,  () => UnequipArmor(ArmorSlot.Chest)));
 		_equipmentList.AddChild(MakeArmorSlotRow("⛑",  "Шлем",     ch.Helmet, () => UnequipArmor(ArmorSlot.Helmet)));
 		_equipmentList.AddChild(MakeArmorSlotRow("🧤", "Перчатки", ch.Gloves, () => UnequipArmor(ArmorSlot.Gloves)));
@@ -182,6 +185,24 @@ public partial class InventoryOverlay : Control
 		if (!GameData.Instance.UnequipWeapon())
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Оружие снято.", error: false);
+		Refresh();
+	}
+
+	private void UnequipOffhand()
+	{
+		if (BlockedByReadOnly()) return;
+		if (!GameData.Instance.UnequipOffhand())
+			SetStatus("Не получилось снять — инвентарь полон.", error: true);
+		else SetStatus("Второе оружие снято.", error: false);
+		Refresh();
+	}
+
+	private void UnequipShield()
+	{
+		if (BlockedByReadOnly()) return;
+		if (!GameData.Instance.UnequipShield())
+			SetStatus("Не получилось снять — инвентарь полон.", error: true);
+		else SetStatus("Щит снят.", error: false);
 		Refresh();
 	}
 

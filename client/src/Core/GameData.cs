@@ -160,23 +160,15 @@ public partial class GameData : Node
 		if (slotIndex < 0 || slotIndex >= slots.Count) return false;
 		var st = slots[slotIndex];
 
-		// Резолвим какой именно объект надеваем: instance-payload или свежий
-		// клон из ItemsDB по baseId. Для зелий — фейлим (надеть нельзя).
+		// Резолвим объект из слота. Один из трёх: WeaponData, ArmorData,
+		// ShieldData. Для зелий — фейлим (надеть нельзя).
 		WeaponData asWeapon = st.WeaponInstance ?? ItemsDB.GetWeapon(st.ItemId)?.Clone();
 		ArmorData  asArmor  = st.ArmorInstance  ?? ItemsDB.GetArmor(st.ItemId)?.Clone();
-		if (asWeapon == null && asArmor == null) return false;
+		ShieldData asShield = st.ShieldInstance ?? ShieldsDB.Get(st.ItemId)?.Clone();
+		if (asWeapon == null && asArmor == null && asShield == null) return false;
 
-		if (asWeapon != null)
-		{
-			// Снимаем 1 шт из слота. Для instance — слот удаляется целиком,
-			// для baseId-стека — декрементируется Count.
-			TakeOneFromSlot(slotIndex);
-			// Старое оружие — обратно в инвентарь как instance.
-			if (Character.Weapon != null)
-				Character.Inventory.TryAddInstance(Character.Weapon);
-			Character.Weapon = asWeapon;
-			return true;
-		}
+		if (asWeapon != null) return EquipWeapon(asWeapon, slotIndex);
+		if (asShield != null) return EquipShield(asShield, slotIndex);
 
 		// Броня.
 		ArmorSlot target = asArmor.Slot;
@@ -191,6 +183,72 @@ public partial class GameData : Node
 		return true;
 	}
 
+	// Логика надевания оружия с учётом 1H/2H/dual-wield (И6.4):
+	//   2H weapon: занимает Weapon, выкидывает Offhand и Shield обратно в инвентарь.
+	//   1H weapon: если Weapon пуст или это 2H — заменить Weapon.
+	//              Если Weapon — 1H и Offhand пуст и Shield пуст — пойдёт в Offhand.
+	//              Иначе свапает с Weapon (старое уходит в инвентарь).
+	private bool EquipWeapon(WeaponData w, int slotIndex)
+	{
+		TakeOneFromSlot(slotIndex);
+
+		if (w.IsTwoHanded)
+		{
+			// Двуручное занимает все руки.
+			if (Character.Weapon != null)  Character.Inventory.TryAddInstance(Character.Weapon);
+			if (Character.Offhand != null) Character.Inventory.TryAddInstance(Character.Offhand);
+			if (Character.Shield != null)  Character.Inventory.TryAddInstance(Character.Shield);
+			Character.Weapon = w;
+			Character.Offhand = null;
+			Character.Shield = null;
+			return true;
+		}
+
+		// Одноручное:
+		bool mainSlotIs2H = Character.Weapon != null && Character.Weapon.IsTwoHanded;
+		if (Character.Weapon == null || mainSlotIs2H)
+		{
+			// Освобождаем main: если там было 2H — оно уходит в инвентарь.
+			if (Character.Weapon != null) Character.Inventory.TryAddInstance(Character.Weapon);
+			Character.Weapon = w;
+			return true;
+		}
+
+		// Main занят одноручным. Off-hand?
+		if (Character.Offhand == null && Character.Shield == null)
+		{
+			Character.Offhand = w;
+			return true;
+		}
+
+		// Оба слота заняты — свапаем с main (Offhand/Shield остаются).
+		Character.Inventory.TryAddInstance(Character.Weapon);
+		Character.Weapon = w;
+		return true;
+	}
+
+	// Щит в off-hand. Если основное оружие 2H — оно выкидывается (нужна
+	// свободная рука). Если в off-hand уже что-то — свап в инвентарь.
+	private bool EquipShield(ShieldData s, int slotIndex)
+	{
+		TakeOneFromSlot(slotIndex);
+
+		if (Character.Weapon != null && Character.Weapon.IsTwoHanded)
+		{
+			Character.Inventory.TryAddInstance(Character.Weapon);
+			Character.Weapon = null;
+		}
+		if (Character.Offhand != null)
+		{
+			Character.Inventory.TryAddInstance(Character.Offhand);
+			Character.Offhand = null;
+		}
+		if (Character.Shield != null)
+			Character.Inventory.TryAddInstance(Character.Shield);
+		Character.Shield = s;
+		return true;
+	}
+
 	// Снять оружие в инвентарь. False если инвентарь полон или оружия нет.
 	public bool UnequipWeapon()
 	{
@@ -198,6 +256,24 @@ public partial class GameData : Node
 		if (Character.Inventory.IsFull) return false;
 		Character.Inventory.TryAddInstance(Character.Weapon);
 		Character.Weapon = null;
+		return true;
+	}
+
+	public bool UnequipOffhand()
+	{
+		if (Character == null || Character.Offhand == null) return false;
+		if (Character.Inventory.IsFull) return false;
+		Character.Inventory.TryAddInstance(Character.Offhand);
+		Character.Offhand = null;
+		return true;
+	}
+
+	public bool UnequipShield()
+	{
+		if (Character == null || Character.Shield == null) return false;
+		if (Character.Inventory.IsFull) return false;
+		Character.Inventory.TryAddInstance(Character.Shield);
+		Character.Shield = null;
 		return true;
 	}
 
@@ -220,7 +296,7 @@ public partial class GameData : Node
 		var slots = Character.Inventory.Slots;
 		if (slotIndex < 0 || slotIndex >= slots.Count) return;
 		var s = slots[slotIndex];
-		if (s.WeaponInstance != null || s.ArmorInstance != null)
+		if (s.WeaponInstance != null || s.ArmorInstance != null || s.ShieldInstance != null)
 		{
 			Character.Inventory.RemoveAt(slotIndex);
 			return;

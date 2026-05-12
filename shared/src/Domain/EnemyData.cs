@@ -137,6 +137,11 @@ public class EnemyData
 		e.LootTable.Add(new LootEntry { ItemId = "ring_focus_low",    Chance = 0.10f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "amulet_might_low",  Chance = 0.08f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_strength",   Chance = 0.05f });
+		// И6.4: dual-wield и щиты. Демо-частые шансы чтобы быстро увидеть.
+		e.LootTable.Add(new LootEntry { ItemId = "dagger_low",            Chance = 0.20f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "shield_physical_low",   Chance = 0.10f });
+		e.LootTable.Add(new LootEntry { ItemId = "shield_magic_low",      Chance = 0.07f });
+		e.LootTable.Add(new LootEntry { ItemId = "shield_balanced_low",   Chance = 0.07f });
 		return e;
 	}
 

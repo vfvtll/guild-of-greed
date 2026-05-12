@@ -49,6 +49,11 @@ public class CharacterData
 	// Теперь сериализуется напрямую в JSON: вместе с предметом сохраняются
 	// и его роллнутые Affixes / Rarity.
 	public WeaponData Weapon;
+	// Off-hand слот (И6.4): второе одноручное оружие (dual-wield) ИЛИ щит,
+	// но не оба сразу. Только один из Offhand/Shield не-null в каждый момент.
+	// Если Weapon.IsTwoHanded — оба off-hand'а должны быть null.
+	public WeaponData Offhand;
+	public ShieldData Shield;
 	public ArmorData Chest;
 	public ArmorData Helmet;
 	public ArmorData Gloves;
@@ -104,18 +109,28 @@ public class CharacterData
 	// HpRegen (И6.2) — новый ресурс. База 0 от персонажа, копится через аффиксы
 	// и (в будущем) через сеты. Тикает в начале хода игрока в CombatEngine.
 	public int HpRegen()  => ApplyAffix(0, AffixStatKind.HpRegen);
-	public int HandSize() => 5 + (Weapon?.ExtraDraw ?? 0) + SumArmor(a => a.ExtraDrawBonus);
+	// HandSize: 5 базово + ExtraDraw оружия + бонусы брони + аффиксы/сеты.
+	// Штрафы за off-hand: dual-wield −2, щит −1 (И6.4).
+	public int HandSize()
+	{
+		int n = 5 + (Weapon?.ExtraDraw ?? 0) + SumArmor(a => a.ExtraDrawBonus);
+		if (Offhand != null) n -= 2;
+		else if (Shield != null) n -= 1;
+		return System.Math.Max(1, n);
+	}
 
 	public float PhysMult()      => Weapon?.PhysMult ?? 1.0f;
 	public float MagicMult()     => Weapon?.MagicMult ?? 1.0f;
-	public int   WeaponPhysAtk() => Weapon?.PhysAtk ?? 0;
-	public int   WeaponMagAtk()  => Weapon?.MagicAtk ?? 0;
+	// Статы суммируются с off-hand оружием (И6.4 — dual-wield). Шит не даёт
+	// атаки; его Phys/MagDef учитываются в PhysDef()/MagDef() ниже.
+	public int   WeaponPhysAtk() => (Weapon?.PhysAtk ?? 0) + (Offhand?.PhysAtk ?? 0);
+	public int   WeaponMagAtk()  => (Weapon?.MagicAtk ?? 0) + (Offhand?.MagicAtk ?? 0);
 	public int   PhysAtkBonus()  => SumArmor(a => a.PhysAtkBonus) + AffixFlat(AffixStatKind.PhysAtk) + SetFlat(AffixStatKind.PhysAtk);
 	public int   MagicAtkBonus() => SumArmor(a => a.MagicAtkBonus) + AffixFlat(AffixStatKind.MagAtk) + SetFlat(AffixStatKind.MagAtk);
 	public int   MagicAtkPct()   => SumArmor(a => a.MagicAtkPct) + AffixPct(AffixStatKind.MagAtk) + SetPct(AffixStatKind.MagAtk);
 	public int   PhysAtkPct()    => AffixPct(AffixStatKind.PhysAtk) + SetPct(AffixStatKind.PhysAtk);
-	public int   PhysDef()       => ApplyAffix(SumArmor(a => a.PhysDef), AffixStatKind.PhysDef);
-	public int   MagDef()        => ApplyAffix(0, AffixStatKind.MagDef);
+	public int   PhysDef()       => ApplyAffix(SumArmor(a => a.PhysDef) + (Shield?.PhysDef ?? 0), AffixStatKind.PhysDef);
+	public int   MagDef()        => ApplyAffix(Shield?.MagDef ?? 0, AffixStatKind.MagDef);
 
 	// Сумма плоских префиксов выбранного типа со всех надетых предметов
 	// (оружие + броня + бижутерия). Использует и Weapon, и AllArmor.
@@ -246,7 +261,13 @@ public class CharacterData
 	public int EffectiveCritEveryN()
 	{
 		if (Weapon == null) return int.MaxValue;
-		return Math.Max(2, Weapon.CritEveryNAttacks - Dex / 10);
+		int baseCrit = Weapon.CritEveryNAttacks;
+		// Dual-wield (И6.4): среднее cooldown'а двух одноручных. Уникальный
+		// пассив второго оружия НЕ работает, но статы (CritEveryNAttacks) —
+		// усредняются с основным.
+		if (Offhand != null)
+			baseCrit = (Weapon.CritEveryNAttacks + Offhand.CritEveryNAttacks) / 2;
+		return Math.Max(2, baseCrit - Dex / 10);
 	}
 
 	public float CritMultiplier() => 1.5f + Dex / 100f;

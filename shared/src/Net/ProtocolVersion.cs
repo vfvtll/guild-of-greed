@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 9;   // I6.3-b: WeaponPassive.Magnitude2, power_per_non_attack, magic_chain, BattleState.SpellsCastThisTurn.
+	public const int Current = 10;  // I6.4: 1H/2H, dual-wield (Offhand), щиты (Shield), counter-buff balanced, magic reflect.
 }
