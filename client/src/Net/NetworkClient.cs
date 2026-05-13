@@ -135,13 +135,27 @@ public class NetworkClient : IDisposable
 		=> ExchangeAsync<DeleteCharacterResponse>(new DeleteCharacterRequest { CharacterId = characterId }, ct);
 
 	public Task<BattleStartedResponse> StartBattleAsync(int locationIndex, int nodeType,
-		System.Collections.Generic.List<string> lockedDeck = null, CancellationToken ct = default)
+		CancellationToken ct = default)
 		=> ExchangeAsync<BattleStartedResponse>(new StartBattleRequest
 		{
 			LocationIndex = locationIndex,
 			NodeType = nodeType,
-			LockedDeck = lockedDeck,
 		}, ct);
+
+	public Task<PushCharacterResponse> PushCharacterAsync(string characterJson, CancellationToken ct = default)
+		=> ExchangeAsync<PushCharacterResponse>(new PushCharacterRequest
+		{
+			CharacterJson = characterJson,
+		}, ct);
+
+	public Task<StartRunResponse> StartRunAsync(int locationIndex, CancellationToken ct = default)
+		=> ExchangeAsync<StartRunResponse>(new StartRunRequest
+		{
+			LocationIndex = locationIndex,
+		}, ct);
+
+	public Task<EndRunResponse> EndRunAsync(CancellationToken ct = default)
+		=> ExchangeAsync<EndRunResponse>(new EndRunRequest(), ct);
 
 	public Task<BattleActionResponse> SendBattleActionAsync(int actionType, int handIndex,
 		int targetEnemyIndex, string potionId, CancellationToken ct = default)

@@ -182,6 +182,7 @@ public partial class InventoryOverlay : Control
 			SetStatus("Нет очков для распределения.", error: true);
 			return;
 		}
+		GameData.Instance.PushCharacterToServer();
 		SetStatus($"+1 {stat}. Осталось очков: {ch.UnspentStatPoints}.", error: false);
 		Refresh();
 	}

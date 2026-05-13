@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 11;  // Run-locked deck: StartBattleRequest.LockedDeck.
+	public const int Current = 12;  // PushCharacter / StartRun / EndRun RPCs; server-auth deck (LockedDeck removed from StartBattleRequest).
 }

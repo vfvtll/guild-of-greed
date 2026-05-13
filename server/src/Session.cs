@@ -39,6 +39,11 @@ public class Session
 	private BattleSession _battle;
 	private readonly Random _serverRng = new();
 
+	// Снэпшот персонажа на старте забега — используется для расчёта колоды
+	// (CardsDB.DeckFor) во всех боях внутри run. Мутации мид-ран (например
+	// ап оружия) на колоду не влияют. null = вне забега (туториал/хаб).
+	private CharacterData _runSnapshot;
+
 	public Session(TcpClient tcp, Stream stream, AccountStore store, string peer, CancellationToken shutdown)
 	{
 		_tcp = tcp;
@@ -145,6 +150,9 @@ public class Session
 				StartBattleRequest r      => HandleStartBattle(r),
 				BattleActionRequest r     => HandleBattleAction(r),
 				GetBattleStateRequest r   => HandleGetBattleState(r),
+				PushCharacterRequest r    => HandlePushCharacter(r),
+				StartRunRequest r         => HandleStartRun(r),
+				EndRunRequest r           => HandleEndRun(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -300,12 +308,11 @@ public class Session
 
 		var nodeType = (MapNodeType)r.NodeType;
 		var enemies = EnemyData.SpawnFor(r.LocationIndex, nodeType);
-		// Колода: если клиент прислал замороженную колоду забега (RunMap.LockedDeck) —
-		// используем её, иначе считаем через CardsDB.DeckFor (туториальные одиночные бои).
-		// Клиенту тут доверяем — те же права что и у equip/town (см. архитектурный TODO).
-		var deck = r.LockedDeck != null && r.LockedDeck.Count > 0
-			? new System.Collections.Generic.List<string>(r.LockedDeck)
-			: CardsDB.DeckFor(character);
+		// Колода — авторитетно с сервера. В run-режиме строим из _runSnapshot
+		// (зафиксированного на StartRun), в туториал-режиме — из живого
+		// персонажа. Клиент колоду не присылает.
+		var charForDeck = _runSnapshot ?? character;
+		var deck = CardsDB.DeckFor(charForDeck);
 		int seed = _serverRng.Next();
 
 		_battle = new BattleSession(character, enemies, deck, seed, nodeType);
@@ -382,6 +389,71 @@ public class Session
 			CombatOver = s.CombatOver,
 			Victory = s.Victory,
 		};
+	}
+
+	// =======================================================================
+	// Run lifecycle + character persistence
+	// =======================================================================
+
+	private static readonly System.Text.Json.JsonSerializerOptions CharJsonOpts =
+		new() { IncludeFields = true };
+
+	private ServerMessage HandlePushCharacter(PushCharacterRequest r)
+	{
+		if (_accountId == null || _selectedCharacterId == null)
+			return new PushCharacterResponse { Success = false, Error = "no_character_selected" };
+		if (string.IsNullOrEmpty(r.CharacterJson))
+			return new PushCharacterResponse { Success = false, Error = "empty_json" };
+
+		CharacterData ch;
+		try
+		{
+			ch = System.Text.Json.JsonSerializer.Deserialize<CharacterData>(r.CharacterJson, CharJsonOpts);
+		}
+		catch (System.Exception ex)
+		{
+			Logger.Warn($"[{_peer}] PushCharacter: bad JSON: {ex.Message}");
+			return new PushCharacterResponse { Success = false, Error = "bad_json" };
+		}
+		if (ch == null)
+			return new PushCharacterResponse { Success = false, Error = "null_character" };
+		if (ch.Id != _selectedCharacterId.Value)
+		{
+			Logger.Warn($"[{_peer}] PushCharacter: id mismatch (got {ch.Id}, expected {_selectedCharacterId})");
+			return new PushCharacterResponse { Success = false, Error = "id_mismatch" };
+		}
+
+		// TODO: серверная валидация статов/инвентаря/денег (anti-cheat). Сейчас
+		// доверяем JSON от клиента — та же модель что у combat-CSP (Confirmed=true).
+		if (!_store.UpdateCharacter(_accountId.Value, ch))
+		{
+			Logger.Warn($"[{_peer}] PushCharacter: UpdateCharacter failed");
+			return new PushCharacterResponse { Success = false, Error = "save_failed" };
+		}
+		return new PushCharacterResponse { Success = true };
+	}
+
+	private ServerMessage HandleStartRun(StartRunRequest r)
+	{
+		if (_accountId == null || _selectedCharacterId == null)
+			return new StartRunResponse { Success = false, Error = "no_character_selected" };
+		var ch = _store.LoadCharacter(_accountId.Value, _selectedCharacterId.Value);
+		if (ch == null) return new StartRunResponse { Success = false, Error = "character_missing" };
+
+		// Снэпшот = глубокая копия через JSON-цикл. Дешевле собственного DeepCopy,
+		// безопаснее: новые поля Character'а попадут в снэпшот без правок здесь.
+		var json = System.Text.Json.JsonSerializer.Serialize(ch, CharJsonOpts);
+		_runSnapshot = System.Text.Json.JsonSerializer.Deserialize<CharacterData>(json, CharJsonOpts);
+
+		Logger.Info($"[{_peer}] run started loc={r.LocationIndex} snapshot weapon={_runSnapshot.Weapon?.Type ?? "(none)"}");
+		return new StartRunResponse { Success = true };
+	}
+
+	private ServerMessage HandleEndRun(EndRunRequest r)
+	{
+		_runSnapshot = null;
+		Logger.Info($"[{_peer}] run ended");
+		return new EndRunResponse { Success = true };
 	}
 
 	private ServerMessage HandleDeleteCharacter(DeleteCharacterRequest r)

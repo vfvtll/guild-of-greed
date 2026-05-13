@@ -32,6 +32,11 @@ public partial class Main : Control
 	{
 		_net?.Dispose();
 		_net = NewNet();
+		// GameData использует _net для пуша CharacterData после любой мутации
+		// (equip/buy/sell/стэш/spend). Должен быть выставлен ДО первых мутаций —
+		// фактически как только handshake пройдёт (для пушей нужен авторизованный
+		// канал), но безопаснее ставить сразу: PushCharacterToServer проверит Net != null.
+		GameData.Instance.Net = _net;
 		ShowConnecting();
 	}
 
@@ -356,7 +361,7 @@ public partial class Main : Control
 
 	private void ShowLocationSelect()
 	{
-		GameData.Instance.EndRun();
+		EndCurrentRun();
 		ClearContent();
 		var view = new LocationSelectView();
 		view.LocationChosen += OnLocationChosen;
@@ -367,16 +372,40 @@ public partial class Main : Control
 
 	private void ShowTown()
 	{
-		GameData.Instance.EndRun();
+		EndCurrentRun();
 		ClearContent();
 		var view = new TownView();
 		view.LeaveTownRequested += ShowLocationSelect;
 		AddChild(view);
 	}
 
-	private void OnLocationChosen(int index)
+	// Локально + сетевой EndRun (fire-and-forget). Зовётся всеми путями
+	// выхода из подземелья: победа на боссе, смерть, ручной flee, переход
+	// в город. Сервер сбросит свой _runSnapshot — следующий StartRun снимет
+	// новый снэпшот с актуального DB-состояния.
+	private void EndCurrentRun()
 	{
-		GameData.Instance.StartRun(index);
+		bool wasInRun = GameData.Instance.CurrentRun != null;
+		GameData.Instance.EndRun();
+		if (wasInRun && _net != null) _ = SafeEndRunAsync();
+	}
+
+	private async System.Threading.Tasks.Task SafeEndRunAsync()
+	{
+		try { await _net.EndRunAsync(); }
+		catch (System.Exception ex) { GD.PrintErr($"EndRun network error: {ex.Message}"); }
+	}
+
+	private async void OnLocationChosen(int index)
+	{
+		GameData.Instance.StartRun(index);   // local: ResetForCombat + map gen + LockedDeck
+		// Сначала пушим Character с обновлёнными HP/MP в БД, ПОТОМ просим сервер
+		// снять run-snapshot. Иначе снэпшот возьмёт старые HP и при старте боя
+		// у сервера будут одни значения, у клиента — другие (CSP-десинк).
+		try { await GameData.Instance.PushCharacterAndAwaitAsync(); }
+		catch (System.Exception ex) { GD.PrintErr($"OnLocationChosen push error: {ex.Message}"); }
+		try { await _net.StartRunAsync(index); }
+		catch (System.Exception ex) { GD.PrintErr($"StartRun network error: {ex.Message}"); }
 		ShowMap();
 	}
 

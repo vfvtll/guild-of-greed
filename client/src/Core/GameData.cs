@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
+using GuildOfGreed.Shared.Net;
 
 // Глобальный стейт игры (autoload, синглтон).
 // В будущем сюда переедут: GlobalStash, экономика, грейд, крафт, аукцион.
@@ -11,6 +12,12 @@ public partial class GameData : Node
 
 	public CharacterData Character { get; private set; }
 	public UserSession Session { get; private set; }
+
+	// Сетевой клиент — устанавливается из Main после handshake. Используется
+	// для пуша Character на сервер после ЛЮБОЙ локальной мутации (equip,
+	// buy/sell, стэш, очки статов). Без этого экипа/деньги/инвентарь не
+	// доезжают в БД до следующего боя и пропадают при кросс-логине.
+	public NetworkClient Net { get; set; }
 	public int SelectedLoadout = 0;
 	public int SelectedChest = 2;
 	public int SelectedLocation = 0;
@@ -171,20 +178,25 @@ public partial class GameData : Node
 		ShieldData asShield = st.ShieldInstance ?? ShieldsDB.Get(st.ItemId)?.Clone();
 		if (asWeapon == null && asArmor == null && asShield == null) return false;
 
-		if (asWeapon != null) return EquipWeapon(asWeapon, slotIndex);
-		if (asShield != null) return EquipShield(asShield, slotIndex);
+		bool ok;
+		if (asWeapon != null) ok = EquipWeapon(asWeapon, slotIndex);
+		else if (asShield != null) ok = EquipShield(asShield, slotIndex);
+		else
+		{
+			// Броня.
+			ArmorSlot target = asArmor.Slot;
+			// Кольца: если в Ring1 уже занято, а Ring2 пуст — надеваем в Ring2.
+			if (target == ArmorSlot.Ring1 && Character.Ring1 != null && Character.Ring2 == null)
+				target = ArmorSlot.Ring2;
 
-		// Броня.
-		ArmorSlot target = asArmor.Slot;
-		// Кольца: если в Ring1 уже занято, а Ring2 пуст — надеваем в Ring2.
-		if (target == ArmorSlot.Ring1 && Character.Ring1 != null && Character.Ring2 == null)
-			target = ArmorSlot.Ring2;
-
-		TakeOneFromSlot(slotIndex);
-		var old = Character.GetArmorSlot(target);
-		if (old != null) Character.Inventory.TryAddInstance(old);
-		Character.SetArmorSlot(target, asArmor);
-		return true;
+			TakeOneFromSlot(slotIndex);
+			var old = Character.GetArmorSlot(target);
+			if (old != null) Character.Inventory.TryAddInstance(old);
+			Character.SetArmorSlot(target, asArmor);
+			ok = true;
+		}
+		if (ok) PushCharacterToServer();
+		return ok;
 	}
 
 	// Логика надевания оружия с учётом 1H/2H/dual-wield (И6.4):
@@ -260,6 +272,7 @@ public partial class GameData : Node
 		if (Character.Inventory.IsFull) return false;
 		Character.Inventory.TryAddInstance(Character.Weapon);
 		Character.Weapon = null;
+		PushCharacterToServer();
 		return true;
 	}
 
@@ -269,6 +282,7 @@ public partial class GameData : Node
 		if (Character.Inventory.IsFull) return false;
 		Character.Inventory.TryAddInstance(Character.Offhand);
 		Character.Offhand = null;
+		PushCharacterToServer();
 		return true;
 	}
 
@@ -278,6 +292,7 @@ public partial class GameData : Node
 		if (Character.Inventory.IsFull) return false;
 		Character.Inventory.TryAddInstance(Character.Shield);
 		Character.Shield = null;
+		PushCharacterToServer();
 		return true;
 	}
 
@@ -290,6 +305,7 @@ public partial class GameData : Node
 		if (Character.Inventory.IsFull) return false;
 		Character.Inventory.TryAddInstance(item);
 		Character.SetArmorSlot(slot, null);
+		PushCharacterToServer();
 		return true;
 	}
 
@@ -335,6 +351,7 @@ public partial class GameData : Node
 		{
 			Character.AddEffect(potion.Id, potion.BuffType, potion.BuffAmount, potion.BuffDuration);
 		}
+		PushCharacterToServer();
 		return true;
 	}
 
@@ -343,6 +360,59 @@ public partial class GameData : Node
 	public List<string> CurrentDeckIds() => CardsDB.DeckFor(Character);
 
 	public string CurrentLocationName() => LocationNames[SelectedLocation];
+
+	// === Server persistence =============================================
+	//
+	// Пушит текущий Character на сервер. Зовётся ПОСЛЕ любой локальной
+	// мутации (equip/buy/sell/стэш/spend stat). Fire-and-forget: ошибка
+	// сети не блокирует UI, сервер просто получит следующий пуш.
+	private static readonly System.Text.Json.JsonSerializerOptions PushJsonOpts =
+		new() { IncludeFields = true };
+
+	public void PushCharacterToServer()
+	{
+		if (Net == null || Character == null) return;
+		string json;
+		try
+		{
+			json = System.Text.Json.JsonSerializer.Serialize(Character, PushJsonOpts);
+		}
+		catch (System.Exception ex)
+		{
+			GD.PrintErr($"GameData: serialize character failed: {ex.Message}");
+			return;
+		}
+		_ = PushAsync(json);
+	}
+
+	private async System.Threading.Tasks.Task PushAsync(string json)
+	{
+		try
+		{
+			var resp = await Net.PushCharacterAsync(json);
+			if (!resp.Success)
+				GD.PrintErr($"GameData: PushCharacter rejected: {resp.Error}");
+		}
+		catch (System.Exception ex)
+		{
+			GD.PrintErr($"GameData: PushCharacter network error: {ex.Message}");
+		}
+	}
+
+	// Синхронная версия пуша: дожидается ответа сервера. Используется в Main
+	// перед StartRun/EndRun, чтобы серверный снэпшот опирался на свежий DB-state.
+	public async System.Threading.Tasks.Task PushCharacterAndAwaitAsync()
+	{
+		if (Net == null || Character == null) return;
+		string json;
+		try { json = System.Text.Json.JsonSerializer.Serialize(Character, PushJsonOpts); }
+		catch (System.Exception ex)
+		{
+			GD.PrintErr($"GameData: serialize character failed: {ex.Message}");
+			return;
+		}
+		await PushAsync(json);
+	}
 
 	// === Город: магазин / стэш =========================================
 	//
@@ -372,6 +442,7 @@ public partial class GameData : Node
 			if (Character.Inventory.IsFull) return (false, "no_space");
 			Character.Inventory.TryAddInstance(weaponBase.Clone());
 			Character.Inventory.Money -= price.Value;
+			PushCharacterToServer();
 			return (true, null);
 		}
 
@@ -382,6 +453,7 @@ public partial class GameData : Node
 			if (Character.Inventory.IsFull) return (false, "no_space");
 			Character.Inventory.TryAddInstance(armorBase.Clone());
 			Character.Inventory.Money -= price.Value;
+			PushCharacterToServer();
 			return (true, null);
 		}
 
@@ -391,6 +463,7 @@ public partial class GameData : Node
 		if (!Character.Inventory.TryAdd(itemId, 1, maxStack))
 			return (false, "no_space");
 		Character.Inventory.Money = moneyBefore - price.Value;
+		PushCharacterToServer();
 		return (true, null);
 	}
 
@@ -406,6 +479,7 @@ public partial class GameData : Node
 		if (price <= 0) return 0;
 		Character.Inventory.RemoveAt(slotIndex);
 		Character.Inventory.Money += price;
+		PushCharacterToServer();
 		return price;
 	}
 
@@ -419,6 +493,7 @@ public partial class GameData : Node
 		var stack = slots[invSlotIndex];
 		Character.Inventory.RemoveAt(invSlotIndex);
 		Character.Stash.TryAddStack(stack);
+		PushCharacterToServer();
 		return true;
 	}
 
@@ -432,6 +507,7 @@ public partial class GameData : Node
 		var stack = slots[stashSlotIndex];
 		Character.Stash.RemoveAt(stashSlotIndex);
 		Character.Inventory.TryAddStack(stack);
+		PushCharacterToServer();
 		return true;
 	}
 }

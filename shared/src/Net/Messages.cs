@@ -33,6 +33,9 @@ namespace GuildOfGreed.Shared.Net;
 [Union(9, typeof(StartBattleRequest))]
 [Union(10, typeof(BattleActionRequest))]
 [Union(11, typeof(GetBattleStateRequest))]
+[Union(12, typeof(PushCharacterRequest))]
+[Union(13, typeof(StartRunRequest))]
+[Union(14, typeof(EndRunRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -103,10 +106,8 @@ public class StartBattleRequest : ClientMessage
 {
 	[Key(0)] public int LocationIndex;
 	[Key(1)] public int NodeType;       // (int)MapNodeType
-	// Колода, замороженная клиентом на старте забега (RunMap.LockedDeck).
-	// null/пусто = одиночный бой вне забега (стартовый Tutorial) — сервер
-	// сам вычислит колоду через CardsDB.DeckFor по текущему персонажу.
-	[Key(2)] public List<string> LockedDeck;
+	// Key(2) был LockedDeck — удалён в protocol v12. Сервер сам строит колоду
+	// из своего _runSnapshot (см. StartRunRequest); клиент колоду не присылает.
 }
 
 // Одно действие игрока в активном бою. Маппится на BattleAction в shared/Combat.
@@ -126,6 +127,35 @@ public class BattleActionRequest : ClientMessage
 [MessagePackObject]
 public class GetBattleStateRequest : ClientMessage { }
 
+// Полный JSON CharacterData → сохраняется в БД. Клиент шлёт после ЛЮБОЙ
+// локальной мутации (equip/unequip, покупка/продажа, стэш, очки статов),
+// чтобы DB всегда отражала актуальное состояние и логин с другого устройства
+// показывал ту же экипировку и деньги. ВРЕМЕННО доверяем JSON от клиента —
+// валидация серверная появится в отдельном инкременте.
+[MessagePackObject]
+public class PushCharacterRequest : ClientMessage
+{
+	[Key(0)] public string CharacterJson;
+}
+
+// Старт забега: сервер снимает снэпшот текущего DB-состояния персонажа
+// (для расчёта колоды через CardsDB.DeckFor). Снэпшот живёт на Session
+// до EndRunRequest. Во время run все StartBattleRequest используют
+// этот снэпшот для построения колоды — никакие мутации мид-ран
+// (например, ап оружия) на колоду не влияют. Клиент обязан вызвать
+// PushCharacterRequest ДО этого RPC, чтобы DB содержала актуальное
+// состояние (HP/MP/equip).
+[MessagePackObject]
+public class StartRunRequest : ClientMessage
+{
+	[Key(0)] public int LocationIndex;
+}
+
+// Завершение забега: сервер сбрасывает _runSnapshot. Дальше StartBattleRequest
+// будет считать колоду по живому персонажу (туториал-режим или новый run).
+[MessagePackObject]
+public class EndRunRequest : ClientMessage { }
+
 // === Server → Client ===========================================================
 
 [Union(0, typeof(ServerWelcome))]
@@ -141,6 +171,9 @@ public class GetBattleStateRequest : ClientMessage { }
 [Union(10, typeof(BattleStartedResponse))]
 [Union(11, typeof(BattleActionResponse))]
 [Union(12, typeof(BattleStateResponse))]
+[Union(13, typeof(PushCharacterResponse))]
+[Union(14, typeof(StartRunResponse))]
+[Union(15, typeof(EndRunResponse))]
 public abstract class ServerMessage { }
 
 [MessagePackObject]
@@ -282,4 +315,25 @@ public class BattleStateResponse : ServerMessage
 	[Key(9)] public int RngCalls;
 	[Key(10)] public bool CombatOver;
 	[Key(11)] public bool Victory;
+}
+
+[MessagePackObject]
+public class PushCharacterResponse : ServerMessage
+{
+	[Key(0)] public bool Success;
+	[Key(1)] public string Error;
+}
+
+[MessagePackObject]
+public class StartRunResponse : ServerMessage
+{
+	[Key(0)] public bool Success;
+	[Key(1)] public string Error;
+}
+
+[MessagePackObject]
+public class EndRunResponse : ServerMessage
+{
+	[Key(0)] public bool Success;
+	[Key(1)] public string Error;
 }
