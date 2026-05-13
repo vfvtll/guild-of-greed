@@ -628,6 +628,18 @@ public static class CombatEngine
 			// Если инвентарь полон — лут теряется. Не эмитим отдельного event:
 			// для CSP достаточно факта inventory state.
 		}
+
+		// Деньги. Катаются всегда (если MoneyMax>0), не зависят от LootTable.
+		// Идут в общий медный кошель — переполнения слотов нет.
+		if (enemy.MoneyMax > 0)
+		{
+			int money = state.Rng.Range(enemy.MoneyMin, enemy.MoneyMax + 1);
+			if (money > 0)
+			{
+				state.Player.Inventory.Money += money;
+				dropped.Add($"money:{money}");
+			}
+		}
 		return dropped;
 	}
 

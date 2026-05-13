@@ -36,6 +36,7 @@ public partial class InventoryOverlay : Control
 	private VBoxContainer _equipmentList;
 	private GridContainer _inventoryGrid;
 	private Label _summaryAtk, _summaryDef, _summaryCrit, _summarySets;
+	private RichTextLabel _currencyLabel;
 
 	// Для slide-in/out анимаций.
 	private PanelContainer _panel;
@@ -91,6 +92,7 @@ public partial class InventoryOverlay : Control
 		if (ch == null) return;
 
 		_capacityLabel.Text = $"Содержимое ({ch.Inventory.Slots.Count}/{Inventory.Capacity})";
+		RefreshCurrency(ch);
 		RefreshSummary(ch);
 
 		ClearChildren(_equipmentList);
@@ -121,6 +123,23 @@ public partial class InventoryOverlay : Control
 				_inventoryGrid.AddChild(MakeEmptyCard());
 			}
 		}
+	}
+
+	// Hex-цвета для номиналов кошеля. GoldBright — почти как UIStyle, но для
+	// BBCode нужен литерал. Серебро/медь — отдельные оттенки, чтобы три номинала
+	// читались с одного взгляда.
+	private const string HexGold   = "#f3d172";
+	private const string HexSilver = "#cfd2d8";
+	private const string HexCopper = "#d18a4d";
+
+	private void RefreshCurrency(CharacterData ch)
+	{
+		var (g, s, c) = Currency.Split(ch.Inventory.Money);
+		_currencyLabel.Text =
+			$"🪙 Кошель:  " +
+			$"[color={HexGold}]{g}з[/color]  " +
+			$"[color={HexSilver}]{s}с[/color]  " +
+			$"[color={HexCopper}]{c}м[/color]";
 	}
 
 	private void RefreshSummary(CharacterData ch)

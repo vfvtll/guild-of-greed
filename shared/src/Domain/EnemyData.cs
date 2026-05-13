@@ -30,6 +30,12 @@ public class EnemyData
 	// продолжает копиться между ходами.
 	public int BleedStack = 0;
 
+	// Деньги — минимум/максимум медяков, выпадающих при смерти. CombatEngine.DropLoot
+	// катает Rng.Range(Min, Max+1) и прибавляет к Inventory.Money. Default 1..3 для
+	// рядовых врагов. Для тутора-болванчика выставлен 0/0 (см. CreateTrainingDummy).
+	public int MoneyMin = 1;
+	public int MoneyMax = 3;
+
 	// Спавн encounter'а для узла на карте. Используется и клиентом
 	// (GameData.SpawnForCurrentNode → display), и сервером (BattleSession
 	// → authoritative). Чтобы анти-чит работал, обе стороны должны
@@ -71,6 +77,9 @@ public class EnemyData
 			CurrentHp = 28,
 			PhysDef = 0,
 			MagicDef = 0,
+			// Тутор-волк не дропает деньги — стартового лута и так гора.
+			MoneyMin = 0,
+			MoneyMax = 0,
 		};
 		e.Intents.Add(new Intent { Type = "attack", Amount = 4, Name = "Укус" });
 		e.Intents.Add(new Intent { Type = "attack", Amount = 6, Name = "Бросок" });

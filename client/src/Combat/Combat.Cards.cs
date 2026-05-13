@@ -176,6 +176,14 @@ public partial class Combat
 		if (ev.DroppedItems == null) return;
 		foreach (var item in ev.DroppedItems)
 		{
+			// Особый префикс "money:N" — выпавшие медяки (CombatEngine.DropLoot).
+			// Кошель уже пополнен в engine; здесь только лог.
+			if (item.StartsWith("money:"))
+			{
+				if (long.TryParse(item[6..], out long copper) && copper > 0)
+					Log($"[color=#e9a35a]🪙 Монеты: +{Currency.FormatShort(copper)}[/color]");
+				continue;
+			}
 			// item приходит как "itemId×count" — разбираем для лога.
 			int x = item.IndexOf('×');
 			string itemId = x > 0 ? item[..x] : item;

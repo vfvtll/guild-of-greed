@@ -27,6 +27,11 @@ public class Inventory
 
 	public List<InventoryStack> Slots = new();
 
+	// Валюта одним числом — в медяках. См. Currency для деления на золото/серебро/медь.
+	// long потому что у нас 1 золото = 10 000 медяков, а на дольной игре скоро
+	// упрёмся в int.MaxValue. Старые сейвы без поля → 0 (JSON default).
+	public long Money = 0;
+
 	public bool IsFull => Slots.Count >= Capacity;
 	public int FreeSlots => Capacity - Slots.Count;
 

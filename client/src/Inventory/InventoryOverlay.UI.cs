@@ -121,6 +121,18 @@ public partial class InventoryOverlay
 		_capacityLabel = UIStyle.MakeSectionTitle("Содержимое");
 		right.AddChild(_capacityLabel);
 
+		// Кошель: цветные номиналы золото / серебро / медь. Reused в Refresh.
+		_currencyLabel = new RichTextLabel
+		{
+			BbcodeEnabled = true,
+			FitContent = true,
+			ScrollActive = false,
+			CustomMinimumSize = new Vector2(0, 22),
+		};
+		_currencyLabel.AddThemeFontSizeOverride("normal_font_size", 14);
+		_currencyLabel.AddThemeColorOverride("default_color", UIStyle.TextPrimary);
+		right.AddChild(_currencyLabel);
+
 		_inventoryGrid = new GridContainer { Columns = GridColumns };
 		_inventoryGrid.AddThemeConstantOverride("h_separation", 8);
 		_inventoryGrid.AddThemeConstantOverride("v_separation", 8);
