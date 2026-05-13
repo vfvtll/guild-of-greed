@@ -36,7 +36,14 @@ public partial class InventoryOverlay : Control
 	private VBoxContainer _equipmentList;
 	private GridContainer _inventoryGrid;
 	private Label _summaryAtk, _summaryDef, _summaryCrit, _summarySets;
+	private Label _summaryLevel;
 	private RichTextLabel _currencyLabel;
+
+	// Виджет распределения очков — показывается только когда UnspentStatPoints > 0.
+	private PanelContainer _statSpendPanel;
+	private Label _statPointsAvailLabel;
+	private readonly Button[] _statSpendButtons = new Button[6];
+	private static readonly string[] StatIds = { "STR", "INT", "CON", "WIT", "MEN", "DEX" };
 
 	// Для slide-in/out анимаций.
 	private PanelContainer _panel;
@@ -94,6 +101,7 @@ public partial class InventoryOverlay : Control
 		_capacityLabel.Text = $"Содержимое ({ch.Inventory.Slots.Count}/{Inventory.Capacity})";
 		RefreshCurrency(ch);
 		RefreshSummary(ch);
+		RefreshStatPoints(ch);
 
 		ClearChildren(_equipmentList);
 		_equipmentList.AddChild(MakeWeaponSlotRow("⚔",  "Оружие",   ch.Weapon, () => UnequipWeapon()));
@@ -142,6 +150,42 @@ public partial class InventoryOverlay : Control
 			$"[color={HexCopper}]{c}м[/color]";
 	}
 
+	// Прячет/показывает виджет распределения очков и обновляет тексты на
+	// кнопках. Тратить очки во время боя нельзя — иначе мид-fight рост
+	// статов разъехался бы с серверной копией.
+	private void RefreshStatPoints(CharacterData ch)
+	{
+		bool hasPoints = ch.UnspentStatPoints > 0;
+		_statSpendPanel.Visible = hasPoints;
+		if (!hasPoints) return;
+
+		_statPointsAvailLabel.Text =
+			ReadOnly
+				? $"⭐ Очков на распределение: {ch.UnspentStatPoints} (доступно после боя)"
+				: $"⭐ Очков на распределение: {ch.UnspentStatPoints} — выберите стат для +1";
+
+		int[] vals = { ch.Str, ch.Int, ch.Con, ch.Wit, ch.Men, ch.Dex };
+		for (int i = 0; i < 6; i++)
+		{
+			_statSpendButtons[i].Text = $"+1 {StatIds[i]} ({vals[i]})";
+			_statSpendButtons[i].Disabled = ReadOnly;
+		}
+	}
+
+	private void OnSpendStatPressed(string stat)
+	{
+		if (BlockedByReadOnly()) return;
+		var ch = GameData.Instance.Character;
+		if (ch == null) return;
+		if (!ch.TrySpendStatPoint(stat))
+		{
+			SetStatus("Нет очков для распределения.", error: true);
+			return;
+		}
+		SetStatus($"+1 {stat}. Осталось очков: {ch.UnspentStatPoints}.", error: false);
+		Refresh();
+	}
+
 	private void RefreshSummary(CharacterData ch)
 	{
 		int physAtk = ch.Str / 3 + ch.WeaponPhysAtk() + ch.PhysAtkBonus();
@@ -150,6 +194,17 @@ public partial class InventoryOverlay : Control
 		int hp = ch.MaxHp();
 		int mp = ch.MaxMp();
 		int regen = ch.MpRegen();
+		// Уровень персонажа + (если есть оружие) уровень навыка оружия.
+		string levelLine = $"⭐ Уровень {ch.Level} ({ch.Exp}/{ch.XpForNextCharacterLevel()} XP)";
+		if (ch.Weapon != null)
+		{
+			string wt = ch.Weapon.Type;
+			int wlvl = ch.GetWeaponLevel(wt);
+			int wxp  = ch.GetWeaponXp(wt);
+			int wnext = ch.XpForNextWeaponLevel(wt);
+			levelLine += $"   🗡 {ItemsDB.WeaponTypeName(wt)} ур.{wlvl} ({wxp}/{wnext})";
+		}
+		_summaryLevel.Text = levelLine;
 		_summaryAtk.Text =
 			$"⚔ ФизАтк {physAtk} × {ch.PhysMult():F1}    🔮 МагАтк {magAtk} × {ch.MagicMult():F1}";
 		_summaryDef.Text =

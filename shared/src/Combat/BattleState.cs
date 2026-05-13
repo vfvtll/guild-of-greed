@@ -35,4 +35,10 @@ public class BattleState
 	// reconnect, сериализуем Seed + counter).
 	public int Seed;
 	public RandomSource Rng;
+
+	// Снэпшот уровней ДО начала боя — чтобы при resolve в BattleEnded
+	// корректно эмитить CharacterLevelUp / WeaponLevelUp только по новым
+	// уровням. Заполняется в CombatEngine.StartBattle.
+	public int PreBattleCharacterLevel;
+	public Dictionary<string, int> PreBattleWeaponLevels = new();
 }

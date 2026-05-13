@@ -74,15 +74,46 @@ public partial class InventoryOverlay
 		var summaryV = new VBoxContainer();
 		summaryV.AddThemeConstantOverride("separation", 2);
 		summary.AddChild(summaryV);
-		_summaryAtk  = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
-		_summaryDef  = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
-		_summaryCrit = UIStyle.MakeLabel("", 13, UIStyle.WarnAmber);
-		_summarySets = UIStyle.MakeLabel("", 12, UIStyle.RarityUncommon);
+		_summaryLevel = UIStyle.MakeLabel("", 13, UIStyle.GoldBright);
+		_summaryAtk   = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
+		_summaryDef   = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
+		_summaryCrit  = UIStyle.MakeLabel("", 13, UIStyle.WarnAmber);
+		_summarySets  = UIStyle.MakeLabel("", 12, UIStyle.RarityUncommon);
 		_summarySets.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		summaryV.AddChild(_summaryLevel);
 		summaryV.AddChild(_summaryAtk);
 		summaryV.AddChild(_summaryDef);
 		summaryV.AddChild(_summaryCrit);
 		summaryV.AddChild(_summarySets);
+
+		// Виджет распределения очков статов. Сидит отдельной панелью под
+		// сводкой; Refresh скрывает её при UnspentStatPoints=0.
+		_statSpendPanel = new PanelContainer();
+		_statSpendPanel.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
+		v.AddChild(_statSpendPanel);
+
+		var spendV = new VBoxContainer();
+		spendV.AddThemeConstantOverride("separation", 6);
+		_statSpendPanel.AddChild(spendV);
+
+		_statPointsAvailLabel = UIStyle.MakeLabel("", 14, UIStyle.GoldBright);
+		spendV.AddChild(_statPointsAvailLabel);
+
+		var spendBtnRow = new HBoxContainer();
+		spendBtnRow.AddThemeConstantOverride("separation", 8);
+		spendV.AddChild(spendBtnRow);
+
+		for (int i = 0; i < 6; i++)
+		{
+			var btn = new Button { Text = "" };
+			UIStyle.StyleButton(btn);
+			btn.CustomMinimumSize = new Vector2(140, 0);
+			string capturedStat = StatIds[i];
+			btn.TooltipText = StatTooltip(capturedStat);
+			btn.Pressed += () => OnSpendStatPressed(capturedStat);
+			spendBtnRow.AddChild(btn);
+			_statSpendButtons[i] = btn;
+		}
 
 		// Две колонки: надето слева, инвентарь справа.
 		var columns = new HBoxContainer();
@@ -156,6 +187,18 @@ public partial class InventoryOverlay
 		closeBtn.Pressed += Close;
 		btnRow.AddChild(closeBtn);
 	}
+
+	// Подсказка для каждой кнопки распределения очков.
+	private static string StatTooltip(string stat) => stat switch
+	{
+		"STR" => "Физическая атака",
+		"INT" => "Магическая атака",
+		"CON" => "Здоровье (ХП)",
+		"WIT" => "Регенерация маны",
+		"MEN" => "Максимум маны",
+		"DEX" => "Блок, шанс и сила крита",
+		_     => "",
+	};
 
 	// =====================================================================
 	// Фабрики карточек слотов

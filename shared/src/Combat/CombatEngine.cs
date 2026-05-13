@@ -64,6 +64,22 @@ public static class CombatEngine
 		// узлами одного забега), но Block / Effects / счётчик крита сбрасываются.
 		state.Player.PrepareForBattle();
 
+		// Снэпшот уровней ДО боя — нужен ResolveLevelUps для эмитa LevelUp-событий
+		// только при реальном повышении. Сохраняем уровень всех типов оружия,
+		// по которым у игрока уже есть XP, плюс текущий equipped-type на случай
+		// если он ещё не в словаре (0 XP).
+		state.PreBattleCharacterLevel = state.Player.Level;
+		state.PreBattleWeaponLevels.Clear();
+		if (state.Player.WeaponXp != null)
+			foreach (var kv in state.Player.WeaponXp)
+				state.PreBattleWeaponLevels[kv.Key] = state.Player.GetWeaponLevel(kv.Key);
+		if (state.Player.Weapon != null)
+		{
+			var t = state.Player.Weapon.Type;
+			if (!string.IsNullOrEmpty(t) && !state.PreBattleWeaponLevels.ContainsKey(t))
+				state.PreBattleWeaponLevels[t] = 0;
+		}
+
 		var events = new List<BattleEvent> { new() { Type = BattleEventType.BattleStarted } };
 
 		// Колода + тасовка. Стартовый shuffle event не эмитим — клиент видит
@@ -255,10 +271,8 @@ public static class CombatEngine
 					ApplyDamageToPlayer(state, events, intent.Amount, intent.Name, isPhys, idx);
 					if (state.Player.CurrentHp <= 0)
 					{
-						state.CombatOver = true;
-						state.Victory = false;
 						events.Add(new BattleEvent { Type = BattleEventType.PlayerDied });
-						events.Add(new BattleEvent { Type = BattleEventType.BattleEnded, Victory = false });
+						EndBattle(state, events, victory: false);
 						return;
 					}
 					break;
@@ -318,15 +332,12 @@ public static class CombatEngine
 				Type = BattleEventType.EnemyDied,
 				EnemyIndex = state.Enemies.IndexOf(enemy),
 			});
+			GrantKillXp(state, enemy, events);
 			var dropped = DropLoot(state, enemy);
 			if (dropped.Count > 0)
 				events.Add(new BattleEvent { Type = BattleEventType.LootDropped, DroppedItems = dropped });
 			if (AllEnemiesDead(state))
-			{
-				state.CombatOver = true;
-				state.Victory = true;
-				events.Add(new BattleEvent { Type = BattleEventType.BattleEnded, Victory = true });
-			}
+				EndBattle(state, events, victory: true);
 		}
 	}
 
@@ -423,6 +434,26 @@ public static class CombatEngine
 		state.Player.CurrentMp -= actualCost;
 		events.Add(new BattleEvent { Type = BattleEventType.MpSpent, Amount = actualCost });
 
+		// XP оружия — за каждую сыгранную АТАКУЮЩУЮ карту (damage_phys / damage_magic).
+		// Без оружия (Weapon=null) XP не идёт — голому персонажу нечего качать.
+		// 5 XP за карту: первый уровень оружия (50 XP) = ~10 атак = 1-2 боя.
+		if (card.IsAttack && state.Player.Weapon != null)
+		{
+			var wt = state.Player.Weapon.Type;
+			if (!string.IsNullOrEmpty(wt))
+			{
+				state.Player.WeaponXp ??= new Dictionary<string, int>();
+				state.Player.WeaponXp.TryGetValue(wt, out int cur);
+				state.Player.WeaponXp[wt] = cur + 5;
+				events.Add(new BattleEvent
+				{
+					Type = BattleEventType.WeaponXpGained,
+					EffectType = wt,
+					Amount = 5,
+				});
+			}
+		}
+
 		// Применяем эффект карты.
 		switch (card.Effect)
 		{
@@ -500,11 +531,7 @@ public static class CombatEngine
 
 		// Победа?
 		if (AllEnemiesDead(state))
-		{
-			state.CombatOver = true;
-			state.Victory = true;
-			events.Add(new BattleEvent { Type = BattleEventType.BattleEnded, Victory = true });
-		}
+			EndBattle(state, events, victory: true);
 
 		return events;
 	}
@@ -569,6 +596,7 @@ public static class CombatEngine
 				Type = BattleEventType.EnemyDied,
 				EnemyIndex = enemyIndex,
 			});
+			GrantKillXp(state, enemy, events);
 			var dropped = DropLoot(state, enemy);
 			if (dropped.Count > 0)
 			{
@@ -580,6 +608,17 @@ public static class CombatEngine
 				});
 			}
 		}
+	}
+
+	// XP персонажа за смерть врага. Базируется на MaxHp — чем толще враг,
+	// тем больше опыта (training-dummy ~7, гоблин ~25, босс ~80). Накапливается
+	// в Exp; повышение Level отложено в ResolveLevelUps на BattleEnded.
+	private static void GrantKillXp(BattleState state, EnemyData enemy, List<BattleEvent> events)
+	{
+		if (state.Player == null) return;
+		int xp = Math.Max(1, enemy.MaxHp / 4);
+		state.Player.Exp += xp;
+		events.Add(new BattleEvent { Type = BattleEventType.XpGained, Amount = xp });
 	}
 
 	// Прокатывает LootTable врага. Каждая запись — независимый ролл через
@@ -702,11 +741,58 @@ public static class CombatEngine
 
 	private static List<BattleEvent> FleeAction(BattleState state)
 	{
+		var events = new List<BattleEvent>();
+		EndBattle(state, events, victory: false);
+		return events;
+	}
+
+	// Финализация боя: устанавливает CombatOver/Victory, прокатывает повышения
+	// уровней (через ResolveLevelUps) и эмитит BattleEnded. Вызывается из ВСЕХ
+	// точек, где бой может закончиться — победа/смерть/бегство.
+	private static void EndBattle(BattleState state, List<BattleEvent> events, bool victory)
+	{
 		state.CombatOver = true;
-		state.Victory = false;
-		return new List<BattleEvent>
+		state.Victory = victory;
+		ResolveLevelUps(state, events);
+		events.Add(new BattleEvent { Type = BattleEventType.BattleEnded, Victory = victory });
+	}
+
+	// Повышение уровней по накопленному за бой XP. Чистая функция от state —
+	// клиент и сервер прокатывают идентично.
+	private static void ResolveLevelUps(BattleState state, List<BattleEvent> events)
+	{
+		var p = state.Player;
+		if (p == null) return;
+
+		// Персонаж: пока Exp ≥ порога — повышаем уровень и распределяем статы.
+		while (p.Exp >= p.XpForNextCharacterLevel())
 		{
-			new() { Type = BattleEventType.BattleEnded, Victory = false },
-		};
+			p.LevelUpCharacter();
+			events.Add(new BattleEvent
+			{
+				Type = BattleEventType.CharacterLevelUp,
+				Amount = p.Level,
+			});
+		}
+
+		// Оружие: уровень — производная от XP (xp/50). Сравниваем с pre-battle
+		// снэпшотом чтобы не дублировать событие на стороннем оружии без XP.
+		if (p.WeaponXp != null)
+		{
+			foreach (var kv in p.WeaponXp)
+			{
+				int oldLevel = state.PreBattleWeaponLevels.GetValueOrDefault(kv.Key, 0);
+				int newLevel = p.GetWeaponLevel(kv.Key);
+				if (newLevel > oldLevel)
+				{
+					events.Add(new BattleEvent
+					{
+						Type = BattleEventType.WeaponLevelUp,
+						EffectType = kv.Key,
+						Amount = newLevel,
+					});
+				}
+			}
+		}
 	}
 }

@@ -47,20 +47,71 @@ public static class CardsDB
 			Id = "magic_focus", Name = "Магический фокус", Archetype = "mage", Type = "magic",
 			Cost = 14, AmountPct = 20, Duration = 2, Effect = "buff_magic", Icon = "✨",
 		},
+
+		// === Карты-апгрейды по типу оружия (открываются на ур.1 оружия) =====
+		// При weapon-level≥1 стартовая колода получает замену 2x strike → slash
+		// (или эквивалентно по типу). См. DeckUpgrades ниже.
+
+		// Одноручный меч ур.1: более мощный удар за бо́льшую ману.
+		["slash"] = new()
+		{
+			Id = "slash", Name = "Разрез", Archetype = "warrior", Type = "physical",
+			Cost = 18, BaseDamage = 11, Effect = "damage_phys", Icon = "🗡",
+		},
+		// Двуручный меч ур.1: тяжёлый раскол.
+		["cleave"] = new()
+		{
+			Id = "cleave", Name = "Раскол", Archetype = "warrior", Type = "physical",
+			Cost = 22, BaseDamage = 14, Effect = "damage_phys", Icon = "🪓",
+		},
+		// Кинжал ур.1: дешёвый укол. Архетип кинжала — спам.
+		["quick_stab"] = new()
+		{
+			Id = "quick_stab", Name = "Быстрый укол", Archetype = "warrior", Type = "physical",
+			Cost = 6, BaseDamage = 4, Effect = "damage_phys", Icon = "🔪",
+		},
+		// Посох ур.1: усиленный снаряд.
+		["empowered_bolt"] = new()
+		{
+			Id = "empowered_bolt", Name = "Усиленный снаряд", Archetype = "mage", Type = "magic",
+			Cost = 24, BaseDamage = 14, Effect = "damage_magic", Icon = "🔥",
+		},
 	};
 
 	public static CardData GetCard(string id)
 		=> Cards.TryGetValue(id, out var c) ? c : null;
 
-	// Стартовые колоды по 10 карт.
-	public static readonly List<string> WarriorDeck = new()
+	// === Стартовые колоды по типу оружия ====================================
+	//
+	// 10-карточные стартеры. Заточены под конкретное оружие чтобы каждое
+	// чувствовалось по-своему ещё ДО прокачки. Голый персонаж (Weapon=null)
+	// получает Warrior-стартер как универсальный fallback.
+
+	private static readonly List<string> WarriorStarter = new()
 	{
 		"strike", "strike", "strike", "strike", "strike",
 		"guard", "guard", "guard",
 		"armor_break", "armor_break",
 	};
 
-	public static readonly List<string> MageDeck = new()
+	// Двуручник — больше strike, меньше guard (стиль 2H — давление, не блок).
+	private static readonly List<string> TwoHanderStarter = new()
+	{
+		"strike", "strike", "strike", "strike", "strike", "strike",
+		"guard", "guard",
+		"armor_break", "armor_break",
+	};
+
+	// Кинжал — шквал ударов, меньше защиты. Своя ниша откроется на ур.1 апгрейдом.
+	private static readonly List<string> KnifeStarter = new()
+	{
+		"strike", "strike", "strike", "strike", "strike", "strike",
+		"guard", "guard",
+		"armor_break", "armor_break",
+	};
+
+	// Маг (посох).
+	private static readonly List<string> MageStarter = new()
 	{
 		"fire_bolt", "fire_bolt", "fire_bolt",
 		"water_strike", "water_strike",
@@ -69,17 +120,86 @@ public static class CardsDB
 		"strike",
 	};
 
-	// Стартовая колода по экипированному оружию. Используется и клиентом
-	// при StartNewCombat, и сервером в BattleSession — оба должны получить
-	// одну и ту же колоду для одного игрока.
+	// Lookup стартовой колоды по типу оружия. Неизвестный тип → Warrior.
+	private static readonly Dictionary<string, List<string>> StarterByWeaponType = new()
+	{
+		["sword_1h"] = WarriorStarter,
+		["sword_2h"] = TwoHanderStarter,
+		["knife"]    = KnifeStarter,
+		["staff"]    = MageStarter,
+	};
+
+	// Старые имена оставлены под Obsolete на случай ссылок из save-блобов / тестов.
+	[System.Obsolete("Use DeckFor(character)")] public static readonly List<string> WarriorDeck = WarriorStarter;
+	[System.Obsolete("Use DeckFor(character)")] public static readonly List<string> MageDeck = MageStarter;
+
+	// === Апгрейды колоды по уровню оружия ===================================
+	//
+	// Когда GetWeaponLevel(type) ≥ Level — стартовые карты заменяются на
+	// улучшенные. На ур.1 пока один апгрейд на тип (показать паттерн),
+	// потом докинем больше уровней с дополнительными апгрейдами.
+	public class DeckUpgrade
+	{
+		public int Level;        // Минимальный уровень оружия для применения.
+		public string OldCardId; // Что заменяем (берём первые N штук в колоде).
+		public string NewCardId; // На что меняем.
+		public int Count;        // Сколько копий заменить.
+	}
+
+	private static readonly Dictionary<string, List<DeckUpgrade>> UpgradesByWeaponType = new()
+	{
+		["sword_1h"] = new()
+		{
+			new() { Level = 1, OldCardId = "strike", NewCardId = "slash", Count = 2 },
+		},
+		["sword_2h"] = new()
+		{
+			new() { Level = 1, OldCardId = "strike", NewCardId = "cleave", Count = 2 },
+		},
+		["knife"] = new()
+		{
+			new() { Level = 1, OldCardId = "strike", NewCardId = "quick_stab", Count = 3 },
+		},
+		["staff"] = new()
+		{
+			new() { Level = 1, OldCardId = "fire_bolt", NewCardId = "empowered_bolt", Count = 2 },
+		},
+	};
+
+	// Стартовая колода для боя. Используется и клиентом (StartNewCombatAsync),
+	// и сервером (HandleStartBattle) — обе стороны обязаны получить одно и то же.
+	// Чистая функция от character.Weapon.Type + character.WeaponXp[type].
 	public static List<string> DeckFor(CharacterData character)
 	{
-		// Магическая колода — для всего что попадает в тип "staff" (посох).
-		// Подгрузка через character.Weapon (instance), а не Id — на случай
-		// нестандартных weapon-Id (например, легендарные посохи в будущем).
-		if (character?.Weapon?.Type == "staff")
-			return new List<string>(MageDeck);
-		return new List<string>(WarriorDeck);
+		string type = character?.Weapon?.Type;
+		var starter = !string.IsNullOrEmpty(type)
+			&& StarterByWeaponType.TryGetValue(type, out var s)
+			? s : WarriorStarter;
+
+		var deck = new List<string>(starter);
+		if (character != null && !string.IsNullOrEmpty(type)
+			&& UpgradesByWeaponType.TryGetValue(type, out var upgrades))
+		{
+			int level = character.GetWeaponLevel(type);
+			foreach (var u in upgrades)
+			{
+				if (level < u.Level) continue;
+				ReplaceN(deck, u.OldCardId, u.NewCardId, u.Count);
+			}
+		}
+		return deck;
+	}
+
+	// Заменяет первые N вхождений oldId на newId. Стабильность порядка важна
+	// для CSP — обе стороны должны получить идентичный список.
+	private static void ReplaceN(List<string> deck, string oldId, string newId, int count)
+	{
+		for (int i = 0; i < deck.Count && count > 0; i++)
+		{
+			if (deck[i] != oldId) continue;
+			deck[i] = newId;
+			count--;
+		}
 	}
 
 	// =====================================================================

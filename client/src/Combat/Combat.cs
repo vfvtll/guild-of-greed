@@ -121,9 +121,17 @@ public partial class Combat : Control
 		string locationLabel = isTutorial ? "Опушка леса" : GameData.Instance.CurrentLocationName();
 		Log($"[b]=== {locationLabel} — {nodeLabel} ===[/b]");
 		Log($"Противников: {_state.Enemies.Count}");
+		Log($"Уровень {pc.Level} ({pc.Exp}/{pc.XpForNextCharacterLevel()} XP)");
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
 		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");
 		Log($"Оружие: {ItemsDB.DescribeWeapon(pc.Weapon)}");
+		if (pc.Weapon != null)
+		{
+			int wlvl = pc.GetWeaponLevel(pc.Weapon.Type);
+			int wxp  = pc.GetWeaponXp(pc.Weapon.Type);
+			int wnext = pc.XpForNextWeaponLevel(pc.Weapon.Type);
+			Log($"Навык оружия: ур.{wlvl} ({wxp}/{wnext} XP)");
+		}
 		Log($"👕 {pc.Chest?.Name ?? "—"}  ⛑ {pc.Helmet?.Name ?? "—"}");
 		Log($"🧤 {pc.Gloves?.Name ?? "—"}  👢 {pc.Boots?.Name ?? "—"}");
 		Log($"Колода ({_state.Deck.Count} карт): {DeckSummary()}");
@@ -315,6 +323,28 @@ public partial class Combat : Control
 				case BattleEventType.BleedTicked:
 					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
 						Log($"[color=#f55]🩸 {_state.Enemies[ev.EnemyIndex].EnemyName} — кровотечение: −{ev.Amount} HP[/color]");
+					break;
+
+				case BattleEventType.XpGained:
+					Log($"[color=#7fb]+{ev.Amount} опыта[/color]");
+					break;
+
+				case BattleEventType.WeaponXpGained:
+					// Намеренно НЕ логируем — слишком спамно (тикает на каждой
+					// атакующей карте). Игрок видит итог в инвентаре и при
+					// WeaponLevelUp.
+					break;
+
+				case BattleEventType.CharacterLevelUp:
+					Log($"[color=#fa3][b]⭐ Уровень повышен — {ev.Amount}![/b][/color]");
+					Log($"[color=#fa3]+{CharacterData.StatPointsPerLevel} очка на распределение (в инвентаре после боя).[/color]");
+					Input.VibrateHandheld(150);
+					break;
+
+				case BattleEventType.WeaponLevelUp:
+					Log($"[color=#fa3][b]🗡 Оружие прокачено: {ItemsDB.WeaponTypeName(ev.EffectType)} → ур. {ev.Amount}[/b][/color]");
+					Log($"[color=#fa3]Колода обновится перед следующим боем.[/color]");
+					Input.VibrateHandheld(150);
 					break;
 
 				case BattleEventType.BattleEnded:

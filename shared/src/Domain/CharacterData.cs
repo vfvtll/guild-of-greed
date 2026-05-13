@@ -72,6 +72,18 @@ public class CharacterData
 	// сервер просто персистит обновлённый character_json при следующем бое.
 	public Stash Stash = new();
 
+	// === XP оружия (по типу) ===
+	// Ключ — WeaponData.Type ("sword_1h" / "sword_2h" / "knife" / "staff" / ...).
+	// Опыт копится при игре атакующих карт с этим типом в руках. Уровень
+	// оружия читается из XP детерминированно (см. GetWeaponLevel). При
+	// уровне 1+ стартовые карты заменяются на улучшенные (см. CardsDB.DeckFor).
+	public Dictionary<string, int> WeaponXp = new();
+
+	// Нераспределённые очки статов. Копятся +2 за каждый ап персонажа,
+	// игрок тратит вручную из инвентаря (CharacterData.TrySpendStatPoint).
+	// Старые сейвы без поля → 0 (JSON default).
+	public int UnspentStatPoints = 0;
+
 	// === Боевое состояние ===
 	// CurrentHp/CurrentMp — PERSIST между боями: расход здоровья и маны в одном
 	// бою влияет на следующий. Восстановление только при StartRun (новый забег)
@@ -334,5 +346,68 @@ public class CharacterData
 		foreach (var e in Effects)
 			if (e.Type == type) total += e.Amount;
 		return total;
+	}
+
+	// === Уровень и опыт персонажа ===========================================
+	//
+	// Exp — суммарный накопленный опыт за всю жизнь персонажа. Уровень
+	// рассчитывается из Exp через XpForCharacterLevel и наоборот. Стартовый
+	// Level=1.
+	//
+	// Threshold-кривая (накопительно):
+	//   Level 1 → 2: 100 XP
+	//   Level 2 → 3: 200 XP (итого 300)
+	//   ...
+	//   Level N → N+1: 100*N XP
+	// То есть XpForNextCharacterLevel = Level * 100.
+
+	public int XpForNextCharacterLevel() => Level * 100;
+
+	// === Уровень оружия (по типу) ===========================================
+	//
+	// Чтобы паттерн заработал на первом тесте: каждые 50 XP = +1 уровень.
+	// Идентично у клиента и сервера (чистая функция от WeaponXp[type]).
+
+	public int GetWeaponXp(string type)
+	{
+		if (string.IsNullOrEmpty(type) || WeaponXp == null) return 0;
+		return WeaponXp.TryGetValue(type, out int v) ? v : 0;
+	}
+
+	public int GetWeaponLevel(string type) => GetWeaponXp(type) / 50;
+
+	public int XpForNextWeaponLevel(string type)
+		=> (GetWeaponLevel(type) + 1) * 50;
+
+	// === Применение уровня персонажа ========================================
+	//
+	// LevelUpCharacter поднимает Level на 1 и накидывает 2 очка в пул
+	// UnspentStatPoints. Игрок сам распределяет их через TrySpendStatPoint
+	// (вызывается из UI инвентаря).
+	public const int StatPointsPerLevel = 2;
+
+	public void LevelUpCharacter()
+	{
+		Level++;
+		UnspentStatPoints += StatPointsPerLevel;
+	}
+
+	// Потратить 1 очко на указанный стат. Стат — строковый ID ("STR" / "INT" /
+	// "CON" / "WIT" / "MEN" / "DEX"). Возвращает true если очко списано.
+	public bool TrySpendStatPoint(string stat)
+	{
+		if (UnspentStatPoints <= 0 || string.IsNullOrEmpty(stat)) return false;
+		switch (stat.ToUpperInvariant())
+		{
+			case "STR": Str++; break;
+			case "INT": Int++; break;
+			case "CON": Con++; break;
+			case "WIT": Wit++; break;
+			case "MEN": Men++; break;
+			case "DEX": Dex++; break;
+			default: return false;
+		}
+		UnspentStatPoints--;
+		return true;
 	}
 }

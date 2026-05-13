@@ -36,6 +36,11 @@ public enum BattleEventType
 	// И6.2-E: кровотечение от двуручника.
 	BleedStacked,   // +N в стак на враге (после удара)
 	BleedTicked,    // в конце хода врага: N урона от bleed (после вычета HpRegen)
+	// XP / уровни (новая прокачка). Все события эмитятся в CombatEngine.
+	XpGained,           // Amount = XP персонажа, начисленные за смерть врага
+	WeaponXpGained,     // EffectType = WeaponData.Type, Amount = XP оружия
+	CharacterLevelUp,   // Amount = новый Level персонажа
+	WeaponLevelUp,      // EffectType = WeaponData.Type, Amount = новый уровень оружия
 }
 
 public class BattleEvent

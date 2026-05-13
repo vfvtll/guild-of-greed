@@ -257,6 +257,18 @@ public static class ItemsDB
 		return $"{w.Name}: {string.Join(", ", parts)}";
 	}
 
+	// Локализованное имя типа оружия — для лога повышения уровня оружия
+	// и UI инвентаря. Не критично к точности названия; не localized через Lang.T,
+	// потому что shared слой не должен зависеть от клиентского Lang.
+	public static string WeaponTypeName(string type) => type switch
+	{
+		"sword_1h" => "Одноручный меч",
+		"sword_2h" => "Двуручный меч",
+		"knife"    => "Кинжал",
+		"staff"    => "Посох",
+		_          => type ?? "—",
+	};
+
 	// Описание уник.эффекта оружия для тултипов и LogIntro.
 	public static string DescribePassive(WeaponPassive p)
 	{
