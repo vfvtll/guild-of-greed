@@ -339,4 +339,72 @@ public partial class GameData : Node
 	public List<string> CurrentDeckIds() => CardsDB.DeckFor(Character);
 
 	public string CurrentLocationName() => LocationNames[SelectedLocation];
+
+	// === Город: магазин / стэш =========================================
+	//
+	// ВАЖНО: изменения чисто клиентские. На сервер уходят при следующем
+	// сохранении персонажа — а это происходит только в HandleBattleAction
+	// при завершении боя. Если игрок зайдёт в город, накупит/продаст и
+	// вылетит без боя — изменения потеряются. Та же модель, что и для
+	// equip/unequip; правильный фикс — отдельный RPC PushCharacter.
+
+	// Купить 1 единицу базового стакаемого предмета (зелья). Возвращает
+	// (ok, errorReason). errorReason: "no_money" / "no_space" / "not_for_sale".
+	public (bool ok, string reason) BuyOne(string itemId)
+	{
+		if (Character == null) return (false, "no_character");
+		var price = ShopDB.BuyPrice(itemId);
+		if (price == null) return (false, "not_for_sale");
+		if (Character.Inventory.Money < price.Value) return (false, "no_money");
+
+		int maxStack = PotionsDB.Get(itemId) != null ? 9 : 1;
+		// Симулируем добавление: TryAdd либо положит всё, либо вернёт false.
+		// Money не списываем до успешного добавления.
+		long moneyBefore = Character.Inventory.Money;
+		if (!Character.Inventory.TryAdd(itemId, 1, maxStack))
+			return (false, "no_space");
+		Character.Inventory.Money = moneyBefore - price.Value;
+		return (true, null);
+	}
+
+	// Продать слот инвентаря целиком. Возвращает реальную сумму, добавленную
+	// в кошель (0 если не удалось).
+	public long SellSlot(int slotIndex)
+	{
+		if (Character == null) return 0;
+		var slots = Character.Inventory.Slots;
+		if (slotIndex < 0 || slotIndex >= slots.Count) return 0;
+		var stack = slots[slotIndex];
+		long price = ShopDB.SellPriceForStack(stack);
+		if (price <= 0) return 0;
+		Character.Inventory.RemoveAt(slotIndex);
+		Character.Inventory.Money += price;
+		return price;
+	}
+
+	// Переложить слот целиком из инвентаря в стэш. False — если стэш полон.
+	public bool DepositToStash(int invSlotIndex)
+	{
+		if (Character == null) return false;
+		var slots = Character.Inventory.Slots;
+		if (invSlotIndex < 0 || invSlotIndex >= slots.Count) return false;
+		if (Character.Stash.IsFull) return false;
+		var stack = slots[invSlotIndex];
+		Character.Inventory.RemoveAt(invSlotIndex);
+		Character.Stash.TryAddStack(stack);
+		return true;
+	}
+
+	// Переложить слот целиком из стэша в инвентарь. False — если инвентарь полон.
+	public bool WithdrawFromStash(int stashSlotIndex)
+	{
+		if (Character == null) return false;
+		var slots = Character.Stash.Slots;
+		if (stashSlotIndex < 0 || stashSlotIndex >= slots.Count) return false;
+		if (Character.Inventory.IsFull) return false;
+		var stack = slots[stashSlotIndex];
+		Character.Stash.RemoveAt(stashSlotIndex);
+		Character.Inventory.TryAddStack(stack);
+		return true;
+	}
 }

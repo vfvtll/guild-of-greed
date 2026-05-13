@@ -106,6 +106,15 @@ public class Inventory
 		return true;
 	}
 
+	// Положить готовый стак "как есть" — для перемещений из Stash в Inventory:
+	// сохраняет ссылку на тот же InventoryStack (важно для instance-предметов).
+	public bool TryAddStack(InventoryStack stack)
+	{
+		if (stack == null || IsFull) return false;
+		Slots.Add(stack);
+		return true;
+	}
+
 	// Удалить count единиц стакаемого предмета по ItemId. Не трогает instance-слоты
 	// (потому что они уникальны и Id для них — лишь lookup-метка, не ключ удаления).
 	public int Remove(string itemId, int count = 1)

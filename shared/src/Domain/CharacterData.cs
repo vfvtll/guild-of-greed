@@ -65,6 +65,13 @@ public class CharacterData
 	// === Инвентарь (с лимитом по слотам) ===
 	public Inventory Inventory = new();
 
+	// === Городской стэш ===
+	// Хранится в JSON. Старые сейвы без поля → new Stash() default
+	// (System.Text.Json не затирает поле, если ключа в JSON нет).
+	// Перенос items из Inventory.Stash и обратно — в GameData / клиентский UI;
+	// сервер просто персистит обновлённый character_json при следующем бое.
+	public Stash Stash = new();
+
 	// === Боевое состояние ===
 	// CurrentHp/CurrentMp — PERSIST между боями: расход здоровья и маны в одном
 	// бою влияет на следующий. Восстановление только при StartRun (новый забег)

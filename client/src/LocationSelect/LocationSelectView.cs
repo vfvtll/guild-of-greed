@@ -15,6 +15,7 @@ public partial class LocationSelectView : Control
 {
 	[Signal] public delegate void LocationChosenEventHandler(int index);
 	[Signal] public delegate void ResetCharacterRequestedEventHandler();
+	[Signal] public delegate void TownRequestedEventHandler();
 
 	private InventoryOverlay _inventoryOverlay;
 
@@ -40,6 +41,11 @@ public partial class LocationSelectView : Control
 		UIStyle.StyleButton(inventoryBtn);
 		inventoryBtn.Pressed += OnInventoryPressed;
 		top.AddChild(inventoryBtn);
+
+		var townBtn = new Button { Text = "🏛 Город" };
+		UIStyle.StyleButton(townBtn);
+		townBtn.Pressed += () => EmitSignal(SignalName.TownRequested);
+		top.AddChild(townBtn);
 
 		var resetBtn = new Button { Text = "👤 Новый персонаж" };
 		UIStyle.StyleButton(resetBtn);

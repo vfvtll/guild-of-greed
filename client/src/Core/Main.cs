@@ -361,6 +361,16 @@ public partial class Main : Control
 		var view = new LocationSelectView();
 		view.LocationChosen += OnLocationChosen;
 		view.ResetCharacterRequested += OnResetCharacterFromGame;
+		view.TownRequested += ShowTown;
+		AddChild(view);
+	}
+
+	private void ShowTown()
+	{
+		GameData.Instance.EndRun();
+		ClearContent();
+		var view = new TownView();
+		view.LeaveTownRequested += ShowLocationSelect;
 		AddChild(view);
 	}
 

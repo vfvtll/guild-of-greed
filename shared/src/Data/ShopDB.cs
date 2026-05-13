@@ -1,0 +1,110 @@
+using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+
+namespace GuildOfGreed.Shared.Data;
+
+// Городская лавка: статичный ассортимент на продажу + единая логика цен
+// для покупки/продажи. Все цены — в медяках (см. Currency).
+//
+// MVP: магазин торгует базовыми зельями. Шоп-генерация оружия/брони с роллом
+// аффиксов — следующий инкремент. Пока в Stock только потёки.
+//
+// Покупка: BuyPrice(id) — фиксированная цена базы.
+// Продажа: SellPriceForStack(stack) — учитывает редкость instance-предметов;
+//          возвращает 40% от полной "базовой" цены того же тира.
+public static class ShopDB
+{
+	// Множитель выкупа: лавка покупает у игрока за 40% полной цены.
+	public const float SellRatio = 0.4f;
+
+	// Стартовый ассортимент. Все — стакаемые зелья, без ограничения по числу
+	// покупок (бесконечный запас). Каждая запись просто живёт в порядке списка.
+	public static readonly List<string> Stock = new()
+	{
+		"potion_hp_small",
+		"potion_mp_small",
+		"potion_hp_medium",
+		"potion_mp_medium",
+		"potion_strength",
+		"potion_focus",
+		"potion_full",
+	};
+
+	// === Базовые таблицы цен ===========================================
+
+	// Зелья: фиксированные цены, чтобы экономика читалась с одного взгляда.
+	private static readonly Dictionary<string, long> PotionPrices = new()
+	{
+		["potion_hp_small"]  = 15,
+		["potion_mp_small"]  = 15,
+		["potion_hp_medium"] = 60,
+		["potion_mp_medium"] = 60,
+		["potion_strength"]  = 80,
+		["potion_focus"]     = 80,
+		["potion_full"]      = 250,
+	};
+
+	// Оружие/броня/щит: цена по редкости (instance — катался ItemGenerator).
+	// Числа подобраны так, чтобы Legendary стоила < 1 золота (потолок раннего game).
+	private static long PriceByRarity(ItemRarity r) => r switch
+	{
+		ItemRarity.Common    => 30,
+		ItemRarity.Uncommon  => 90,
+		ItemRarity.Rare      => 300,
+		ItemRarity.Heroic    => 900,
+		ItemRarity.Epic      => 2500,
+		ItemRarity.Legendary => 8000,
+		_                    => 30,
+	};
+
+	// === Покупка ========================================================
+
+	// Цена покупки по baseId. null для предметов которые лавка не продаёт.
+	public static long? BuyPrice(string itemId)
+	{
+		if (PotionPrices.TryGetValue(itemId, out var p)) return p;
+		return null;
+	}
+
+	// === Продажа ========================================================
+
+	// Цена продажи стака из инвентаря. Учитывает:
+	//   - стакаемые baseId — по PotionPrices (если есть) × SellRatio × count;
+	//   - instance Weapon/Armor/Shield — по rarity × SellRatio;
+	//   - неизвестные base-id — 1м (чтобы лавка никогда не давала 0).
+	public static long SellPriceForStack(InventoryStack stack)
+	{
+		if (stack == null) return 0;
+
+		if (stack.WeaponInstance != null)
+			return Floor(PriceByRarity(stack.WeaponInstance.Rarity) * SellRatio);
+		if (stack.ArmorInstance != null)
+			return Floor(PriceByRarity(stack.ArmorInstance.Rarity) * SellRatio);
+		if (stack.ShieldInstance != null)
+			return Floor(PriceByRarity(stack.ShieldInstance.Rarity) * SellRatio);
+
+		// Стакаемое: считаем за весь стак.
+		long unit;
+		if (PotionPrices.TryGetValue(stack.ItemId, out var p)) unit = p;
+		else
+		{
+			// База без аффиксов (например, "sword_1h_low" в сейв-блобе) — оцениваем
+			// по rarity самой базы из ItemsDB.
+			var w = ItemsDB.GetWeapon(stack.ItemId);
+			if (w != null) unit = PriceByRarity(w.Rarity);
+			else
+			{
+				var a = ItemsDB.GetArmor(stack.ItemId);
+				if (a != null) unit = PriceByRarity(a.Rarity);
+				else
+				{
+					var s = ShieldsDB.Get(stack.ItemId);
+					unit = s != null ? PriceByRarity(s.Rarity) : 1;
+				}
+			}
+		}
+		return System.Math.Max(1, Floor(unit * SellRatio)) * stack.Count;
+	}
+
+	private static long Floor(float v) => (long)System.Math.Floor(v);
+}
