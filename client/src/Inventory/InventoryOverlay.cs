@@ -30,6 +30,12 @@ public partial class InventoryOverlay : Control
 	// Combat выставляет ReadOnly = !_combatOver перед AddChild.
 	public bool ReadOnly = false;
 
+	// Во время забега (CurrentRun != null) экипировку и распределение очков
+	// статов менять нельзя — сервер всё равно отвергнет push с такими
+	// изменениями. Зелья и сортировка инвентаря разрешены.
+	// Выставляется вызывающим (MapView/Combat) на основе GameData.CurrentRun.
+	public bool RunLocked = false;
+
 	private Label _capacityLabel;
 	private Label _statusLabel;
 	private Label _readOnlyHint;
@@ -159,22 +165,22 @@ public partial class InventoryOverlay : Control
 		_statSpendPanel.Visible = hasPoints;
 		if (!hasPoints) return;
 
-		_statPointsAvailLabel.Text =
-			ReadOnly
-				? $"⭐ Очков на распределение: {ch.UnspentStatPoints} (доступно после боя)"
-				: $"⭐ Очков на распределение: {ch.UnspentStatPoints} — выберите стат для +1";
+		string hint = ReadOnly ? " (доступно после боя)"
+			: RunLocked ? " (доступно в городе)"
+			: " — выберите стат для +1";
+		_statPointsAvailLabel.Text = $"⭐ Очков на распределение: {ch.UnspentStatPoints}{hint}";
 
 		int[] vals = { ch.Str, ch.Int, ch.Con, ch.Wit, ch.Men, ch.Dex };
 		for (int i = 0; i < 6; i++)
 		{
 			_statSpendButtons[i].Text = $"+1 {StatIds[i]} ({vals[i]})";
-			_statSpendButtons[i].Disabled = ReadOnly;
+			_statSpendButtons[i].Disabled = ReadOnly || RunLocked;
 		}
 	}
 
 	private void OnSpendStatPressed(string stat)
 	{
-		if (BlockedByReadOnly()) return;
+		if (BlockedForCharChange()) return;
 		var ch = GameData.Instance.Character;
 		if (ch == null) return;
 		if (!ch.TrySpendStatPoint(stat))
@@ -256,7 +262,7 @@ public partial class InventoryOverlay : Control
 
 	private void UnequipWeapon()
 	{
-		if (BlockedByReadOnly()) return;
+		if (BlockedForCharChange()) return;
 		if (!GameData.Instance.UnequipWeapon())
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Оружие снято.", error: false);
@@ -265,7 +271,7 @@ public partial class InventoryOverlay : Control
 
 	private void UnequipOffhand()
 	{
-		if (BlockedByReadOnly()) return;
+		if (BlockedForCharChange()) return;
 		if (!GameData.Instance.UnequipOffhand())
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Второе оружие снято.", error: false);
@@ -274,7 +280,7 @@ public partial class InventoryOverlay : Control
 
 	private void UnequipShield()
 	{
-		if (BlockedByReadOnly()) return;
+		if (BlockedForCharChange()) return;
 		if (!GameData.Instance.UnequipShield())
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Щит снят.", error: false);
@@ -283,7 +289,7 @@ public partial class InventoryOverlay : Control
 
 	private void UnequipArmor(ArmorSlot slot)
 	{
-		if (BlockedByReadOnly()) return;
+		if (BlockedForCharChange()) return;
 		if (!GameData.Instance.UnequipSlot(slot))
 			SetStatus("Не получилось снять — инвентарь полон.", error: true);
 		else SetStatus("Снято в инвентарь.", error: false);
@@ -292,12 +298,14 @@ public partial class InventoryOverlay : Control
 
 	private void UseInventorySlot(int slotIndex)
 	{
+		// Бой блокирует ВСЁ (зелья — через панель игрока), забег блокирует
+		// только смену экипировки — зелья из инвентаря разрешены.
 		if (BlockedByReadOnly()) return;
 		var slots = GameData.Instance.Character?.Inventory?.Slots;
 		if (slots == null || slotIndex < 0 || slotIndex >= slots.Count) return;
 		var st = slots[slotIndex];
 
-		// Зелье — пьём. Только для стак-предметов: instance не бывает зельем.
+		// Зелье — пьём (доступно и в подземелье).
 		if (st.WeaponInstance == null && st.ArmorInstance == null
 			&& PotionsDB.Get(st.ItemId) != null)
 		{
@@ -308,7 +316,12 @@ public partial class InventoryOverlay : Control
 			return;
 		}
 
-		// Оружие/броня — надеваем.
+		// Оружие/броня — надеваем. В подземелье запрещено.
+		if (RunLocked)
+		{
+			SetStatus("В подземелье нельзя менять экипировку. Выйдите в город.", error: true);
+			return;
+		}
 		if (GameData.Instance.EquipFromInventory(slotIndex))
 			SetStatus("Надето.", error: false);
 		else SetStatus("Не удалось надеть.", error: true);
@@ -322,6 +335,23 @@ public partial class InventoryOverlay : Control
 		if (!ReadOnly) return false;
 		SetStatus("Во время боя нельзя менять экипировку или пить зелья отсюда.", error: true);
 		return true;
+	}
+
+	// Блокирует ТОЛЬКО изменения, которые сервер откажется применить во время
+	// забега: экипировка и распределение очков статов. Зелья остаются доступными.
+	private bool BlockedForCharChange()
+	{
+		if (ReadOnly)
+		{
+			SetStatus("Во время боя нельзя менять экипировку или пить зелья отсюда.", error: true);
+			return true;
+		}
+		if (RunLocked)
+		{
+			SetStatus("В подземелье нельзя менять экипировку и распределять очки. Выйдите в город.", error: true);
+			return true;
+		}
+		return false;
 	}
 
 	private void SetStatus(string msg, bool error)

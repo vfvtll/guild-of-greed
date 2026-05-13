@@ -33,13 +33,16 @@ public static class MapGenerator
 		new() { Rows = 6, Paths = 3, Cols = 5 }, // Логово босса — длинное.
 	};
 
-	public static RunMap Generate(int locationIndex)
+	// Главный API — детерминированная генерация из seed. Клиент и сервер
+	// получают seed из StartRunResponse и оба строят идентичную карту.
+	public static RunMap Generate(int locationIndex, int seed)
 	{
+		var rng = new RandomSource(seed);
 		var spec = SpecFor(locationIndex);
 		var map = new RunMap
 		{
 			LocationIndex = locationIndex,
-			Seed = Rng.Next(int.MaxValue),
+			Seed = seed,
 			Rows = spec.Rows,
 		};
 
@@ -50,14 +53,14 @@ public static class MapGenerator
 		int lastNormalRow = spec.Rows - 1;
 		for (int p = 0; p < spec.Paths; p++)
 		{
-			int col = Rng.Next(spec.Cols);
+			int col = rng.Next(spec.Cols);
 			int prevId = -1;
 
 			for (int row = 1; row <= lastNormalRow; row++)
 			{
 				if (row > 1)
 				{
-					int delta = Rng.Range(-1, 2); // -1, 0, +1
+					int delta = rng.Range(-1, 2); // -1, 0, +1
 					col = Clamp(col + delta, 0, spec.Cols - 1);
 				}
 				int id = EnsureNode(map, grid, row, col, MapNodeType.Battle);

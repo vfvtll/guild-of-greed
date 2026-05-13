@@ -108,6 +108,10 @@ public class StartBattleRequest : ClientMessage
 	[Key(1)] public int NodeType;       // (int)MapNodeType
 	// Key(2) был LockedDeck — удалён в protocol v12. Сервер сам строит колоду
 	// из своего _runSnapshot (см. StartRunRequest); клиент колоду не присылает.
+	// Id узла карты в текущем забеге — нужен серверу для детерминированного
+	// вывода битвенного seed'а из (runSeed, nodeId). -1 для туториал-боёв
+	// и любых случаев вне забега.
+	[Key(3)] public int NodeId = -1;
 }
 
 // Одно действие игрока в активном бою. Маппится на BattleAction в shared/Combat.
@@ -329,6 +333,10 @@ public class StartRunResponse : ServerMessage
 {
 	[Key(0)] public bool Success;
 	[Key(1)] public string Error;
+	// Сид забега — определяет геометрию RunMap и все боевые RNG-потоки.
+	// Клиент использует его в MapGenerator.Generate. Все StartBattleRequest
+	// внутри забега получают на сервере battleSeed = deriveFrom(RunSeed, NodeId).
+	[Key(2)] public int RunSeed;
 }
 
 [MessagePackObject]

@@ -68,11 +68,14 @@ public partial class Combat : Control
 		var node = GameData.Instance.CurrentRun?.CurrentNode();
 		int locationIndex = LocationOverride ?? GameData.Instance.SelectedLocation;
 		int nodeType = NodeTypeOverride ?? (int)(node?.Type ?? MapNodeType.Battle);
+		// nodeId нужен серверу для вывода детерминированного battleSeed из
+		// (runSeed, nodeId). Туториал (CurrentRun == null) — отправляем -1.
+		int nodeId = node?.Id ?? -1;
 
 		BattleStartedResponse resp;
 		try
 		{
-			resp = await Net.StartBattleAsync(locationIndex, nodeType);
+			resp = await Net.StartBattleAsync(locationIndex, nodeType, nodeId);
 		}
 		catch (ServerException ex)
 		{
@@ -429,7 +432,11 @@ public partial class Combat : Control
 	{
 		if (_inventoryOverlay != null) return;
 		bool combatOver = _state != null && _state.CombatOver;
-		_inventoryOverlay = new InventoryOverlay { ReadOnly = !combatOver };
+		// В бою (CurrentRun!=null) — экипировка заморожена даже после конца боя
+		// (выход из подземелья = выход из забега). Зелья и stat-points раздаются
+		// только в городе.
+		bool inRun = GameData.Instance.CurrentRun != null;
+		_inventoryOverlay = new InventoryOverlay { ReadOnly = !combatOver, RunLocked = inRun };
 		_inventoryOverlay.Closed += OnInventoryClosed;
 		AddChild(_inventoryOverlay);
 	}

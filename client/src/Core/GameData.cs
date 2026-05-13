@@ -136,15 +136,17 @@ public partial class GameData : Node
 	// Здесь делаем полный restore HP/MP. Между узлами одного забега HP/MP
 	// переносятся (carry over), но вход в новое подземелье = "вы отдохнули
 	// в хабе перед заходом".
-	public void StartRun(int locationIndex)
+	// Старт забега: сид приходит ОТ СЕРВЕРА (StartRunResponse.RunSeed) —
+	// один на всё подземелье, из него генерится карта и выводятся боевые
+	// RNG-потоки. Карта и колода детерминированы от seed + character_snapshot.
+	public void StartRun(int locationIndex, int seed)
 	{
 		if (locationIndex < 0 || locationIndex >= LocationNames.Length) locationIndex = 0;
 		SelectedLocation = locationIndex;
-		Character?.ResetForCombat();
-		CurrentRun = MapGenerator.Generate(locationIndex);
-		// Замораживаем колоду на забег. Все бои внутри run будут использовать
-		// эту копию — даже после ап оружия мид-ран карты в стартовой раздаче
-		// не меняются. Пересчёт колоды произойдёт только при следующем StartRun.
+		Character?.ResetForCombat();   // idempotent — основной reset уже был перед PushCharacter
+		CurrentRun = MapGenerator.Generate(locationIndex, seed);
+		// Замораживаем колоду на забег. Все бои внутри run используют эту копию.
+		// Пересчёт — только при следующем StartRun.
 		CurrentRun.LockedDeck = CardsDB.DeckFor(Character);
 	}
 

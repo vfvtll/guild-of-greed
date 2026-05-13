@@ -43,6 +43,9 @@ public class Session
 	// (CardsDB.DeckFor) во всех боях внутри run. Мутации мид-ран (например
 	// ап оружия) на колоду не влияют. null = вне забега (туториал/хаб).
 	private CharacterData _runSnapshot;
+	// Сид забега. Из него генерится карта и выводятся все боевые seed'ы
+	// (deriveBattleSeed). 0 = вне забега; ставится в HandleStartRun.
+	private int _runSeed;
 
 	public Session(TcpClient tcp, Stream stream, AccountStore store, string peer, CancellationToken shutdown)
 	{
@@ -313,7 +316,11 @@ public class Session
 		// персонажа. Клиент колоду не присылает.
 		var charForDeck = _runSnapshot ?? character;
 		var deck = CardsDB.DeckFor(charForDeck);
-		int seed = _serverRng.Next();
+		// Сид боя: в run выводится детерминированно из (runSeed, nodeId) — один
+		// runSeed на всё подземелье. Вне забега (туториал) — свежий из _serverRng.
+		int seed = _runSeed != 0
+			? DeriveBattleSeed(_runSeed, r.NodeId)
+			: _serverRng.Next();
 
 		_battle = new BattleSession(character, enemies, deck, seed, nodeType);
 		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
@@ -423,7 +430,17 @@ public class Session
 			return new PushCharacterResponse { Success = false, Error = "id_mismatch" };
 		}
 
-		// TODO: серверная валидация статов/инвентаря/денег (anti-cheat). Сейчас
+		// Запрет менять экипировку И базовые статы во время забега. Лут/HP/MP/XP/
+		// инвентарь меняться могут (бой, зелья); equipment + статы — нет.
+		if (_runSnapshot != null)
+		{
+			if (!EquipmentMatches(_runSnapshot, ch))
+				return new PushCharacterResponse { Success = false, Error = "equipment_locked_in_run" };
+			if (!StatsMatch(_runSnapshot, ch))
+				return new PushCharacterResponse { Success = false, Error = "stats_locked_in_run" };
+		}
+
+		// TODO: серверная валидация инвентаря/денег (anti-cheat). Сейчас
 		// доверяем JSON от клиента — та же модель что у combat-CSP (Confirmed=true).
 		if (!_store.UpdateCharacter(_accountId.Value, ch))
 		{
@@ -431,6 +448,32 @@ public class Session
 			return new PushCharacterResponse { Success = false, Error = "save_failed" };
 		}
 		return new PushCharacterResponse { Success = true };
+	}
+
+	// Сравнение всех слотов экипировки. Простой JSON-roundtrip — учитывает
+	// и базовый Id, и рандомные аффиксы/редкость instance-предметов.
+	private static bool EquipmentMatches(CharacterData a, CharacterData b)
+	{
+		string sa = System.Text.Json.JsonSerializer.Serialize(new
+		{
+			a.Weapon, a.Offhand, a.Shield, a.Chest, a.Helmet, a.Gloves, a.Boots,
+			a.Amulet, a.Ring1, a.Ring2,
+		}, CharJsonOpts);
+		string sb = System.Text.Json.JsonSerializer.Serialize(new
+		{
+			b.Weapon, b.Offhand, b.Shield, b.Chest, b.Helmet, b.Gloves, b.Boots,
+			b.Amulet, b.Ring1, b.Ring2,
+		}, CharJsonOpts);
+		return sa == sb;
+	}
+
+	// Базовые статы тоже заморожены — игрок не может потратить очки мид-ран.
+	// UnspentStatPoints может расти (level-up в бою) — это нормально, проверяется
+	// только что 6 статов не изменились.
+	private static bool StatsMatch(CharacterData a, CharacterData b)
+	{
+		return a.Str == b.Str && a.Int == b.Int && a.Con == b.Con
+			&& a.Wit == b.Wit && a.Men == b.Men && a.Dex == b.Dex;
 	}
 
 	private ServerMessage HandleStartRun(StartRunRequest r)
@@ -445,15 +488,34 @@ public class Session
 		var json = System.Text.Json.JsonSerializer.Serialize(ch, CharJsonOpts);
 		_runSnapshot = System.Text.Json.JsonSerializer.Deserialize<CharacterData>(json, CharJsonOpts);
 
-		Logger.Info($"[{_peer}] run started loc={r.LocationIndex} snapshot weapon={_runSnapshot.Weapon?.Type ?? "(none)"}");
-		return new StartRunResponse { Success = true };
+		// Сид забега. Гарантируем ненулевое значение (0 — sentinel "вне забега").
+		do { _runSeed = _serverRng.Next(); } while (_runSeed == 0);
+
+		Logger.Info($"[{_peer}] run started loc={r.LocationIndex} seed={_runSeed} " +
+			$"snapshot weapon={_runSnapshot.Weapon?.Type ?? "(none)"}");
+		return new StartRunResponse { Success = true, RunSeed = _runSeed };
 	}
 
 	private ServerMessage HandleEndRun(EndRunRequest r)
 	{
 		_runSnapshot = null;
+		_runSeed = 0;
 		Logger.Info($"[{_peer}] run ended");
 		return new EndRunResponse { Success = true };
+	}
+
+	// Детерминированный вывод seed'а боя из runSeed + nodeId. Простая mix-функция
+	// (multiplicative hash с золотым отношением 0x9E3779B9). Достаточно для
+	// разнообразия RNG-потоков между узлами одного забега. Server-only: клиент
+	// получает готовое значение в BattleStartedResponse.
+	private static int DeriveBattleSeed(int runSeed, int nodeId)
+	{
+		unchecked
+		{
+			uint h = (uint)runSeed * 0x9E3779B9u;
+			h ^= (uint)nodeId + 0x9E3779B9u + (h << 6) + (h >> 2);
+			return (int)h;
+		}
 	}
 
 	private ServerMessage HandleDeleteCharacter(DeleteCharacterRequest r)

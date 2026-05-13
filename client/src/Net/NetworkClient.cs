@@ -135,11 +135,12 @@ public class NetworkClient : IDisposable
 		=> ExchangeAsync<DeleteCharacterResponse>(new DeleteCharacterRequest { CharacterId = characterId }, ct);
 
 	public Task<BattleStartedResponse> StartBattleAsync(int locationIndex, int nodeType,
-		CancellationToken ct = default)
+		int nodeId = -1, CancellationToken ct = default)
 		=> ExchangeAsync<BattleStartedResponse>(new StartBattleRequest
 		{
 			LocationIndex = locationIndex,
 			NodeType = nodeType,
+			NodeId = nodeId,
 		}, ct);
 
 	public Task<PushCharacterResponse> PushCharacterAsync(string characterJson, CancellationToken ct = default)

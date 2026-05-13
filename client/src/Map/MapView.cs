@@ -207,7 +207,10 @@ public partial class MapView : Control
 	private void OnInventoryPressed()
 	{
 		if (_inventoryOverlay != null) return;
-		_inventoryOverlay = new InventoryOverlay { ReadOnly = false };
+		// Открыто с карты подземелья — экипировку менять нельзя, зелья и
+		// перенос между Inventory/Stash разрешены (стэш всё равно не доступен
+		// в MapView — только из города).
+		_inventoryOverlay = new InventoryOverlay { ReadOnly = false, RunLocked = true };
 		_inventoryOverlay.Closed += OnInventoryClosed;
 		AddChild(_inventoryOverlay);
 	}

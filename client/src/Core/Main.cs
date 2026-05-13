@@ -398,14 +398,31 @@ public partial class Main : Control
 
 	private async void OnLocationChosen(int index)
 	{
-		GameData.Instance.StartRun(index);   // local: ResetForCombat + map gen + LockedDeck
-		// Сначала пушим Character с обновлёнными HP/MP в БД, ПОТОМ просим сервер
-		// снять run-snapshot. Иначе снэпшот возьмёт старые HP и при старте боя
-		// у сервера будут одни значения, у клиента — другие (CSP-десинк).
+		// 1. Локально восстанавливаем HP/MP — забег начинается отдохнувшим.
+		GameData.Instance.Character?.ResetForCombat();
+
+		// 2. Пушим обновлённый Character в БД ДО того как сервер снимет run-snapshot.
 		try { await GameData.Instance.PushCharacterAndAwaitAsync(); }
 		catch (System.Exception ex) { GD.PrintErr($"OnLocationChosen push error: {ex.Message}"); }
-		try { await _net.StartRunAsync(index); }
-		catch (System.Exception ex) { GD.PrintErr($"StartRun network error: {ex.Message}"); }
+
+		// 3. Сервер генерит runSeed (один на всё подземелье) и снимает character snapshot.
+		StartRunResponse resp;
+		try { resp = await _net.StartRunAsync(index); }
+		catch (System.Exception ex)
+		{
+			GD.PrintErr($"StartRun network error: {ex.Message}");
+			ShowLocationSelect();
+			return;
+		}
+		if (!resp.Success)
+		{
+			GD.PrintErr($"StartRun failed: {resp.Error}");
+			ShowLocationSelect();
+			return;
+		}
+
+		// 4. Локально строим карту и фиксируем колоду по серверному seed'у.
+		GameData.Instance.StartRun(index, resp.RunSeed);
 		ShowMap();
 	}
 
