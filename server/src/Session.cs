@@ -310,21 +310,33 @@ public class Session
 
 
 		var nodeType = (MapNodeType)r.NodeType;
-		var enemies = EnemyData.SpawnFor(r.LocationIndex, nodeType);
-		// Колода — авторитетно с сервера. В run-режиме строим из _runSnapshot
-		// (зафиксированного на StartRun), в туториал-режиме — из живого
-		// персонажа. Клиент колоду не присылает.
-		var charForDeck = _runSnapshot ?? character;
-		var deck = CardsDB.DeckFor(charForDeck);
 		// Сид боя: в run выводится детерминированно из (runSeed, nodeId) — один
 		// runSeed на всё подземелье. Вне забега (туториал) — свежий из _serverRng.
 		int seed = _runSeed != 0
 			? DeriveBattleSeed(_runSeed, r.NodeId)
 			: _serverRng.Next();
+		// Спавн врагов от seed'а — обе стороны (клиент и сервер) получают
+		// идентичный пул через детерминированный RandomSource.
+		var enemies = EnemyData.SpawnFor(r.LocationIndex, nodeType, seed);
+		// Колода — авторитетно с сервера. В run-режиме строим из _runSnapshot
+		// (зафиксированного на StartRun), в туториал-режиме — из живого
+		// персонажа. Клиент колоду не присылает.
+		var charForDeck = _runSnapshot ?? character;
+		var deck = CardsDB.DeckFor(charForDeck);
+		// Run-эффекты подземелья — приходят от клиента (трастуются как и
+		// остальная мета-прогрессия). Резолвим в объекты RunEffect через DB,
+		// неизвестные ID просто отбрасываем.
+		var runEffects = new System.Collections.Generic.List<RunEffect>();
+		if (r.ActiveRunEffects != null)
+			foreach (var id in r.ActiveRunEffects)
+			{
+				var eff = RunEffectsDB.Get(id);
+				if (eff != null) runEffects.Add(eff);
+			}
 
-		_battle = new BattleSession(character, enemies, deck, seed, nodeType);
+		_battle = new BattleSession(character, enemies, deck, seed, nodeType, runEffects);
 		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
-			$"seed={seed} enemies={enemies.Count}");
+			$"seed={seed} enemies={enemies.Count} effects={runEffects.Count}");
 
 		return new BattleStartedResponse { Success = true, Seed = seed };
 	}

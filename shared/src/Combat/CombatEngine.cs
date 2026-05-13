@@ -50,7 +50,8 @@ public static class CombatEngine
 		CharacterData player,
 		List<EnemyData> enemies,
 		List<string> deckSource,
-		int seed)
+		int seed,
+		List<RunEffect> runEffects = null)
 	{
 		var state = new BattleState
 		{
@@ -58,6 +59,7 @@ public static class CombatEngine
 			Enemies = enemies,
 			Seed = seed,
 			Rng = new RandomSource(seed),
+			RunEffects = runEffects ?? new List<RunEffect>(),
 		};
 
 		// Подготовка к бою: HP/MP переносятся из прошлого боя (persist между
@@ -119,6 +121,11 @@ public static class CombatEngine
 		if (state.CombatOver) return new List<BattleEvent>();
 		var events = new List<BattleEvent>();
 
+		// 0. Тик кровотечения игрока (зеркально enemy bleed в EnemyTurn).
+		//    Игнорирует Block/PhysDef — урон идёт прямо в HP.
+		TickPlayerBleed(state, events);
+		if (state.CombatOver) return events;
+
 		// 1. Сброс руки в discard.
 		foreach (var cardId in state.Hand)
 		{
@@ -165,6 +172,11 @@ public static class CombatEngine
 		state.TurnCount++;
 		// Reset цепочки маг.заклинаний (пассив посоха) на каждый новый ход.
 		state.SpellsCastThisTurn = 0;
+
+		// Run-эффекты "bleed_all_per_turn": в начале каждого хода добавляют
+		// Magnitude кровотечения всем живым (включая игрока). Bleed тикает по
+		// существующему механизму — у игрока в EndTurn, у врагов в EnemyTurn.
+		ApplyBleedFromRunEffects(state, events);
 
 		if (regenMp)
 		{
@@ -272,7 +284,7 @@ public static class CombatEngine
 				case "attack_magic":
 				{
 					bool isPhys = intent.Type != "attack_magic";
-					ApplyDamageToPlayer(state, events, intent.Amount, intent.Name, isPhys, idx);
+					ApplyDamageToPlayer(state, events, intent.Amount, intent.Name, isPhys, idx, intent.WeaponType);
 					if (state.Player.CurrentHp <= 0)
 					{
 						events.Add(new BattleEvent { Type = BattleEventType.PlayerDied });
@@ -315,6 +327,83 @@ public static class CombatEngine
 		// AllEnemiesDead будет проверен на следующем шаге BeginPlayerTurn.
 	}
 
+	// Run-эффекты bleed_all_per_turn: добавить Magnitude к BleedStack всех
+	// живых сторон. Эмитится BleedStacked для UI.
+	private static void ApplyBleedFromRunEffects(BattleState state, List<BattleEvent> events)
+	{
+		if (state.RunEffects == null) return;
+		foreach (var eff in state.RunEffects)
+		{
+			if (eff.Kind != "bleed_all_per_turn" || eff.Magnitude <= 0) continue;
+			if (state.Player.CurrentHp > 0)
+			{
+				state.Player.BleedStack += eff.Magnitude;
+				events.Add(new BattleEvent
+				{
+					Type = BattleEventType.BleedStacked,
+					EnemyIndex = -1,   // игрок
+					Amount = eff.Magnitude,
+				});
+			}
+			for (int i = 0; i < state.Enemies.Count; i++)
+			{
+				if (state.Enemies[i].CurrentHp <= 0) continue;
+				state.Enemies[i].BleedStack += eff.Magnitude;
+				events.Add(new BattleEvent
+				{
+					Type = BattleEventType.BleedStacked,
+					EnemyIndex = i,
+					Amount = eff.Magnitude,
+				});
+			}
+		}
+	}
+
+	// Тик кровотечения игрока в начале EndTurn. Формула как у врагов:
+	// HpRegen сначала съедает часть стака, остаток уходит в HP. Stack
+	// сохраняется (не сбрасывается). При смерти — EndBattle(victory:false).
+	private static void TickPlayerBleed(BattleState state, List<BattleEvent> events)
+	{
+		var p = state.Player;
+		if (p == null || p.BleedStack <= 0) return;
+		p.BleedStack = Math.Max(0, p.BleedStack - p.HpRegen());
+		if (p.BleedStack <= 0) return;
+		int dmg = Math.Min(p.BleedStack, p.CurrentHp);
+		p.CurrentHp -= dmg;
+		events.Add(new BattleEvent
+		{
+			Type = BattleEventType.BleedTicked,
+			EnemyIndex = -1,
+			Amount = dmg,
+		});
+		if (p.CurrentHp <= 0)
+		{
+			events.Add(new BattleEvent { Type = BattleEventType.PlayerDied });
+			EndBattle(state, events, victory: false);
+		}
+	}
+
+	// Run-эффекты all_dmg_pct / weapon_dmg_pct → множитель к исходящему урону.
+	// sourceWeaponType: тип оружия атакующего (player.Weapon.Type или intent.WeaponType).
+	// Может быть null — тогда weapon_dmg_pct не применяется.
+	private static int ApplyRunDmgPct(int dmg, List<RunEffect> effects, string sourceWeaponType)
+	{
+		if (effects == null || effects.Count == 0) return dmg;
+		int pct = 0;
+		foreach (var e in effects)
+		{
+			if (e.Kind == "all_dmg_pct")
+				pct += e.Magnitude;
+			else if (e.Kind == "weapon_dmg_pct"
+				&& !string.IsNullOrEmpty(sourceWeaponType)
+				&& e.Param == sourceWeaponType)
+				pct += e.Magnitude;
+		}
+		if (pct == 0) return dmg;
+		long scaled = (long)dmg * (100 + pct) / 100;
+		return (int)Math.Max(0, scaled);
+	}
+
 	private static void TickBleed(BattleState state, List<BattleEvent> events, EnemyData enemy)
 	{
 		if (enemy.BleedStack <= 0) return;
@@ -346,8 +435,12 @@ public static class CombatEngine
 	}
 
 	private static void ApplyDamageToPlayer(BattleState state, List<BattleEvent> events,
-		int rawDamage, string intentName, bool isPhys = true, int sourceEnemyIndex = -1)
+		int rawDamage, string intentName, bool isPhys = true, int sourceEnemyIndex = -1,
+		string sourceWeaponType = null)
 	{
+		// Run-эффекты на исходящий урон врага (all_dmg_pct + weapon_dmg_pct
+		// если intent.WeaponType подходит). Затем уже block/PhysDef/MagDef.
+		rawDamage = ApplyRunDmgPct(rawDamage, state.RunEffects, sourceWeaponType);
 		int absorbed = Math.Min(state.Player.CurrentBlock, rawDamage);
 		state.Player.CurrentBlock -= absorbed;
 		int hpDamage = Math.Max(0, rawDamage - absorbed);
@@ -466,6 +559,8 @@ public static class CombatEngine
 				// Считаем non-attack карты ДО снятия played-карты из руки —
 				// это даёт интуитивный bonus от текущего "защитного" набора.
 				int dmg = CardsDB.ComputePhysDamage(card, state.Player, target, state.Hand);
+				// Run-эффекты: множитель к исходящему урону (all_dmg_pct + weapon_dmg_pct).
+				dmg = ApplyRunDmgPct(dmg, state.RunEffects, state.Player.Weapon?.Type);
 				bool isCrit = state.Player.TryConsumeCrit();
 				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
 				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: true, isCrit);
@@ -475,6 +570,7 @@ public static class CombatEngine
 			{
 				int chain = state.SpellsCastThisTurn;
 				int dmg = CardsDB.ComputeMagicDamage(card, state.Player, target, chain);
+				dmg = ApplyRunDmgPct(dmg, state.RunEffects, state.Player.Weapon?.Type);
 				bool isCrit = state.Player.TryConsumeCrit();
 				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
 				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: false, isCrit);

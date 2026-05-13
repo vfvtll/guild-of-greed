@@ -55,6 +55,12 @@ public class RunMap
 	// "колода выбирается на забег". Заполняется в GameData.StartRun.
 	public List<string> LockedDeck = new();
 
+	// Активные эффекты подземелья — копятся выбором игрока после каждого боя.
+	// Хранятся как ID из RunEffectsDB; client передаёт их в StartBattleRequest,
+	// сервер применяет в CombatEngine. При выходе из забега (EndRun) RunMap
+	// уничтожается → эффекты исчезают.
+	public List<string> ActiveEffects = new();
+
 	// Все узлы текущей строки (для отрисовки колонкой).
 	public IEnumerable<MapNode> NodesInRow(int row)
 	{

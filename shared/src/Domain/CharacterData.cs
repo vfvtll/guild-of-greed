@@ -94,6 +94,10 @@ public class CharacterData
 	[JsonIgnore] public int CurrentBlock;
 	[JsonIgnore] public List<StatusEffect> Effects = new();
 	[JsonIgnore] public int AttacksSinceLastCrit;
+	// Стак кровотечения у игрока (зеркало EnemyData.BleedStack). Накапливается
+	// от run-эффектов вида "bleed_all_per_turn"; тикает в конце хода игрока,
+	// игнорируя броню/блок (как у врагов). Сбрасывается в PrepareForBattle.
+	[JsonIgnore] public int BleedStack;
 
 	public CharacterData() { }
 
@@ -324,6 +328,7 @@ public class CharacterData
 		CurrentBlock = 0;
 		Effects.Clear();
 		AttacksSinceLastCrit = 0;
+		BleedStack = 0;
 	}
 
 	public void AddEffect(string id, string type, float amount, int duration)

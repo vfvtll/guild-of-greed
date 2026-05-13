@@ -41,4 +41,10 @@ public class BattleState
 	// уровням. Заполняется в CombatEngine.StartBattle.
 	public int PreBattleCharacterLevel;
 	public Dictionary<string, int> PreBattleWeaponLevels = new();
+
+	// Активные эффекты подземелья. Скопированы из RunMap.ActiveEffects на старте
+	// боя и применяются движком (bleed_all_per_turn, all_dmg_pct, weapon_dmg_pct).
+	// Стандарт: bleed добавляется в BeginPlayerTurn; damage-pct применяется
+	// в исходящем уроне обеих сторон.
+	public List<RunEffect> RunEffects = new();
 }

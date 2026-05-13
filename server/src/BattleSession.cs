@@ -20,9 +20,9 @@ public class BattleSession
 	public MapNodeType NodeType { get; }
 
 	public BattleSession(CharacterData player, List<EnemyData> enemies, List<string> deck,
-		int seed, MapNodeType nodeType)
+		int seed, MapNodeType nodeType, List<RunEffect> runEffects = null)
 	{
-		var (state, _) = CombatEngine.StartBattle(player, enemies, deck, seed);
+		var (state, _) = CombatEngine.StartBattle(player, enemies, deck, seed, runEffects);
 		State = state;
 		NodeType = nodeType;
 	}

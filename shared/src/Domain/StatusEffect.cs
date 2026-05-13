@@ -14,7 +14,11 @@ public class StatusEffect
 
 public class Intent
 {
-    public string Type;     // "attack" / "block"
+    public string Type;     // "attack" / "attack_magic" / "block"
     public int Amount;
     public string Name;
+    // Тип оружия, которым атакует враг — для run-эффектов вида
+    // "урон кинжалами +200%". Null = неприменимо (магия, чистые когти/клыки).
+    // Значения совпадают с WeaponData.Type ("knife", "sword_1h", и т.п.).
+    public string WeaponType;
 }

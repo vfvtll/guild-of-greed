@@ -135,12 +135,14 @@ public class NetworkClient : IDisposable
 		=> ExchangeAsync<DeleteCharacterResponse>(new DeleteCharacterRequest { CharacterId = characterId }, ct);
 
 	public Task<BattleStartedResponse> StartBattleAsync(int locationIndex, int nodeType,
-		int nodeId = -1, CancellationToken ct = default)
+		int nodeId = -1, System.Collections.Generic.List<string> activeRunEffects = null,
+		CancellationToken ct = default)
 		=> ExchangeAsync<BattleStartedResponse>(new StartBattleRequest
 		{
 			LocationIndex = locationIndex,
 			NodeType = nodeType,
 			NodeId = nodeId,
+			ActiveRunEffects = activeRunEffects,
 		}, ct);
 
 	public Task<PushCharacterResponse> PushCharacterAsync(string characterJson, CancellationToken ct = default)

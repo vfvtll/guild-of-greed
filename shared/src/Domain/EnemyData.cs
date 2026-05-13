@@ -36,11 +36,15 @@ public class EnemyData
 	public int MoneyMin = 1;
 	public int MoneyMax = 3;
 
-	// Спавн encounter'а для узла на карте. Используется и клиентом
-	// (GameData.SpawnForCurrentNode → display), и сервером (BattleSession
-	// → authoritative). Чтобы анти-чит работал, обе стороны должны
-	// вычислять одно и то же.
-	public static List<EnemyData> SpawnFor(int locationIndex, MapNodeType nodeType)
+	// Спавн encounter'а для узла на карте. Детерминированно от seed — клиент
+	// и сервер получают идентичный набор врагов. Seed — это battleSeed, который
+	// сам выводится из (runSeed, nodeId) на сервере, см. Session.DeriveBattleSeed.
+	//
+	// Лор-настройка: игрок — обычный авантюрист, а не избранный. Подавляющее
+	// большинство встреч — дикие звери и гоблины-разбойники. Боссы локаций
+	// первой грейд-полосы — старший разбойник / альфа-волк / гоблин-вожак,
+	// без эпического пафоса.
+	public static List<EnemyData> SpawnFor(int locationIndex, MapNodeType nodeType, int seed = 0)
 	{
 		var list = new List<EnemyData>();
 		if (nodeType == MapNodeType.Tutorial)
@@ -48,20 +52,50 @@ public class EnemyData
 			list.Add(CreateTrainingDummy());
 			return list;
 		}
+		var rng = new RandomSource(seed);
 		if (nodeType == MapNodeType.Boss)
 		{
-			list.Add(CreateBoss());
+			list.Add(CreateBossFor(locationIndex));
 			return list;
 		}
-		switch (locationIndex)
-		{
-			case 0: list.Add(CreateGoblin()); break;
-			case 1: list.Add(CreateForestGoblin()); list.Add(CreateForestGoblin()); break;
-			case 2: list.Add(CreateGoblin()); break;
-			default: list.Add(CreateGoblin()); break;
-		}
+		// Обычный бой — берём 1–3 случайных из пула локации.
+		var pool = PoolFor(locationIndex);
+		int count = rng.Range(1, 4);  // 1..3
+		// Локация "лес" — стайные мобы, перевес в сторону мелких; даём шанс
+		// добавить +1 врага сверху (тоже из пула).
+		if (locationIndex == 1 && rng.Chance(0.5f)) count++;
+		count = System.Math.Min(count, 4);
+		for (int i = 0; i < count; i++)
+			list.Add(pool[rng.Next(pool.Count)]());
 		return list;
 	}
+
+	// Пул фабрик по локации. Каждая фабрика возвращает нового врага.
+	// Использование делегатов (без аргументов) позволяет SpawnFor рандомно
+	// семплировать без аллокации каждой возможной комбинации.
+	private static List<System.Func<EnemyData>> PoolFor(int locationIndex)
+	{
+		switch (locationIndex)
+		{
+			case 0: // "Подземелье" — гоблины-разбойники, разведчики, эльпи.
+				return new() { CreateGoblinRogue, CreateGoblinScout, CreateElpy };
+			case 1: // "Тёмный лес" — звери: волки, зайцы, эльпи.
+				return new() { CreateWildHare, CreateWolf, CreateElpy, CreateForestGoblin };
+			case 2: // "Логово гоблинов" — гоблины и шаман.
+				return new() { CreateGoblinRogue, CreateGoblinScout, CreateGoblinShaman };
+			default:
+				return new() { CreateGoblinRogue };
+		}
+	}
+
+	// Босс локации — конкретная фабрика. Все скромные — это всё ещё первый грейд.
+	private static EnemyData CreateBossFor(int locationIndex) => locationIndex switch
+	{
+		0 => CreateBanditElder(),    // Подземелье — старший разбойник
+		1 => CreateAlphaWolf(),      // Лес — альфа стаи
+		2 => CreateGoblinChief(),    // Логово — вождь гоблинов
+		_ => CreateBanditElder(),
+	};
 
 	// Стартовый бой нового персонажа: волк-подранок на опушке леса.
 	// HP/PhysDef рассчитаны так, чтобы голый персонаж (без оружия, Str~40) убил
@@ -99,46 +133,73 @@ public class EnemyData
 		return e;
 	}
 
-	// Слабый гоблин для леса — 5 шт. атакуют разом, поэтому каждый сильно слабее.
+	// ========= Мелочь (E-grade Low, 1-2 хода на голом персе) =========
+
+	// Заяц — самый слабый враг. Прыжки, обычно бьёт мало. Хороший XP для новичка.
+	public static EnemyData CreateWildHare()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Заяц-русак",
+			MaxHp = 18, CurrentHp = 18,
+			PhysDef = 0, MagicDef = 0,
+		};
+		e.Intents.Add(new Intent { Type = "attack", Amount = 3, Name = "Прыжок", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 5, Name = "Двойной прыжок", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 2, Name = "Прижался" });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small", Chance = 0.10f });
+		return e;
+	}
+
+	// Эльпи — мелкий лесной фей. Колется магически (бывает противно для воина без MagDef).
+	public static EnemyData CreateElpy()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Эльпи",
+			MaxHp = 32, CurrentHp = 32,
+			PhysDef = 0, MagicDef = 1,
+		};
+		e.Intents.Add(new Intent { Type = "attack",       Amount = 5, Name = "Тычок усиком", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "attack_magic", Amount = 7, Name = "Искра пыльцы", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "block",        Amount = 3, Name = "Зашуршал листьями" });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_small", Chance = 0.35f });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small", Chance = 0.20f });
+		return e;
+	}
+
+	// Лесной гоблин — base для боёв "стайкой" в лесу. (Оставил старое имя
+	// для backward compat внутри файла.)
 	public static EnemyData CreateForestGoblin()
 	{
 		var e = new EnemyData
 		{
-			EnemyName = "Гоблин",
-			MaxHp = 40,
-			CurrentHp = 40,
-			PhysDef = 1,
-			MagicDef = 0,
+			EnemyName = "Гоблин-дикарь",
+			MaxHp = 40, CurrentHp = 40,
+			PhysDef = 1, MagicDef = 0,
 		};
-		e.Intents.Add(new Intent { Type = "attack", Amount = 6,  Name = "Удар когтями" });
-		e.Intents.Add(new Intent { Type = "attack", Amount = 9,  Name = "Засечка" });
-		e.Intents.Add(new Intent { Type = "block",  Amount = 4,  Name = "Уклонение" });
-
-		// Лесной гоблин дропает мало — игрок не должен через лес ломиться за лутом.
+		e.Intents.Add(new Intent { Type = "attack", Amount = 6, Name = "Удар когтями", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 9, Name = "Засечка ножом", WeaponType = "knife" });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 4, Name = "Уклонение" });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small", Chance = 0.30f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_small", Chance = 0.15f });
 		return e;
 	}
 
-	// Goblin под игрока со статами 35..45 и ХП ~120.
-	public static EnemyData CreateGoblin()
+	// ========= Средние (E-grade Low/Mid боевые) =========
+
+	// Гоблин-разбойник: классический "с ножиком". Заменяет старого CreateGoblin.
+	public static EnemyData CreateGoblinRogue()
 	{
 		var e = new EnemyData
 		{
 			EnemyName = "Гоблин-разбойник",
-			MaxHp = 100,
-			CurrentHp = 100,
-			PhysDef = 2,
-			MagicDef = 0,
+			MaxHp = 100, CurrentHp = 100,
+			PhysDef = 2, MagicDef = 0,
 		};
-		e.Intents.Add(new Intent { Type = "attack", Amount = 12, Name = "Удар кинжалом" });
-		e.Intents.Add(new Intent { Type = "attack", Amount = 17, Name = "Сильный замах" });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 12, Name = "Удар кинжалом", WeaponType = "knife" });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 17, Name = "Сильный замах", WeaponType = "sword_1h" });
 		e.Intents.Add(new Intent { Type = "block",  Amount = 7,  Name = "Уклонение" });
-
-		// Стандартный лут — гарантированно зелье, шанс на бижутерию с аффиксами.
-		// Affixed=true на украшениях даёт рандомный rarity (по весам Grade=E:
-		// 80% Common, 20% Uncommon) и аффиксы по бюджету (Common=1суф,
-		// Uncommon=1преф+1суф).
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small",   Chance = 0.60f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_small",   Chance = 0.30f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_medium",  Chance = 0.10f });
@@ -146,7 +207,6 @@ public class EnemyData
 		e.LootTable.Add(new LootEntry { ItemId = "ring_focus_low",    Chance = 0.10f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "amulet_might_low",  Chance = 0.08f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_strength",   Chance = 0.05f });
-		// И6.4: dual-wield и щиты. Демо-частые шансы чтобы быстро увидеть.
 		e.LootTable.Add(new LootEntry { ItemId = "dagger_low",            Chance = 0.20f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "shield_physical_low",   Chance = 0.10f });
 		e.LootTable.Add(new LootEntry { ItemId = "shield_magic_low",      Chance = 0.07f });
@@ -154,32 +214,123 @@ public class EnemyData
 		return e;
 	}
 
-	// Босс: 320 ХП, толстая защита, мощные удары. Реальный челлендж.
-	public static EnemyData CreateBoss()
+	// Гоблин-разведчик: быстрее, но слабее. Без оружия — голые руки.
+	public static EnemyData CreateGoblinScout()
 	{
 		var e = new EnemyData
 		{
-			EnemyName = "Тёмный рыцарь",
-			MaxHp = 320,
-			CurrentHp = 320,
-			PhysDef = 5,
-			MagicDef = 2,
+			EnemyName = "Гоблин-разведчик",
+			MaxHp = 70, CurrentHp = 70,
+			PhysDef = 1, MagicDef = 0,
 		};
-		e.Intents.Add(new Intent { Type = "attack", Amount = 22, Name = "Удар алебардой" });
-		e.Intents.Add(new Intent { Type = "attack", Amount = 30, Name = "Сокрушающий удар" });
-		e.Intents.Add(new Intent { Type = "block",  Amount = 18, Name = "Кровавая стойка" });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 8,  Name = "Резкий выпад", WeaponType = "knife" });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 10, Name = "Двойной выпад", WeaponType = "knife" });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 5,  Name = "Отступление" });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small", Chance = 0.40f });
+		e.LootTable.Add(new LootEntry { ItemId = "dagger_low",      Chance = 0.15f, Affixed = true });
+		return e;
+	}
 
-		// Босс — щедрый: оба украшения с аффиксами (Rarity катается по grade=E,
-		// но это редкие базы — обычно выпадает Uncommon с 1+1 аффиксом).
+	// Волк: атаки покусыванием. Толще зайца, без магии.
+	public static EnemyData CreateWolf()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Волк",
+			MaxHp = 55, CurrentHp = 55,
+			PhysDef = 1, MagicDef = 0,
+		};
+		e.Intents.Add(new Intent { Type = "attack", Amount = 7,  Name = "Укус", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 10, Name = "Прыжок-укус", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 5,  Name = "Прижал уши" });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_small", Chance = 0.20f });
+		return e;
+	}
+
+	// Гоблин-шаман: магические атаки. Мало HP но больный, особенно по тому
+	// у кого слабый MagDef.
+	public static EnemyData CreateGoblinShaman()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Гоблин-шаман",
+			MaxHp = 85, CurrentHp = 85,
+			PhysDef = 1, MagicDef = 3,
+		};
+		e.Intents.Add(new Intent { Type = "attack_magic", Amount = 10, Name = "Болотная искра", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "attack_magic", Amount = 14, Name = "Пляска духов", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "block",        Amount = 8,  Name = "Защитный круг" });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_medium", Chance = 0.30f });
+		e.LootTable.Add(new LootEntry { ItemId = "ring_focus_low",   Chance = 0.15f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "amulet_arcane_low", Chance = 0.08f, Affixed = true });
+		return e;
+	}
+
+	// ========= Боссы локаций (всё ещё E-grade, без пафоса) =========
+
+	// Locality 0 boss: старший разбойник.
+	public static EnemyData CreateBanditElder()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Старший разбойник",
+			MaxHp = 180, CurrentHp = 180,
+			PhysDef = 3, MagicDef = 1,
+		};
+		e.Intents.Add(new Intent { Type = "attack", Amount = 16, Name = "Удар мечом", WeaponType = "sword_1h" });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 22, Name = "Сокрушающий замах", WeaponType = "sword_1h" });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 12, Name = "Боевая стойка" });
 		e.LootTable.Add(new LootEntry { ItemId = "ring_blessed_low",  Chance = 1.00f, Affixed = true });
-		e.LootTable.Add(new LootEntry { ItemId = "amulet_arcane_low", Chance = 0.40f, Affixed = true });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_full",       Chance = 0.50f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_medium",  Chance = 1.00f });
-		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_medium",  Chance = 1.00f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_strength",   Chance = 0.50f });
+		return e;
+	}
+
+	// Locality 1 boss: альфа стаи.
+	public static EnemyData CreateAlphaWolf()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Альфа-волк",
+			MaxHp = 200, CurrentHp = 200,
+			PhysDef = 3, MagicDef = 0,
+		};
+		e.Intents.Add(new Intent { Type = "attack", Amount = 18, Name = "Свирепый укус", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "attack", Amount = 26, Name = "Прыжок на загривок", WeaponType = null });
+		e.Intents.Add(new Intent { Type = "block",  Amount = 14, Name = "Скалит клыки" });
+		e.LootTable.Add(new LootEntry { ItemId = "amulet_might_low", Chance = 1.00f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_full",      Chance = 0.40f });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_hp_medium", Chance = 1.00f });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_strength",  Chance = 0.40f });
+		return e;
+	}
+
+	// Locality 2 boss: вождь гоблинов.
+	public static EnemyData CreateGoblinChief()
+	{
+		var e = new EnemyData
+		{
+			EnemyName = "Вождь гоблинов",
+			MaxHp = 240, CurrentHp = 240,
+			PhysDef = 4, MagicDef = 2,
+		};
+		e.Intents.Add(new Intent { Type = "attack",       Amount = 20, Name = "Тяжёлый замах",     WeaponType = "sword_2h" });
+		e.Intents.Add(new Intent { Type = "attack_magic", Amount = 18, Name = "Зов тотема",        WeaponType = null });
+		e.Intents.Add(new Intent { Type = "block",        Amount = 15, Name = "Ритуальный плащ" });
+		e.LootTable.Add(new LootEntry { ItemId = "amulet_arcane_low", Chance = 1.00f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "ring_blessed_low",  Chance = 0.50f, Affixed = true });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_full",       Chance = 0.80f });
+		e.LootTable.Add(new LootEntry { ItemId = "potion_mp_medium",  Chance = 1.00f });
 		e.LootTable.Add(new LootEntry { ItemId = "potion_focus",      Chance = 0.50f });
 		return e;
 	}
+
+	// Backward-compat алиасы (на случай старых сейвов / тестов).
+	[System.Obsolete("Use CreateGoblinRogue / CreateBanditElder / CreateAlphaWolf / CreateGoblinChief")]
+	public static EnemyData CreateGoblin() => CreateGoblinRogue();
+	[System.Obsolete("Use CreateBossFor(locationIndex) via SpawnFor")]
+	public static EnemyData CreateBoss() => CreateBanditElder();
 
 	public void RollIntent()
 		=> NextIntent = Rng.Pick(Intents);

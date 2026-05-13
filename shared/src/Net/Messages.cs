@@ -112,6 +112,10 @@ public class StartBattleRequest : ClientMessage
 	// вывода битвенного seed'а из (runSeed, nodeId). -1 для туториал-боёв
 	// и любых случаев вне забега.
 	[Key(3)] public int NodeId = -1;
+	// ID-ы активных эффектов забега (RunMap.ActiveEffects). Сервер использует
+	// их при построении BattleState — применяет в CombatEngine. null/пусто
+	// для туториал-боёв.
+	[Key(4)] public List<string> ActiveRunEffects;
 }
 
 // Одно действие игрока в активном бою. Маппится на BattleAction в shared/Combat.

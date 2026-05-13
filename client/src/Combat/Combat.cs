@@ -46,6 +46,7 @@ public partial class Combat : Control
 	private InventoryOverlay _inventoryOverlay;
 	private CombatLogOverlay _logOverlay;
 	private readonly List<string> _logLines = new();
+	private RunEffectChoiceOverlay _runEffectOverlay;
 
 	public override void _Ready()
 	{
@@ -71,11 +72,15 @@ public partial class Combat : Control
 		// nodeId нужен серверу для вывода детерминированного battleSeed из
 		// (runSeed, nodeId). Туториал (CurrentRun == null) — отправляем -1.
 		int nodeId = node?.Id ?? -1;
+		// Run-эффекты: накопленные в RunMap. Сервер и клиент применяют их
+		// идентично в CombatEngine — обе стороны строят список из этого же
+		// массива ID через RunEffectsDB.Get.
+		var activeEffectIds = GameData.Instance.CurrentRun?.ActiveEffects;
 
 		BattleStartedResponse resp;
 		try
 		{
-			resp = await Net.StartBattleAsync(locationIndex, nodeType, nodeId);
+			resp = await Net.StartBattleAsync(locationIndex, nodeType, nodeId, activeEffectIds);
 		}
 		catch (ServerException ex)
 		{
@@ -102,13 +107,24 @@ public partial class Combat : Control
 		// для туториала — DeckFor от текущего персонажа. Server строит колоду
 		// идентично: из своего _runSnapshot или живого character (см. Session).
 		var character = GameData.Instance.Character;
-		var enemies = EnemyData.SpawnFor(locationIndex, (MapNodeType)nodeType);
+		// SpawnFor получает тот же battleSeed, что и сервер — обе стороны
+		// детерминированно семплируют один и тот же пул врагов.
+		var enemies = EnemyData.SpawnFor(locationIndex, (MapNodeType)nodeType, resp.Seed);
 		var lockedDeck = GameData.Instance.CurrentRun?.LockedDeck;
 		var deck = lockedDeck != null && lockedDeck.Count > 0
 			? new List<string>(lockedDeck)
 			: CardsDB.DeckFor(character);
+		// Резолвим активные эффекты по ID — клиент и сервер строят идентичный
+		// список через RunEffectsDB.Get (чистая функция).
+		var runEffects = new List<RunEffect>();
+		if (activeEffectIds != null)
+			foreach (var id in activeEffectIds)
+			{
+				var eff = RunEffectsDB.Get(id);
+				if (eff != null) runEffects.Add(eff);
+			}
 
-		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, resp.Seed);
+		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, resp.Seed, runEffects);
 		_state = state;
 		_endTurnButton.Disabled = false;
 		_busy = false;
@@ -140,6 +156,20 @@ public partial class Combat : Control
 			int wxp  = pc.GetWeaponXp(pc.Weapon.Type);
 			int wnext = pc.XpForNextWeaponLevel(pc.Weapon.Type);
 			Log($"Навык оружия: ур.{wlvl} ({wxp}/{wnext} XP)");
+		}
+
+		// Активные эффекты подземелья (накопленные за забег).
+		var effects = GameData.Instance.CurrentRun?.ActiveEffects;
+		if (effects != null && effects.Count > 0)
+		{
+			var names = new List<string>();
+			foreach (var id in effects)
+			{
+				var e = GuildOfGreed.Shared.Data.RunEffectsDB.Get(id);
+				if (e != null) names.Add(e.Name);
+			}
+			if (names.Count > 0)
+				Log($"[color=#fa3]⚗ Эффекты подземелья: {string.Join(", ", names)}[/color]");
 		}
 		Log($"👕 {pc.Chest?.Name ?? "—"}  ⛑ {pc.Helmet?.Name ?? "—"}");
 		Log($"🧤 {pc.Gloves?.Name ?? "—"}  👢 {pc.Boots?.Name ?? "—"}");
@@ -325,12 +355,19 @@ public partial class Combat : Control
 					break;
 
 				case BattleEventType.BleedStacked:
-					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
+					if (ev.EnemyIndex == -1)
+						Log($"[color=#f55]🩸 Вы: +{ev.Amount} кровотечения (стак {_state.Player.BleedStack})[/color]");
+					else if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
 						Log($"[color=#f55]🩸 {_state.Enemies[ev.EnemyIndex].EnemyName}: +{ev.Amount} кровотечения (стак {_state.Enemies[ev.EnemyIndex].BleedStack})[/color]");
 					break;
 
 				case BattleEventType.BleedTicked:
-					if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
+					if (ev.EnemyIndex == -1)
+					{
+						Log($"[color=#f55]🩸 Вы — кровотечение: −{ev.Amount} HP[/color]");
+						SpawnFloatingText(new Vector2(150, 100), $"-{ev.Amount}", new Color(1f, 0.35f, 0.4f), 24);
+					}
+					else if (ev.EnemyIndex >= 0 && ev.EnemyIndex < _state.Enemies.Count)
 						Log($"[color=#f55]🩸 {_state.Enemies[ev.EnemyIndex].EnemyName} — кровотечение: −{ev.Amount} HP[/color]");
 					break;
 
@@ -359,9 +396,20 @@ public partial class Combat : Control
 				case BattleEventType.BattleEnded:
 					if (ev.Victory)
 					{
-						_endTurnButton.Text = "🗺 Переход на карту";
-						_endTurnButton.Disabled = false;
 						Log($"[color=#7f7][b]{Lang.T("log.encounter_cleared")}[/b][/color]");
+						// В забеге — предлагаем выбор эффекта подземелья. До выбора
+						// кнопка "Переход" задизейблена. В туториале/одиночных
+						// боях — сразу переход.
+						if (GameData.Instance.CurrentRun != null)
+						{
+							_endTurnButton.Disabled = true;
+							ShowRunEffectChoice();
+						}
+						else
+						{
+							_endTurnButton.Text = "🗺 Переход на карту";
+							_endTurnButton.Disabled = false;
+						}
 					}
 					else
 					{
@@ -503,4 +551,37 @@ public partial class Combat : Control
 	}
 
 	private void ClearLog() => _logLines.Clear();
+
+	// =====================================================================
+	// Выбор эффекта подземелья после победы
+	// =====================================================================
+
+	private void ShowRunEffectChoice()
+	{
+		if (_runEffectOverlay != null) return;
+		// Детерминированный поток: тот же seed что у боя, чуть смешанный,
+		// чтобы выбор был стабилен при reconnect/refresh state.
+		var rng = new RandomSource(unchecked(_state.Seed ^ 0x5A17C0DE));
+		var choices = GuildOfGreed.Shared.Data.RunEffectsDB.RollChoices(3, rng);
+		_runEffectOverlay = new RunEffectChoiceOverlay(choices);
+		_runEffectOverlay.Chosen += OnRunEffectChosen;
+		AddChild(_runEffectOverlay);
+	}
+
+	private void OnRunEffectChosen(string effectId)
+	{
+		var eff = GuildOfGreed.Shared.Data.RunEffectsDB.Get(effectId);
+		GameData.Instance.CurrentRun?.ActiveEffects.Add(effectId);
+		Log($"[color=#fa3]⚗ Эффект применён: {eff?.Name ?? effectId}[/color]");
+
+		if (_runEffectOverlay != null)
+		{
+			RemoveChild(_runEffectOverlay);
+			_runEffectOverlay.QueueFree();
+			_runEffectOverlay = null;
+		}
+
+		_endTurnButton.Text = "🗺 Переход на карту";
+		_endTurnButton.Disabled = false;
+	}
 }

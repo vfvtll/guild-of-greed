@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 13;  // Run-seed: StartRunResponse.RunSeed + StartBattleRequest.NodeId. Equip lock enforced during run.
+	public const int Current = 14;  // Run effects: StartBattleRequest.ActiveRunEffects + Intent.WeaponType. New enemy roster.
 }

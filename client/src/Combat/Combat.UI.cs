@@ -226,16 +226,16 @@ public partial class Combat
 			critInfo;
 		RefreshEquipSlots();
 
-		if (p.CurrentBlock > 0)
-		{
-			_blockLabel.Text = $"🛡 Блок: {p.CurrentBlock}";
-			_blockLabel.AddThemeColorOverride("font_color", UIStyle.BlockCyan);
-		}
-		else
-		{
-			_blockLabel.Text = "🛡 Блок: —";
-			_blockLabel.AddThemeColorOverride("font_color", UIStyle.TextDim);
-		}
+		string blockText = p.CurrentBlock > 0
+			? $"🛡 Блок: {p.CurrentBlock}"
+			: "🛡 Блок: —";
+		// Кровотечение игрока (от run-эффекта bleed_all_per_turn). Тикает
+		// в начале EndTurn — игнорирует броню и блок.
+		if (p.BleedStack > 0)
+			blockText += $"    🩸 {p.BleedStack}";
+		_blockLabel.Text = blockText;
+		_blockLabel.AddThemeColorOverride("font_color",
+			p.CurrentBlock > 0 ? UIStyle.BlockCyan : UIStyle.TextDim);
 		_buffsLabel.Text = $"Эффекты: {DescribeEffects(p.Effects)}";
 
 		_deckCountLabel.Text = $"{Lang.T("ui.combat.deck")}: {_state?.Deck.Count ?? 0}";
