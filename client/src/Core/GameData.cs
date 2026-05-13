@@ -348,8 +348,12 @@ public partial class GameData : Node
 	// вылетит без боя — изменения потеряются. Та же модель, что и для
 	// equip/unequip; правильный фикс — отдельный RPC PushCharacter.
 
-	// Купить 1 единицу базового стакаемого предмета (зелья). Возвращает
+	// Купить 1 единицу предмета из ассортимента лавки. Возвращает
 	// (ok, errorReason). errorReason: "no_money" / "no_space" / "not_for_sale".
+	//
+	// Оружие/броня кладутся как INSTANCE (Clone базы, без аффиксов) — иначе
+	// при попытке надеть TryAdd-стак не превратится в WeaponInstance. Зелья и
+	// прочие стакаемые — через Inventory.TryAdd.
 	public (bool ok, string reason) BuyOne(string itemId)
 	{
 		if (Character == null) return (false, "no_character");
@@ -357,9 +361,28 @@ public partial class GameData : Node
 		if (price == null) return (false, "not_for_sale");
 		if (Character.Inventory.Money < price.Value) return (false, "no_money");
 
+		// Оружие — клон базы как instance.
+		var weaponBase = ItemsDB.GetWeapon(itemId);
+		if (weaponBase != null)
+		{
+			if (Character.Inventory.IsFull) return (false, "no_space");
+			Character.Inventory.TryAddInstance(weaponBase.Clone());
+			Character.Inventory.Money -= price.Value;
+			return (true, null);
+		}
+
+		// Броня — то же (на будущее: щиты/доспехи в лавке).
+		var armorBase = ItemsDB.GetArmor(itemId);
+		if (armorBase != null)
+		{
+			if (Character.Inventory.IsFull) return (false, "no_space");
+			Character.Inventory.TryAddInstance(armorBase.Clone());
+			Character.Inventory.Money -= price.Value;
+			return (true, null);
+		}
+
+		// Стакаемые (зелья / прочее).
 		int maxStack = PotionsDB.Get(itemId) != null ? 9 : 1;
-		// Симулируем добавление: TryAdd либо положит всё, либо вернёт false.
-		// Money не списываем до успешного добавления.
 		long moneyBefore = Character.Inventory.Money;
 		if (!Character.Inventory.TryAdd(itemId, 1, maxStack))
 			return (false, "no_space");

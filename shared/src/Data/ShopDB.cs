@@ -17,9 +17,9 @@ public static class ShopDB
 	// Множитель выкупа: лавка покупает у игрока за 40% полной цены.
 	public const float SellRatio = 0.4f;
 
-	// Стартовый ассортимент. Все — стакаемые зелья, без ограничения по числу
-	// покупок (бесконечный запас). Каждая запись просто живёт в порядке списка.
-	public static readonly List<string> Stock = new()
+	// Стартовый ассортимент — разделён по категориям для вкладок в лавке.
+	// Запас бесконечный: ShopOverlay списком просто отображает базы.
+	public static readonly List<string> PotionsStock = new()
 	{
 		"potion_hp_small",
 		"potion_mp_small",
@@ -29,6 +29,19 @@ public static class ShopDB
 		"potion_focus",
 		"potion_full",
 	};
+
+	// Базовое оружие E-grade Low — всегда в продаже, по одному инстансу за клик.
+	// Куплено = клон базы без аффиксов (см. GameData.BuyOne).
+	public static readonly List<string> WeaponsStock = new()
+	{
+		"dagger_low",
+		"sword_1h_low",
+		"sword_2h_low",
+		"staff_low",
+	};
+
+	[System.Obsolete("Use PotionsStock / WeaponsStock")]
+	public static readonly List<string> Stock = PotionsStock;
 
 	// === Базовые таблицы цен ===========================================
 
@@ -42,6 +55,16 @@ public static class ShopDB
 		["potion_strength"]  = 80,
 		["potion_focus"]     = 80,
 		["potion_full"]      = 250,
+	};
+
+	// Оружие E-grade Low: явные цены чтобы экономика начала читаться при
+	// первом тесте. Без аффиксов; дороже зелий, но достижимо за пару забегов.
+	private static readonly Dictionary<string, long> WeaponPrices = new()
+	{
+		["dagger_low"]    = 40,
+		["sword_1h_low"]  = 50,
+		["sword_2h_low"]  = 80,
+		["staff_low"]     = 90,
 	};
 
 	// Оружие/броня/щит: цена по редкости (instance — катался ItemGenerator).
@@ -63,6 +86,7 @@ public static class ShopDB
 	public static long? BuyPrice(string itemId)
 	{
 		if (PotionPrices.TryGetValue(itemId, out var p)) return p;
+		if (WeaponPrices.TryGetValue(itemId, out var w)) return w;
 		return null;
 	}
 

@@ -23,6 +23,11 @@ public partial class ShopOverlay : Control
 	private GridContainer _invGrid;
 	private Label _invTitle;
 	private Label _statusLabel;
+	private Button _potionsTabBtn;
+	private Button _weaponsTabBtn;
+
+	private enum ShopTab { Potions, Weapons }
+	private ShopTab _currentTab = ShopTab.Potions;
 
 	private const int GridColumns = 3;
 	private const string HexGold   = "#f3d172";
@@ -129,6 +134,25 @@ public partial class ShopOverlay : Control
 
 		left.AddChild(UIStyle.MakeSectionTitle("Купить"));
 
+		// Вкладки категорий ассортимента.
+		var tabsRow = new HBoxContainer();
+		tabsRow.AddThemeConstantOverride("separation", 6);
+		left.AddChild(tabsRow);
+
+		_potionsTabBtn = new Button { Text = "🧪 Зелья" };
+		UIStyle.StyleButton(_potionsTabBtn);
+		_potionsTabBtn.CustomMinimumSize = new Vector2(0, 34);
+		_potionsTabBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		_potionsTabBtn.Pressed += () => SetTab(ShopTab.Potions);
+		tabsRow.AddChild(_potionsTabBtn);
+
+		_weaponsTabBtn = new Button { Text = "⚔ Оружие" };
+		UIStyle.StyleButton(_weaponsTabBtn);
+		_weaponsTabBtn.CustomMinimumSize = new Vector2(0, 34);
+		_weaponsTabBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		_weaponsTabBtn.Pressed += () => SetTab(ShopTab.Weapons);
+		tabsRow.AddChild(_weaponsTabBtn);
+
 		var leftScroll = new ScrollContainer();
 		leftScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
 		leftScroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
@@ -186,9 +210,11 @@ public partial class ShopOverlay : Control
 		RefreshMoney(ch);
 		_invTitle.Text = $"Продать (инвентарь {ch.Inventory.Slots.Count}/{Inventory.Capacity})";
 
-		// === Ассортимент ===
+		// === Ассортимент по активной вкладке ===
+		RefreshTabButtons();
 		ClearChildren(_shopList);
-		foreach (var itemId in ShopDB.Stock)
+		var stock = _currentTab == ShopTab.Potions ? ShopDB.PotionsStock : ShopDB.WeaponsStock;
+		foreach (var itemId in stock)
 		{
 			var price = ShopDB.BuyPrice(itemId);
 			if (price == null) continue;
@@ -206,6 +232,22 @@ public partial class ShopOverlay : Control
 			}
 			else _invGrid.AddChild(MakeEmptyCard());
 		}
+	}
+
+	private void SetTab(ShopTab tab)
+	{
+		if (_currentTab == tab) return;
+		_currentTab = tab;
+		Refresh();
+	}
+
+	// Активная вкладка стилизуется как primary-кнопка (золото), неактивная —
+	// как обычная. StyleButton просто перезаписывает theme-overrides, можно
+	// дёргать без накопления стилей.
+	private void RefreshTabButtons()
+	{
+		UIStyle.StyleButton(_potionsTabBtn, primary: _currentTab == ShopTab.Potions);
+		UIStyle.StyleButton(_weaponsTabBtn, primary: _currentTab == ShopTab.Weapons);
 	}
 
 	private void RefreshMoney(CharacterData ch)
