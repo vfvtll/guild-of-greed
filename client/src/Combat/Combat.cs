@@ -69,10 +69,15 @@ public partial class Combat : Control
 		int locationIndex = LocationOverride ?? GameData.Instance.SelectedLocation;
 		int nodeType = NodeTypeOverride ?? (int)(node?.Type ?? MapNodeType.Battle);
 
+		// Колода забега замораживается в GameData.StartRun. Туториал-бои идут
+		// без run → lockedDeck=null, сервер построит колоду через CardsDB.DeckFor.
+		var lockedDeck = GameData.Instance.CurrentRun?.LockedDeck;
+		bool useLockedDeck = lockedDeck != null && lockedDeck.Count > 0;
+
 		BattleStartedResponse resp;
 		try
 		{
-			resp = await Net.StartBattleAsync(locationIndex, nodeType);
+			resp = await Net.StartBattleAsync(locationIndex, nodeType, useLockedDeck ? lockedDeck : null);
 		}
 		catch (ServerException ex)
 		{
@@ -95,9 +100,11 @@ public partial class Combat : Control
 		}
 
 		// Сервер уже знает encounter/deck — мы вычисляем то же из shared helpers.
+		// Для run-боёв берём замороженную колоду забега; для туториала — DeckFor
+		// от текущего персонажа (та же логика, что у сервера в этом случае).
 		var character = GameData.Instance.Character;
 		var enemies = EnemyData.SpawnFor(locationIndex, (MapNodeType)nodeType);
-		var deck = CardsDB.DeckFor(character);
+		var deck = useLockedDeck ? new List<string>(lockedDeck) : CardsDB.DeckFor(character);
 
 		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, resp.Seed);
 		_state = state;

@@ -103,6 +103,10 @@ public class StartBattleRequest : ClientMessage
 {
 	[Key(0)] public int LocationIndex;
 	[Key(1)] public int NodeType;       // (int)MapNodeType
+	// Колода, замороженная клиентом на старте забега (RunMap.LockedDeck).
+	// null/пусто = одиночный бой вне забега (стартовый Tutorial) — сервер
+	// сам вычислит колоду через CardsDB.DeckFor по текущему персонажу.
+	[Key(2)] public List<string> LockedDeck;
 }
 
 // Одно действие игрока в активном бою. Маппится на BattleAction в shared/Combat.

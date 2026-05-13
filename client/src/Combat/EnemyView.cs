@@ -13,6 +13,9 @@ public partial class EnemyView : PanelContainer
 
 	public EnemyData Enemy;
 	public bool Targetable;
+	// Ссылка на игрока — нужна для расчёта эффективного урона в интенте
+	// (raw − block − PhysDef). Обновляется через SetEnemy при каждом RefreshUI.
+	public CharacterData Player;
 
 	private Label _nameLabel;
 	private ProgressBar _hpBar;
@@ -66,10 +69,11 @@ public partial class EnemyView : PanelContainer
 		ApplyStyle(false);
 	}
 
-	public void SetEnemy(EnemyData e, bool targetable)
+	public void SetEnemy(EnemyData e, bool targetable, CharacterData player = null)
 	{
 		Enemy = e;
 		Targetable = targetable;
+		Player = player;
 		if (IsInsideTree())
 		{
 			Refresh();
@@ -101,7 +105,7 @@ public partial class EnemyView : PanelContainer
 		_hpBar.MaxValue = Enemy.MaxHp;
 		_hpBar.Value = Enemy.CurrentHp;
 		_hpLabel.Text = $"ХП: {Enemy.CurrentHp}/{Enemy.MaxHp}";
-		_intentLabel.Text = dead ? "—" : Enemy.DescribeIntent();
+		_intentLabel.Text = dead ? "—" : Enemy.DescribeIntent(Player);
 		_blockLabel.Text = Enemy.CurrentBlock > 0 ? $"🛡 {Enemy.CurrentBlock}" : "";
 		_effectsLabel.Text = DescribeEffects(Enemy.Effects, Enemy.BleedStack);
 	}

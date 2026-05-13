@@ -49,6 +49,12 @@ public class RunMap
 	public List<MapNode> Nodes = new();
 	public int CurrentNodeId = -1;          // -1 = ещё не выбран первый узел.
 
+	// Колода забега, замороженная на входе в подземелье. Все бои этого
+	// забега используют ЭТУ колоду, не пересчитывая её на каждом узле — иначе
+	// ап оружия мид-ран сразу подменял бы карты, что ломает контракт
+	// "колода выбирается на забег". Заполняется в GameData.StartRun.
+	public List<string> LockedDeck = new();
+
 	// Все узлы текущей строки (для отрисовки колонкой).
 	public IEnumerable<MapNode> NodesInRow(int row)
 	{

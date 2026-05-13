@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 10;  // I6.4: 1H/2H, dual-wield (Offhand), щиты (Shield), counter-buff balanced, magic reflect.
+	public const int Current = 11;  // Run-locked deck: StartBattleRequest.LockedDeck.
 }

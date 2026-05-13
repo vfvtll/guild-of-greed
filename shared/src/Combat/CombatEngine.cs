@@ -101,8 +101,12 @@ public static class CombatEngine
 			});
 		}
 
-		// Стартовый ход игрока (без реген MP — он восстанавливается с ResetForCombat).
-		BeginPlayerTurn(state, events, regenMp: false);
+		// Стартовый ход игрока — С регеном MP. ResetForCombat зовётся только
+		// при StartRun (вход в новое подземелье) и при смерти; между узлами
+		// одного забега HP/MP переносятся как есть, поэтому без этого тика
+		// игрок второго и последующих боёв не получал бы регена вообще.
+		// На первом бою регена → no-op (MP уже на максимуме).
+		BeginPlayerTurn(state, events, regenMp: true);
 
 		return (state, events);
 	}

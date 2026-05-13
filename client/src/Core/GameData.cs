@@ -135,6 +135,10 @@ public partial class GameData : Node
 		SelectedLocation = locationIndex;
 		Character?.ResetForCombat();
 		CurrentRun = MapGenerator.Generate(locationIndex);
+		// Замораживаем колоду на забег. Все бои внутри run будут использовать
+		// эту копию — даже после ап оружия мид-ран карты в стартовой раздаче
+		// не меняются. Пересчёт колоды произойдёт только при следующем StartRun.
+		CurrentRun.LockedDeck = CardsDB.DeckFor(Character);
 	}
 
 	public void EndRun() => CurrentRun = null;

@@ -300,7 +300,12 @@ public class Session
 
 		var nodeType = (MapNodeType)r.NodeType;
 		var enemies = EnemyData.SpawnFor(r.LocationIndex, nodeType);
-		var deck = CardsDB.DeckFor(character);
+		// Колода: если клиент прислал замороженную колоду забега (RunMap.LockedDeck) —
+		// используем её, иначе считаем через CardsDB.DeckFor (туториальные одиночные бои).
+		// Клиенту тут доверяем — те же права что и у equip/town (см. архитектурный TODO).
+		var deck = r.LockedDeck != null && r.LockedDeck.Count > 0
+			? new System.Collections.Generic.List<string>(r.LockedDeck)
+			: CardsDB.DeckFor(character);
 		int seed = _serverRng.Next();
 
 		_battle = new BattleSession(character, enemies, deck, seed, nodeType);

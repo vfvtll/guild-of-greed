@@ -134,11 +134,13 @@ public class NetworkClient : IDisposable
 	public Task<DeleteCharacterResponse> DeleteCharacterAsync(Guid characterId, CancellationToken ct = default)
 		=> ExchangeAsync<DeleteCharacterResponse>(new DeleteCharacterRequest { CharacterId = characterId }, ct);
 
-	public Task<BattleStartedResponse> StartBattleAsync(int locationIndex, int nodeType, CancellationToken ct = default)
+	public Task<BattleStartedResponse> StartBattleAsync(int locationIndex, int nodeType,
+		System.Collections.Generic.List<string> lockedDeck = null, CancellationToken ct = default)
 		=> ExchangeAsync<BattleStartedResponse>(new StartBattleRequest
 		{
 			LocationIndex = locationIndex,
 			NodeType = nodeType,
+			LockedDeck = lockedDeck,
 		}, ct);
 
 	public Task<BattleActionResponse> SendBattleActionAsync(int actionType, int handIndex,

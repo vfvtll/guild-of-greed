@@ -367,7 +367,7 @@ public partial class Combat
 			{
 				var view = new EnemyView();
 				_enemyArea.AddChild(view);
-				view.SetEnemy(enemy, targetingActive && enemy.CurrentHp > 0);
+				view.SetEnemy(enemy, targetingActive && enemy.CurrentHp > 0, _state.Player);
 				view.EnemyClicked += OnEnemyTargeted;
 			}
 		}
@@ -376,7 +376,7 @@ public partial class Combat
 			for (int i = 0; i < enemies.Count; i++)
 			{
 				if (_enemyArea.GetChild(i) is EnemyView ev)
-					ev.SetEnemy(enemies[i], targetingActive && enemies[i].CurrentHp > 0);
+					ev.SetEnemy(enemies[i], targetingActive && enemies[i].CurrentHp > 0, _state.Player);
 			}
 		}
 	}

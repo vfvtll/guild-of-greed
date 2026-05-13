@@ -211,15 +211,36 @@ public class EnemyData
 		return total;
 	}
 
-	public string DescribeIntent()
+	public string DescribeIntent() => DescribeIntent(null);
+
+	// Описание намерения с учётом блока/защиты игрока. Для интент-урона
+	// показываем итоговое значение (с учётом текущего CurrentBlock + PhysDef/MagDef),
+	// а в скобках — сырой удар, чтобы было видно "потенциал". Совпадают —
+	// показываем одно число (без шума).
+	public string DescribeIntent(CharacterData player)
 	{
 		if (NextIntent == null) return "...";
-		return NextIntent.Type switch
+		var i = NextIntent;
+		switch (i.Type)
 		{
-			"attack" => $"{NextIntent.Name} — урон {NextIntent.Amount}",
-			"block"  => $"{NextIntent.Name} — блок {NextIntent.Amount}",
-			_        => NextIntent.Name,
-		};
+			case "attack":
+			case "attack_magic":
+			{
+				if (player == null) return $"{i.Name} — урон {i.Amount}";
+				bool isPhys = i.Type != "attack_magic";
+				int raw = i.Amount;
+				int afterBlock = System.Math.Max(0, raw - player.CurrentBlock);
+				int def = isPhys ? player.PhysDef() : player.MagDef();
+				int actual = System.Math.Max(0, afterBlock - def);
+				return actual == raw
+					? $"{i.Name} — урон {raw}"
+					: $"{i.Name} — урон {actual} (из {raw})";
+			}
+			case "block":
+				return $"{i.Name} — блок {i.Amount}";
+			default:
+				return i.Name;
+		}
 	}
 }
 
