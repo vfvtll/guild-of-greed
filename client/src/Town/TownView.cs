@@ -14,6 +14,7 @@ public partial class TownView : Control
 
 	private StashOverlay _stashOverlay;
 	private ShopOverlay _shopOverlay;
+	private ForgeOverlay _forgeOverlay;
 	private Label _kosheLabel;
 
 	public override void _Ready()
@@ -67,15 +68,18 @@ public partial class TownView : Control
 		sub.Position = new Vector2(420, 130);
 		AddChild(sub);
 
-		// === Карточки заведений ===
-		var cardsRow = new HBoxContainer
-		{
-			Position = new Vector2(200, 220),
-			Size = new Vector2(880, 360),
-		};
-		cardsRow.AddThemeConstantOverride("separation", 32);
+		// === Карточки заведений === — растягиваются по ширине, центрируются.
+		var cardsRow = new HBoxContainer();
+		cardsRow.AddThemeConstantOverride("separation", 24);
 		cardsRow.Alignment = BoxContainer.AlignmentMode.Center;
 		AddChild(cardsRow);
+		// Анкорим к верху экрана с горизонтальным растяжением — карточки
+		// сами разместятся центрированно по доступной ширине.
+		cardsRow.SetAnchorsPreset(LayoutPreset.TopWide);
+		cardsRow.OffsetLeft = 40;
+		cardsRow.OffsetRight = -40;
+		cardsRow.OffsetTop = 200;
+		cardsRow.OffsetBottom = 560;
 
 		cardsRow.AddChild(MakeBuildingCard(
 			"🏦", "Стэш",
@@ -84,28 +88,35 @@ public partial class TownView : Control
 
 		cardsRow.AddChild(MakeBuildingCard(
 			"🛒", "Лавка",
-			"Продай лишнее, купи зелья.\nЦена выкупа — 40% от полной.",
+			"Продай лишнее, купи зелья и оружие.\nЦена выкупа — 40% от полной.",
 			OnShopPressed));
+
+		cardsRow.AddChild(MakeBuildingCard(
+			"⚒", "Кузница",
+			"Распыли лишнее в магическую эссенцию.\nУлучшай редкость и перекатывай аффиксы.",
+			OnForgePressed));
 	}
 
 	private PanelContainer MakeBuildingCard(string icon, string name, string hint, System.Action onEnter)
 	{
-		var card = new PanelContainer { CustomMinimumSize = new Vector2(360, 340) };
+		// Карточка занимает равную долю строки (три карточки → ~33% каждая).
+		var card = new PanelContainer { CustomMinimumSize = new Vector2(240, 320) };
+		card.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		card.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 
 		var v = new VBoxContainer();
-		v.AddThemeConstantOverride("separation", 12);
+		v.AddThemeConstantOverride("separation", 10);
 		card.AddChild(v);
 
-		var iconL = UIStyle.MakeLabel(icon, 56, UIStyle.GoldBright);
+		var iconL = UIStyle.MakeLabel(icon, 48, UIStyle.GoldBright);
 		iconL.HorizontalAlignment = HorizontalAlignment.Center;
 		v.AddChild(iconL);
 
 		v.AddChild(UIStyle.MakeSectionTitle(name));
 
-		var hintL = UIStyle.MakeLabel(hint, 13, UIStyle.TextSecondary);
+		var hintL = UIStyle.MakeLabel(hint, 12, UIStyle.TextSecondary);
 		hintL.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		hintL.CustomMinimumSize = new Vector2(320, 0);
+		hintL.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		v.AddChild(hintL);
 
 		var spacer = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -151,6 +162,23 @@ public partial class TownView : Control
 		RemoveChild(_shopOverlay);
 		_shopOverlay.QueueFree();
 		_shopOverlay = null;
+		RefreshKoshel();
+	}
+
+	private void OnForgePressed()
+	{
+		if (_forgeOverlay != null) return;
+		_forgeOverlay = new ForgeOverlay();
+		_forgeOverlay.Closed += OnForgeClosed;
+		AddChild(_forgeOverlay);
+	}
+
+	private void OnForgeClosed()
+	{
+		if (_forgeOverlay == null) return;
+		RemoveChild(_forgeOverlay);
+		_forgeOverlay.QueueFree();
+		_forgeOverlay = null;
 		RefreshKoshel();
 	}
 

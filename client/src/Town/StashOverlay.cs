@@ -18,7 +18,6 @@ public partial class StashOverlay : Control
 
 	private PanelContainer _panel;
 	private ColorRect _dim;
-	private Vector2 _panelTargetPos;
 	private GridContainer _invGrid;
 	private GridContainer _stashGrid;
 	private Label _invTitle;
@@ -40,7 +39,6 @@ public partial class StashOverlay : Control
 	{
 		var t = CreateTween().SetParallel(true)
 			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
-		t.TweenProperty(_panel, "position", _panelTargetPos + new Vector2(0, 30), 0.18f);
 		t.TweenProperty(_panel, "modulate:a", 0f, 0.18f);
 		t.TweenProperty(_dim, "modulate:a", 0f, 0.18f);
 		t.Chain().TweenCallback(Callable.From(() => EmitSignal(SignalName.Closed)));
@@ -48,14 +46,11 @@ public partial class StashOverlay : Control
 
 	private void PlayOpenAnimation()
 	{
-		_panelTargetPos = _panel.Position;
-		_panel.Position = _panelTargetPos + new Vector2(0, 30);
 		_panel.Modulate = new Color(1, 1, 1, 0);
 		_dim.Modulate = new Color(1, 1, 1, 0);
 
 		var t = CreateTween().SetParallel(true)
 			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-		t.TweenProperty(_panel, "position", _panelTargetPos, 0.22f);
 		t.TweenProperty(_panel, "modulate:a", 1f, 0.22f);
 		t.TweenProperty(_dim, "modulate:a", 1f, 0.22f);
 	}
@@ -67,14 +62,15 @@ public partial class StashOverlay : Control
 		_dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(_dim);
 
-		_panel = new PanelContainer
-		{
-			Position = new Vector2(60, 30),
-			Size = new Vector2(1160, 660),
-			CustomMinimumSize = new Vector2(1160, 660),
-		};
+		// Адаптивный фулл-рект с отступами — масштабируется под любой viewport.
+		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
+		_panel.SetAnchorsPreset(LayoutPreset.FullRect);
+		_panel.OffsetLeft = 40;
+		_panel.OffsetTop = 30;
+		_panel.OffsetRight = -40;
+		_panel.OffsetBottom = -30;
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);

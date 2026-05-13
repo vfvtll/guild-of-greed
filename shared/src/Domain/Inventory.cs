@@ -32,6 +32,11 @@ public class Inventory
 	// упрёмся в int.MaxValue. Старые сейвы без поля → 0 (JSON default).
 	public long Money = 0;
 
+	// Магическая эссенция — внутренняя валюта кузницы. Получается распылом
+	// предметов, тратится на улучшение редкости и реролл аффиксов. См. ForgeDB.
+	// Старые сейвы → 0 (default).
+	public long Essence = 0;
+
 	public bool IsFull => Slots.Count >= Capacity;
 	public int FreeSlots => Capacity - Slots.Count;
 

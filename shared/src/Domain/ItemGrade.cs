@@ -82,8 +82,8 @@ public static class ItemGrades
 // Сводка по схеме аффиксов одного предмета. Используется генератором
 // (Инк. C) и UI (Инк. F). Хранится не как поле — каждый раз derive от Rarity.
 //
-// Согласовано 2026-05-12 (прогрессивная схема):
-//   Common:    0 префиксов, 1 суффикс
+// Согласовано 2026-05-13:
+//   Common:    0 префиксов, 0 суффиксов  (голая база, апгрейд в Uncommon — реальное событие)
 //   Uncommon:  1 префикс,   1 суффикс
 //   Rare:      1 префикс,   2 суффикса
 //   Heroic:    2 префикса,  2 суффикса
@@ -97,12 +97,12 @@ public readonly struct AffixBudget
 
 	public static AffixBudget For(ItemRarity rarity) => rarity switch
 	{
-		ItemRarity.Common    => new AffixBudget(0, 1),
+		ItemRarity.Common    => new AffixBudget(0, 0),
 		ItemRarity.Uncommon  => new AffixBudget(1, 1),
 		ItemRarity.Rare      => new AffixBudget(1, 2),
 		ItemRarity.Heroic    => new AffixBudget(2, 2),
 		ItemRarity.Epic      => new AffixBudget(2, 3),
 		ItemRarity.Legendary => new AffixBudget(3, 3),
-		_                    => new AffixBudget(0, 1),
+		_                    => new AffixBudget(0, 0),
 	};
 }

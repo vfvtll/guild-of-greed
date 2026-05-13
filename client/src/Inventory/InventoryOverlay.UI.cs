@@ -14,14 +14,15 @@ public partial class InventoryOverlay
 		_dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(_dim);
 
-		_panel = new PanelContainer
-		{
-			Position = new Vector2(70, 30),
-			Size = new Vector2(1140, 660),
-			CustomMinimumSize = new Vector2(1140, 660),
-		};
+		// Адаптивный размер: панель растягивается на весь экран с отступом.
+		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
+		_panel.SetAnchorsPreset(LayoutPreset.FullRect);
+		_panel.OffsetLeft = 40;
+		_panel.OffsetTop = 30;
+		_panel.OffsetRight = -40;
+		_panel.OffsetBottom = -30;
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);

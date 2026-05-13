@@ -54,7 +54,6 @@ public partial class InventoryOverlay : Control
 	// Для slide-in/out анимаций.
 	private PanelContainer _panel;
 	private ColorRect _dim;
-	private Vector2 _panelTargetPos;
 
 	private const int GridColumns = 4;
 
@@ -67,14 +66,13 @@ public partial class InventoryOverlay : Control
 		PlayOpenAnimation();
 	}
 
-	// Закрытие через анимацию: панель уезжает вниз, фон гаснет, потом сигнал.
-	// Все callsite'ы (✕, "Закрыть", внешние кнопки) должны вызывать Close(),
-	// а не EmitSignal(SignalName.Closed) напрямую.
+	// Закрытие через анимацию: фон гаснет, потом сигнал. Все callsite'ы
+	// (✕, "Закрыть", внешние кнопки) должны вызывать Close(), а не
+	// EmitSignal(SignalName.Closed) напрямую.
 	public void Close()
 	{
 		var t = CreateTween().SetParallel(true)
 			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.In);
-		t.TweenProperty(_panel, "position", _panelTargetPos + new Vector2(0, 30), 0.18f);
 		t.TweenProperty(_panel, "modulate:a", 0f, 0.18f);
 		t.TweenProperty(_dim, "modulate:a", 0f, 0.18f);
 		t.Chain().TweenCallback(Callable.From(() => EmitSignal(SignalName.Closed)));
@@ -83,14 +81,11 @@ public partial class InventoryOverlay : Control
 	private void PlayOpenAnimation()
 	{
 		if (_panel == null) return;
-		_panelTargetPos = _panel.Position;
-		_panel.Position = _panelTargetPos + new Vector2(0, 30);
 		_panel.Modulate = new Color(1, 1, 1, 0);
 		_dim.Modulate = new Color(1, 1, 1, 0);
 
 		var t = CreateTween().SetParallel(true)
 			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-		t.TweenProperty(_panel, "position", _panelTargetPos, 0.22f);
 		t.TweenProperty(_panel, "modulate:a", 1f, 0.22f);
 		t.TweenProperty(_dim, "modulate:a", 1f, 0.22f);
 	}
@@ -141,10 +136,11 @@ public partial class InventoryOverlay : Control
 
 	// Hex-цвета для номиналов кошеля. GoldBright — почти как UIStyle, но для
 	// BBCode нужен литерал. Серебро/медь — отдельные оттенки, чтобы три номинала
-	// читались с одного взгляда.
-	private const string HexGold   = "#f3d172";
-	private const string HexSilver = "#cfd2d8";
-	private const string HexCopper = "#d18a4d";
+	// читались с одного взгляда. Эссенция — фиолет под арканку.
+	private const string HexGold    = "#f3d172";
+	private const string HexSilver  = "#cfd2d8";
+	private const string HexCopper  = "#d18a4d";
+	private const string HexEssence = "#b07cff";
 
 	private void RefreshCurrency(CharacterData ch)
 	{
@@ -153,7 +149,8 @@ public partial class InventoryOverlay : Control
 			$"🪙 Кошель:  " +
 			$"[color={HexGold}]{g}з[/color]  " +
 			$"[color={HexSilver}]{s}с[/color]  " +
-			$"[color={HexCopper}]{c}м[/color]";
+			$"[color={HexCopper}]{c}м[/color]" +
+			$"    ✨ [color={HexEssence}]{ch.Inventory.Essence} эссенции[/color]";
 	}
 
 	// Прячет/показывает виджет распределения очков и обновляет тексты на

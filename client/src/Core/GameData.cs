@@ -512,4 +512,126 @@ public partial class GameData : Node
 		PushCharacterToServer();
 		return true;
 	}
+
+	// === Кузница =======================================================
+	//
+	// Все три операции — на slotIndex в инвентаре. instance-only (weapon/armor/shield),
+	// зелья игнорируются. Push после успешной мутации.
+
+	// Распылить слот в эссенцию. Возвращает кол-во полученной эссенции, 0 если не вышло.
+	public long ForgeDismantle(int slotIndex)
+	{
+		if (Character == null) return 0;
+		var slots = Character.Inventory.Slots;
+		if (slotIndex < 0 || slotIndex >= slots.Count) return 0;
+		var stack = slots[slotIndex];
+
+		string grade, rank;
+		ItemRarity rarity;
+		if (stack.WeaponInstance != null)
+		{ grade = stack.WeaponInstance.Grade; rank = stack.WeaponInstance.Tier; rarity = stack.WeaponInstance.Rarity; }
+		else if (stack.ArmorInstance != null)
+		{ grade = stack.ArmorInstance.Grade; rank = stack.ArmorInstance.Tier; rarity = stack.ArmorInstance.Rarity; }
+		else if (stack.ShieldInstance != null)
+		{ grade = stack.ShieldInstance.Grade; rank = stack.ShieldInstance.Tier; rarity = stack.ShieldInstance.Rarity; }
+		else
+			return 0;  // стакаемые (зелья, базы) — не распыляются.
+
+		long yield = ForgeDB.DismantleEssence(grade, rank, rarity);
+		Character.Inventory.RemoveAt(slotIndex);
+		Character.Inventory.Essence += yield;
+		PushCharacterToServer();
+		return yield;
+	}
+
+	// Улучшить rarity на одну ступень. Возвращает (ok, reason).
+	// reason: "no_essence" / "cant_upgrade" / "not_upgradable" / "no_item".
+	public (bool ok, string reason) ForgeUpgrade(int slotIndex)
+	{
+		if (Character == null) return (false, "no_item");
+		var slots = Character.Inventory.Slots;
+		if (slotIndex < 0 || slotIndex >= slots.Count) return (false, "no_item");
+		var stack = slots[slotIndex];
+
+		if (stack.WeaponInstance != null)
+		{
+			var w = stack.WeaponInstance;
+			if (!ForgeDB.CanUpgrade(w.Grade, w.Rarity)) return (false, "cant_upgrade");
+			long cost = ForgeDB.UpgradeCost(w.Grade, w.Tier, w.Rarity);
+			if (Character.Inventory.Essence < cost) return (false, "no_essence");
+			var newRarity = ForgeDB.NextRarity(w.Rarity);
+			// Перекатываем предмет на новой rarity — ItemGenerator с forceRarity
+			// клонирует базу и катает новый набор аффиксов под бюджет newRarity.
+			var fresh = ItemGenerator.RollWeapon(w.Id, null, newRarity);
+			if (fresh == null) return (false, "not_upgradable");
+			stack.WeaponInstance = fresh;
+			Character.Inventory.Essence -= cost;
+			PushCharacterToServer();
+			return (true, null);
+		}
+		if (stack.ArmorInstance != null)
+		{
+			var a = stack.ArmorInstance;
+			if (!ForgeDB.CanUpgrade(a.Grade, a.Rarity)) return (false, "cant_upgrade");
+			long cost = ForgeDB.UpgradeCost(a.Grade, a.Tier, a.Rarity);
+			if (Character.Inventory.Essence < cost) return (false, "no_essence");
+			var newRarity = ForgeDB.NextRarity(a.Rarity);
+			var fresh = ItemGenerator.RollArmor(a.Id, null, newRarity);
+			if (fresh == null) return (false, "not_upgradable");
+			stack.ArmorInstance = fresh;
+			Character.Inventory.Essence -= cost;
+			PushCharacterToServer();
+			return (true, null);
+		}
+		// Щиты в текущей системе без affix-генератора — улучшение поднимает
+		// только rarity-поле; UI это покажет, реальный геймплейный эффект
+		// добавится когда ItemGenerator научится катать щиты.
+		if (stack.ShieldInstance != null)
+		{
+			var s = stack.ShieldInstance;
+			if (!ForgeDB.CanUpgrade(s.Grade, s.Rarity)) return (false, "cant_upgrade");
+			long cost = ForgeDB.UpgradeCost(s.Grade, s.Tier, s.Rarity);
+			if (Character.Inventory.Essence < cost) return (false, "no_essence");
+			s.Rarity = ForgeDB.NextRarity(s.Rarity);
+			Character.Inventory.Essence -= cost;
+			PushCharacterToServer();
+			return (true, null);
+		}
+		return (false, "not_upgradable");
+	}
+
+	// Реролл аффиксов — та же rarity, новые префиксы/суффиксы по бюджету.
+	public (bool ok, string reason) ForgeReroll(int slotIndex)
+	{
+		if (Character == null) return (false, "no_item");
+		var slots = Character.Inventory.Slots;
+		if (slotIndex < 0 || slotIndex >= slots.Count) return (false, "no_item");
+		var stack = slots[slotIndex];
+
+		if (stack.WeaponInstance != null)
+		{
+			var w = stack.WeaponInstance;
+			long cost = ForgeDB.RerollCost(w.Grade, w.Tier);
+			if (Character.Inventory.Essence < cost) return (false, "no_essence");
+			var fresh = ItemGenerator.RollWeapon(w.Id, null, w.Rarity);
+			if (fresh == null) return (false, "not_rerollable");
+			stack.WeaponInstance = fresh;
+			Character.Inventory.Essence -= cost;
+			PushCharacterToServer();
+			return (true, null);
+		}
+		if (stack.ArmorInstance != null)
+		{
+			var a = stack.ArmorInstance;
+			long cost = ForgeDB.RerollCost(a.Grade, a.Tier);
+			if (Character.Inventory.Essence < cost) return (false, "no_essence");
+			var fresh = ItemGenerator.RollArmor(a.Id, null, a.Rarity);
+			if (fresh == null) return (false, "not_rerollable");
+			stack.ArmorInstance = fresh;
+			Character.Inventory.Essence -= cost;
+			PushCharacterToServer();
+			return (true, null);
+		}
+		return (false, "not_rerollable");
+	}
 }
