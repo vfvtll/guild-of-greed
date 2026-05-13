@@ -31,6 +31,8 @@ public static class MapGenerator
 		new() { Rows = 4, Paths = 2, Cols = 4 }, // Подземелье — короткое.
 		new() { Rows = 5, Paths = 3, Cols = 5 }, // Тёмный лес — среднее.
 		new() { Rows = 6, Paths = 3, Cols = 5 }, // Логово босса — длинное.
+		new() { Rows = 8, Paths = 3, Cols = 5 }, // Заброшенные катакомбы — длинное (lvl≥5).
+		new() { Rows = 10, Paths = 4, Cols = 6 }, // Развалины старого замка — самое длинное (lvl≥5).
 	};
 
 	// Главный API — детерминированная генерация из seed. Клиент и сервер

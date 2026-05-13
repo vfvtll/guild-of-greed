@@ -7,7 +7,7 @@ namespace GuildOfGreed.Shared.Domain;
 //
 // LootTable: при смерти Combat ролит каждую запись по её Chance и кладёт
 // успешные дропы в инвентарь игрока (см. Combat.Cards.DropLoot).
-public class EnemyData
+public partial class EnemyData
 {
 	public string EnemyName = "Гоблин";
 	public int MaxHp = 60;
@@ -64,6 +64,10 @@ public class EnemyData
 		// Локация "лес" — стайные мобы, перевес в сторону мелких; даём шанс
 		// добавить +1 врага сверху (тоже из пула).
 		if (locationIndex == 1 && rng.Chance(0.5f)) count++;
+		// Катакомбы и руины (длинные подземелья от 5 ур.) — иногда смешанные пачки
+		// из 3–4 врагов: это там, где у игрока проседает MagDef/HP, давление пакета
+		// заметно сильнее одиночки. ~33% шанс +1.
+		if ((locationIndex == 3 || locationIndex == 4) && rng.Chance(0.33f)) count++;
 		count = System.Math.Min(count, 4);
 		for (int i = 0; i < count; i++)
 			list.Add(pool[rng.Next(pool.Count)]());
@@ -83,6 +87,10 @@ public class EnemyData
 				return new() { CreateWildHare, CreateWolf, CreateElpy, CreateForestGoblin };
 			case 2: // "Логово гоблинов" — гоблины и шаман.
 				return new() { CreateGoblinRogue, CreateGoblinScout, CreateGoblinShaman };
+			case 3: // "Заброшенные катакомбы" — нежить + культисты (длинное, lvl≥5).
+				return new() { CreateSkeletonWarrior, CreateSkeletonArcher, CreateDarkNeophyte, CreateShamblingDead, CreateShade };
+			case 4: // "Развалины старого замка" — разбойники и наёмники (самое длинное, lvl≥5).
+				return new() { CreateBanditVeteran, CreateHalberdMerc, CreateChainedGuard, CreateBerserkConvict, CreateAmbushArcher, CreateFieldWarlock };
 			default:
 				return new() { CreateGoblinRogue };
 		}
@@ -94,6 +102,8 @@ public class EnemyData
 		0 => CreateBanditElder(),    // Подземелье — старший разбойник
 		1 => CreateAlphaWolf(),      // Лес — альфа стаи
 		2 => CreateGoblinChief(),    // Логово — вождь гоблинов
+		3 => CreateLichAcolyte(),    // Катакомбы — лич-послушник
+		4 => CreateGarrisonCaptain(),// Замок — капитан гарнизона
 		_ => CreateBanditElder(),
 	};
 
