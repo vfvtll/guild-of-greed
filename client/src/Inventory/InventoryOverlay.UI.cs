@@ -10,19 +10,16 @@ public partial class InventoryOverlay
 	{
 		// Затемнение позади панели — закрывает клики по бою.
 		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		_dim.SetAnchorsPreset(LayoutPreset.FullRect);
 		_dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(_dim);
+		UIStyle.FillParent(_dim);
 
-		// Адаптивный размер: панель растягивается на весь экран с отступом.
+		// Адаптивный размер: панель ВСЕГДА на весь экран с отступом, независимо
+		// от количества контента (FillParent явно прибивает offsets к нулю).
 		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
-		_panel.SetAnchorsPreset(LayoutPreset.FullRect);
-		_panel.OffsetLeft = 40;
-		_panel.OffsetTop = 30;
-		_panel.OffsetRight = -40;
-		_panel.OffsetBottom = -30;
+		UIStyle.FillParent(_panel, marginX: 40, marginY: 30);
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);

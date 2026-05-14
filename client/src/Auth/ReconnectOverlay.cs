@@ -12,7 +12,7 @@ public partial class ReconnectOverlay : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
 	}
@@ -21,17 +21,20 @@ public partial class ReconnectOverlay : Control
 	{
 		// Полупрозрачная заслонка перекрывает экран под собой.
 		var dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		dim.SetAnchorsPreset(LayoutPreset.FullRect);
 		dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(dim);
+		UIStyle.FillParent(dim);
 
-		var panel = new PanelContainer
-		{
-			Position = new Vector2(440, 280),
-			CustomMinimumSize = new Vector2(400, 0),
-		};
+		// Узкий центрированный popup — анкоримся в центр экрана, чтобы он не
+		// уезжал в угол на нестандартных viewport.
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(420, 180) };
 		panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(panel);
+		panel.SetAnchorsPreset(LayoutPreset.Center);
+		panel.OffsetLeft = -210;
+		panel.OffsetRight = 210;
+		panel.OffsetTop = -90;
+		panel.OffsetBottom = 90;
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);

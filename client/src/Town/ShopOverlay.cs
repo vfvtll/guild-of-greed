@@ -35,7 +35,7 @@ public partial class ShopOverlay : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
 		Refresh();
@@ -65,19 +65,15 @@ public partial class ShopOverlay : Control
 	private void BuildUI()
 	{
 		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		_dim.SetAnchorsPreset(LayoutPreset.FullRect);
 		_dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(_dim);
+		UIStyle.FillParent(_dim);
 
 		// Адаптивный фулл-рект с отступами.
 		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
-		_panel.SetAnchorsPreset(LayoutPreset.FullRect);
-		_panel.OffsetLeft = 40;
-		_panel.OffsetTop = 30;
-		_panel.OffsetRight = -40;
-		_panel.OffsetBottom = -30;
+		UIStyle.FillParent(_panel, marginX: 40, marginY: 30);
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 12);

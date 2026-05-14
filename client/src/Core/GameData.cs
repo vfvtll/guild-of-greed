@@ -62,8 +62,8 @@ public partial class GameData : Node
 		"Подземелье",
 		"Тёмный лес (5 врагов)",
 		"Логово босса",
-		"Заброшенные катакомбы",
-		"Развалины старого замка",
+		"Звериная балка",
+		"Разбойничья застава",
 	};
 
 	public static readonly string[] LocationHints =
@@ -71,8 +71,8 @@ public partial class GameData : Node
 		"Один обычный гоблин — стандартный бой",
 		"Стая из 5 гоблинов — длинный забег, тест на выживаемость",
 		"Тёмный рыцарь — высокий риск, высокая награда",
-		"Нежить и тёмные культисты. 8 рядов карты, упор на магический урон —\nбез запаса MagDef не выйдешь живым.",
-		"Бывшая крепость, кишащая разбойниками и наёмниками. 10 рядов карты —\nсамый длинный забег: бьют тяжело, в конце ждёт капитан гарнизона.",
+		"Глухая чаща с крепким зверьём: волки, вепри, росомаха.\n8 рядов карты, в конце ждёт бурый медведь.",
+		"Бандитский притон в старых развалинах: разбойники, каторжники,\nнаёмники. 10 рядов — самый длинный забег. В конце — главарь шайки.",
 	};
 
 	// Минимальный уровень персонажа, нужный для входа в локацию.
@@ -469,6 +469,19 @@ public partial class GameData : Node
 		{
 			if (Character.Inventory.IsFull) return (false, "no_space");
 			Character.Inventory.TryAddInstance(armorBase.Clone());
+			Character.Inventory.Money -= price.Value;
+			PushCharacterToServer();
+			return (true, null);
+		}
+
+		// Щит — также как INSTANCE, иначе кузнец/инвентарь не отличат его от
+		// стакаемого baseId. Раньше падал в stackable-путь и ShieldInstance
+		// оставалось null — кузнец прятал такой щит из списка.
+		var shieldBase = ShieldsDB.Get(itemId);
+		if (shieldBase != null)
+		{
+			if (Character.Inventory.IsFull) return (false, "no_space");
+			Character.Inventory.TryAddInstance(shieldBase.Clone());
 			Character.Inventory.Money -= price.Value;
 			PushCharacterToServer();
 			return (true, null);

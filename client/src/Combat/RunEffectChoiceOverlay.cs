@@ -25,7 +25,7 @@ public partial class RunEffectChoiceOverlay : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
 		PlayOpenAnimation();
@@ -34,18 +34,15 @@ public partial class RunEffectChoiceOverlay : Control
 	private void BuildUI()
 	{
 		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		_dim.SetAnchorsPreset(LayoutPreset.FullRect);
 		_dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(_dim);
+		UIStyle.FillParent(_dim);
 
-		_panel = new PanelContainer
-		{
-			Position = new Vector2(140, 100),
-			Size = new Vector2(1000, 480),
-			CustomMinimumSize = new Vector2(1000, 480),
-		};
+		// Адаптивный фулл-рект с большими отступами — масштабируется под viewport.
+		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
+		UIStyle.FillParent(_panel, marginX: 140, marginY: 100);
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 16);

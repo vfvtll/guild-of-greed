@@ -22,7 +22,9 @@ public partial class ForgeOverlay : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		// FillParent вместо голого SetAnchorsPreset — гарантирует, что оверлей
+		// растянут на весь рут, а не схлопывается под нулевой стартовый rect.
+		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
 		Refresh();
@@ -52,20 +54,16 @@ public partial class ForgeOverlay : Control
 	private void BuildUI()
 	{
 		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
-		_dim.SetAnchorsPreset(LayoutPreset.FullRect);
 		_dim.MouseFilter = MouseFilterEnum.Stop;
 		AddChild(_dim);
+		UIStyle.FillParent(_dim);
 
-		// Адаптивный размер: панель растягивается на весь экран с отступом.
-		// Без фиксированных Size — масштабируется под любой viewport.
+		// Адаптивный размер: панель всегда на весь экран с отступом, даже если
+		// контента мало (например, в инвентаре нет снаряжения).
 		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
-		_panel.SetAnchorsPreset(LayoutPreset.FullRect);
-		_panel.OffsetLeft = 40;
-		_panel.OffsetTop = 30;
-		_panel.OffsetRight = -40;
-		_panel.OffsetBottom = -30;
+		UIStyle.FillParent(_panel, marginX: 40, marginY: 30);
 
 		var v = new VBoxContainer();
 		v.AddThemeConstantOverride("separation", 10);
@@ -138,6 +136,7 @@ public partial class ForgeOverlay : Control
 		_capacityLabel.Text = $"Инвентарь ({ch.Inventory.Slots.Count}/{Inventory.Capacity}) — кузнец работает только с экипировкой";
 
 		ClearChildren(_itemList);
+		int forgeable = 0;
 		for (int i = 0; i < ch.Inventory.Slots.Count; i++)
 		{
 			var stack = ch.Inventory.Slots[i];
@@ -145,7 +144,52 @@ public partial class ForgeOverlay : Control
 			if (stack.WeaponInstance == null && stack.ArmorInstance == null && stack.ShieldInstance == null)
 				continue;
 			_itemList.AddChild(MakeItemRow(stack, i));
+			forgeable++;
 		}
+
+		// Пустое состояние: явная подсказка, чтобы игрок не думал, что кузнец
+		// сломан. Все надетые предметы или зелья не годятся — нужно положить
+		// инстансы оружия/брони/щита в инвентарь.
+		if (forgeable == 0)
+			_itemList.AddChild(MakeEmptyState());
+	}
+
+	private Control MakeEmptyState()
+	{
+		var panel = new PanelContainer();
+		panel.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
+		panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		panel.SizeFlagsVertical = SizeFlags.ExpandFill;
+
+		var v = new VBoxContainer();
+		v.AddThemeConstantOverride("separation", 8);
+		panel.AddChild(v);
+
+		var spacerTop = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
+		v.AddChild(spacerTop);
+
+		var icon = UIStyle.MakeLabel("⚒", 64, UIStyle.GoldDark);
+		icon.HorizontalAlignment = HorizontalAlignment.Center;
+		v.AddChild(icon);
+
+		var msg = UIStyle.MakeLabel(
+			"В инвентаре нет снаряжения, которое можно обработать.",
+			15, UIStyle.TextSecondary);
+		msg.HorizontalAlignment = HorizontalAlignment.Center;
+		v.AddChild(msg);
+
+		var hint = UIStyle.MakeLabel(
+			"Кузнец работает только с оружием, бронёй и щитами в инвентаре.\n" +
+			"Снимите ненужное с персонажа или достаньте из стэша, потом возвращайтесь.",
+			12, UIStyle.TextDim);
+		hint.HorizontalAlignment = HorizontalAlignment.Center;
+		hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		v.AddChild(hint);
+
+		var spacerBot = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
+		v.AddChild(spacerBot);
+
+		return panel;
 	}
 
 	// === Item row ===

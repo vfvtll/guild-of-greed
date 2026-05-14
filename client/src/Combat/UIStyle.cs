@@ -88,6 +88,36 @@ public static class UIStyle
 		};
 	}
 
+	// =====================================================================
+	// Layout helpers
+	// =====================================================================
+
+	// Растягивает Control на весь родительский Rect (Anchors + Offsets = 0).
+	// Используется для модалок/оверлеев: голый SetAnchorsPreset(FullRect)
+	// при keep_offsets=false сохраняет ТЕКУЩИЙ rect — а у только что созданного
+	// Control'а он 0×0, поэтому модалка визуально схлопывается, особенно когда
+	// внутреннего контента мало (например, пустая кузница).
+	// Этот хелпер прибивает offsets к нулю явно — модалка ВСЕГДА на весь экран.
+	public static void FillParent(Control c, float margin = 0f)
+	{
+		c.SetAnchorsPreset(LayoutPreset.FullRect);
+		c.OffsetLeft = margin;
+		c.OffsetTop = margin;
+		c.OffsetRight = -margin;
+		c.OffsetBottom = -margin;
+	}
+
+	// То же, но с разными горизонтальным/вертикальным отступом — для PanelContainer
+	// внутри оверлея, который не должен впритык лежать к краям экрана.
+	public static void FillParent(Control c, float marginX, float marginY)
+	{
+		c.SetAnchorsPreset(LayoutPreset.FullRect);
+		c.OffsetLeft = marginX;
+		c.OffsetTop = marginY;
+		c.OffsetRight = -marginX;
+		c.OffsetBottom = -marginY;
+	}
+
 	public static StyleBoxFlat BannerStyle(Color border)
 	{
 		return new StyleBoxFlat

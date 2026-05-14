@@ -59,7 +59,7 @@ public partial class InventoryOverlay : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Stop;
 		BuildUI();
 		Refresh();

@@ -87,10 +87,10 @@ public partial class EnemyData
 				return new() { CreateWildHare, CreateWolf, CreateElpy, CreateForestGoblin };
 			case 2: // "Логово гоблинов" — гоблины и шаман.
 				return new() { CreateGoblinRogue, CreateGoblinScout, CreateGoblinShaman };
-			case 3: // "Заброшенные катакомбы" — нежить + культисты (длинное, lvl≥5).
-				return new() { CreateSkeletonWarrior, CreateSkeletonArcher, CreateDarkNeophyte, CreateShamblingDead, CreateShade };
-			case 4: // "Развалины старого замка" — разбойники и наёмники (самое длинное, lvl≥5).
-				return new() { CreateBanditVeteran, CreateHalberdMerc, CreateChainedGuard, CreateBerserkConvict, CreateAmbushArcher, CreateFieldWarlock };
+			case 3: // "Звериная балка" — звери чащи + одна ведунья + забредший каторжник (lvl≥5).
+				return new() { CreateBrownWolf, CreateWildBoar, CreateWolverine, CreateForestWitch, CreateRunawayConvict };
+			case 4: // "Разбойничья застава" — бандиты, каторжники, наёмники, знахарь (lvl≥5, самое длинное).
+				return new() { CreateBanditVeteran, CreateMercenary, CreateChainedConvict, CreateBerserkConvict, CreateAmbushArcher, CreateGangHealer };
 			default:
 				return new() { CreateGoblinRogue };
 		}
@@ -102,8 +102,8 @@ public partial class EnemyData
 		0 => CreateBanditElder(),    // Подземелье — старший разбойник
 		1 => CreateAlphaWolf(),      // Лес — альфа стаи
 		2 => CreateGoblinChief(),    // Логово — вождь гоблинов
-		3 => CreateLichAcolyte(),    // Катакомбы — лич-послушник
-		4 => CreateGarrisonCaptain(),// Замок — капитан гарнизона
+		3 => CreateBrownBear(),      // Звериная балка — бурый медведь
+		4 => CreateGangLeader(),     // Разбойничья застава — главарь шайки
 		_ => CreateBanditElder(),
 	};
 
