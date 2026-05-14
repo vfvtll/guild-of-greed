@@ -200,7 +200,7 @@ public partial class InventoryOverlay : Control
 		int mp = ch.MaxMp();
 		int regen = ch.MpRegen();
 		// Уровень персонажа + (если есть оружие) уровень навыка оружия.
-		string levelLine = $"⭐ Уровень {ch.Level} ({ch.Exp}/{ch.XpForNextCharacterLevel()} XP)";
+		string levelLine = $"⭐ Уровень {ch.DisplayLevel()} ({ch.Grade}-грейд {ch.Level}/{CharacterData.LevelsPerGrade}, {ch.Exp}/{ch.XpForNextCharacterLevel()} XP)";
 		if (ch.Weapon != null)
 		{
 			string wt = ch.Weapon.Type;

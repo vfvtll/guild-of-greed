@@ -411,6 +411,20 @@ public static partial class CharacterCommands
 	}
 
 	// ===================================================================
+	// Grade promotion
+	// ===================================================================
+	//
+	// Dev-mode: бесплатно, без требований к уровню. Игрок в городе жмёт
+	// "Повысить грейд" — Level → 1, Grade → следующий, Exp → 0. На S-грейде
+	// возвращает CantPromote.
+	public static Result PromoteGrade(CharacterData ch)
+	{
+		if (ch == null) return Result.Fail(CharacterCommandError.NoCharacter);
+		if (!ch.PromoteGrade()) return Result.Fail(CharacterCommandError.CantPromote);
+		return Result.Success();
+	}
+
+	// ===================================================================
 	// Internal helpers
 	// ===================================================================
 
@@ -453,4 +467,5 @@ public static class CharacterCommandError
 	public const string NoRecipe        = "no_recipe";
 	public const string LowSkill        = "low_skill";
 	public const string NoResources     = "no_resources";
+	public const string CantPromote     = "cant_promote";
 }

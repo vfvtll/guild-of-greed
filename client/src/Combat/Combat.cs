@@ -146,7 +146,7 @@ public partial class Combat : Control
 		string locationLabel = isTutorial ? "Опушка леса" : GameData.Instance.CurrentLocationName();
 		Log($"[b]=== {locationLabel} — {nodeLabel} ===[/b]");
 		Log($"Противников: {_state.Enemies.Count}");
-		Log($"Уровень {pc.Level} ({pc.Exp}/{pc.XpForNextCharacterLevel()} XP)");
+		Log($"Уровень {pc.DisplayLevel()} ({pc.Grade}-грейд {pc.Level}/{CharacterData.LevelsPerGrade}, {pc.Exp}/{pc.XpForNextCharacterLevel()} XP)");
 		Log($"Статы: STR {pc.Str}, INT {pc.Int}, CON {pc.Con}, WIT {pc.Wit}, MEN {pc.Men}, DEX {pc.Dex}");
 		Log($"🎯 Крит каждые {pc.EffectiveCritEveryN()} атак × {pc.CritMultiplier():F2} урон");
 		Log($"Оружие: {ItemsDB.DescribeWeapon(pc.Weapon)}");

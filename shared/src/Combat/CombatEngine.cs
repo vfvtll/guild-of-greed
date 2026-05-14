@@ -905,7 +905,8 @@ public static class CombatEngine
 		if (p == null) return;
 
 		// Персонаж: пока Exp ≥ порога — повышаем уровень и распределяем статы.
-		while (p.Exp >= p.XpForNextCharacterLevel())
+		// На потолке грейда апы блокируются: дальше нужен promotion в городе.
+		while (p.Exp >= p.XpForNextCharacterLevel() && !p.IsAtGradeCap())
 		{
 			p.LevelUpCharacter();
 			events.Add(new BattleEvent

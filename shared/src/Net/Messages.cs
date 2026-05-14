@@ -50,6 +50,7 @@ namespace GuildOfGreed.Shared.Net;
 [Union(24, typeof(ForgeRerollRequest))]
 [Union(25, typeof(SpendStatPointRequest))]
 [Union(26, typeof(CraftItemRequest))]
+[Union(27, typeof(PromoteGradeRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -246,6 +247,11 @@ public class CraftItemRequest : ClientMessage
 {
 	[Key(0)] public string ItemId;     // base item id из ItemsDB (E/D предмет)
 }
+
+// Промоушн грейда в городе (Гильдия). Параметров нет — сервер сам решает что
+// делать с текущим персонажем. В dev-режиме бесплатно и без требований.
+[MessagePackObject]
+public class PromoteGradeRequest : ClientMessage { }
 
 // === Server → Client ===========================================================
 

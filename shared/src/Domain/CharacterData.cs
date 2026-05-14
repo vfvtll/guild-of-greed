@@ -373,6 +373,55 @@ public class CharacterData
 
 	public int XpForNextCharacterLevel() => Level * 100;
 
+	// === Грейды и сквозной отображаемый уровень =============================
+	//
+	// Внутри одного грейда персонаж может развиться до LevelsPerGrade уровней.
+	// Дальше — promotion в следующий грейд (E → D → C → B → A → S), Level
+	// сбрасывается в 1, Exp обнуляется. Снаружи (UI) показывается сквозной
+	// «отображаемый» уровень = gradeIndex * LevelsPerGrade + Level, чтобы при
+	// переходе E20 → D1 цифра не упала в ноль, а продолжилась с 21.
+	public const int LevelsPerGrade = 20;
+
+	public static int DisplayLevelFor(int level, string grade)
+		=> (int)ItemGrades.Parse(grade) * LevelsPerGrade + level;
+
+	public int DisplayLevel() => DisplayLevelFor(Level, Grade);
+
+	public bool IsAtGradeCap() => Level >= LevelsPerGrade;
+
+	public bool CanPromoteGrade()
+		=> ItemGrades.Parse(Grade) < ItemGrade.S;
+
+	// Промоушн в следующий грейд. Level → 1, Exp → 0. Возвращает true если
+	// апгрейд состоялся. На S-грейде ничего не делает (возвращает false).
+	public bool PromoteGrade()
+	{
+		if (!CanPromoteGrade()) return false;
+		var next = (ItemGrade)((int)ItemGrades.Parse(Grade) + 1);
+		Grade = ItemGrades.Code(next);
+		Level = 1;
+		Exp = 0;
+		return true;
+	}
+
+	// Миграция старых сейвов, где Level накопился выше LevelsPerGrade без
+	// введённого ещё промоушна. Пример: Level=22 / Grade=E → станет
+	// Level=2 / Grade=D, чтобы DisplayLevel остался 22, а внутренний счётчик
+	// уложился в новую модель (E1..20, D1..20, ...). Вызывается на загрузке
+	// персонажа в Session. Возвращает true если что-то поменялось.
+	public bool MigrateLevelToGrade()
+	{
+		bool changed = false;
+		while (Level > LevelsPerGrade && ItemGrades.Parse(Grade) < ItemGrade.S)
+		{
+			Level -= LevelsPerGrade;
+			Grade = ItemGrades.Code((ItemGrade)((int)ItemGrades.Parse(Grade) + 1));
+			changed = true;
+		}
+		if (Level > LevelsPerGrade) { Level = LevelsPerGrade; changed = true; }
+		return changed;
+	}
+
 	// === Уровень оружия (по типу) ===========================================
 	//
 	// Чтобы паттерн заработал на первом тесте: каждые 50 XP = +1 уровень.

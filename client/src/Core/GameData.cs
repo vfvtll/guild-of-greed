@@ -248,4 +248,8 @@ public partial class GameData : Node
 	// === Крафт ===
 	public Task<CommandOutcome> CraftItemAsync(string itemId)
 		=> RunAsync(net => net.CraftItemAsync(itemId), "Craft");
+
+	// === Грейд (Гильдия) ===
+	public Task<CommandOutcome> PromoteGradeAsync()
+		=> RunAsync(net => net.PromoteGradeAsync(), "PromoteGrade");
 }

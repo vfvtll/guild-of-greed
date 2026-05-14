@@ -195,6 +195,9 @@ public class NetworkClient : IDisposable
 	public Task<CharacterCommandResponse> CraftItemAsync(string itemId, CancellationToken ct = default)
 		=> ExchangeAsync<CharacterCommandResponse>(new CraftItemRequest { ItemId = itemId }, ct);
 
+	public Task<CharacterCommandResponse> PromoteGradeAsync(CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new PromoteGradeRequest(), ct);
+
 	public Task<BattleActionResponse> SendBattleActionAsync(int actionType, int handIndex,
 		int targetEnemyIndex, string potionId, CancellationToken ct = default)
 		=> ExchangeAsync<BattleActionResponse>(new BattleActionRequest

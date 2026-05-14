@@ -16,6 +16,7 @@ public partial class TownView : Control
 	private ShopOverlay _shopOverlay;
 	private ForgeOverlay _forgeOverlay;
 	private CraftingOverlay _craftingOverlay;
+	private GradeOverlay _gradeOverlay;
 	private Label _kosheLabel;
 
 	public override void _Ready()
@@ -101,6 +102,11 @@ public partial class TownView : Control
 			"🛠", "Мастерская",
 			"Скрафти оружие и броню из ресурсов.\nE/D — без рецептов, чисто по навыку.",
 			OnCraftingPressed));
+
+		cardsRow.AddChild(MakeBuildingCard(
+			"🛡", "Гильдия",
+			"Получи новый ранг авантюриста.\nКаждый грейд даёт 20 уровней роста.",
+			OnGradePressed));
 	}
 
 	private PanelContainer MakeBuildingCard(string icon, string name, string hint, System.Action onEnter)
@@ -202,6 +208,23 @@ public partial class TownView : Control
 		RemoveChild(_craftingOverlay);
 		_craftingOverlay.QueueFree();
 		_craftingOverlay = null;
+		RefreshKoshel();
+	}
+
+	private void OnGradePressed()
+	{
+		if (_gradeOverlay != null) return;
+		_gradeOverlay = new GradeOverlay();
+		_gradeOverlay.Closed += OnGradeClosed;
+		AddChild(_gradeOverlay);
+	}
+
+	private void OnGradeClosed()
+	{
+		if (_gradeOverlay == null) return;
+		RemoveChild(_gradeOverlay);
+		_gradeOverlay.QueueFree();
+		_gradeOverlay = null;
 		RefreshKoshel();
 	}
 

@@ -172,6 +172,7 @@ public class Session
 				ForgeRerollRequest r         => HandleForgeReroll(r),
 				SpendStatPointRequest r      => HandleSpendStatPoint(r),
 				CraftItemRequest r           => HandleCraftItem(r),
+				PromoteGradeRequest r        => HandlePromoteGrade(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -300,6 +301,16 @@ public class Session
 		{
 			ch.ResetForCombat();
 			_store.UpdateCharacter(_accountId.Value, ch);
+		}
+
+		// Миграция Level → Grade (введён cap LevelsPerGrade=20). Старые сейвы
+		// могут иметь Level=22 / Grade=E — переводим в Level=2 / Grade=D, чтобы
+		// сквозной DisplayLevel остался прежним, а внутренний счётчик соответствовал
+		// новой модели. Сохраняем обратно если что-то поменялось.
+		if (ch.MigrateLevelToGrade())
+		{
+			_store.UpdateCharacter(_accountId.Value, ch);
+			Logger.Info($"[{_peer}] migrated lvl/grade → {ch.Grade}/{ch.Level}");
 		}
 
 		// TODO(dev, crafting v0): убрать после теста крафта. Топим каждый
@@ -591,6 +602,10 @@ public class Session
 	private ServerMessage HandleCraftItem(CraftItemRequest r)
 		=> RunCharacterCommand("Craft", ch =>
 			CharacterCommands.Craft(ch, r.ItemId, MakeForgeRng()));
+
+	// Промоушн грейда (E→D→C→B→A→S). Dev-режим: без требований к уровню.
+	private ServerMessage HandlePromoteGrade(PromoteGradeRequest r)
+		=> RunCharacterCommand("PromoteGrade", ch => CharacterCommands.PromoteGrade(ch));
 
 	// RandomSource для одной forge-операции. Сид берётся из _serverRng — не
 	// детерминирован между запусками, но это и не нужно (форж не воспроизводим).

@@ -200,7 +200,7 @@ public partial class Combat
 	{
 		var p = GameData.Instance.Character;
 
-		_playerNameLabel.Text = $"{p.CharacterName} ({p.Grade} grade, lvl {p.Level})";
+		_playerNameLabel.Text = $"{p.CharacterName} ({p.Grade}-грейд, ур. {p.DisplayLevel()})";
 
 		_hpBar.MaxValue = p.MaxHp();
 		_hpBar.Value = p.CurrentHp;
