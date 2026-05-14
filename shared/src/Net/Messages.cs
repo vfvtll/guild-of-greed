@@ -49,6 +49,7 @@ namespace GuildOfGreed.Shared.Net;
 [Union(23, typeof(ForgeUpgradeRequest))]
 [Union(24, typeof(ForgeRerollRequest))]
 [Union(25, typeof(SpendStatPointRequest))]
+[Union(26, typeof(CraftItemRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -238,6 +239,12 @@ public class ForgeRerollRequest : ClientMessage
 public class SpendStatPointRequest : ClientMessage
 {
 	[Key(0)] public string Stat;       // "STR" / "INT" / "CON" / "WIT" / "MEN" / "DEX"
+}
+
+[MessagePackObject]
+public class CraftItemRequest : ClientMessage
+{
+	[Key(0)] public string ItemId;     // base item id из ItemsDB (E/D предмет)
 }
 
 // === Server → Client ===========================================================

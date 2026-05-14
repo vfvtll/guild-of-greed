@@ -38,6 +38,11 @@ public class WeaponData
 	// Аффиксы экземпляра (И6.2). См. ArmorData.Affixes для семантики.
 	public List<AppliedAffix> Affixes = new();
 
+	// Имя крафтера, если предмет скрафчен игроком. Пусто = system-сгенерирован
+	// (UI показывает "Неизвестный авантюрист"). Сериализуется в JSON; старые
+	// сейвы → null/"".
+	public string CrafterName;
+
 	// Уникальные пассивные эффекты по типу оружия. POCO {Kind, Magnitude} —
 	// разные экземпляры одного типа могут иметь разную силу.
 	// Известные Kind'ы: см. константы в WeaponPassive.

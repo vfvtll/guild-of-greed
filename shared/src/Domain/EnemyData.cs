@@ -36,6 +36,12 @@ public partial class EnemyData
 	public int MoneyMin = 1;
 	public int MoneyMax = 3;
 
+	// Дропать ли крафтовые ресурсы (см. ResourcesDB + CombatEngine.DropLoot).
+	// По умолчанию все враги дропают; туторный болванчик/мобы без лута могут
+	// явно отключить. Базовый уровень крафт-системы (см. .claude_design_crafting.md):
+	// независимо от грейда мобы кидают случайные E/D ресурсы.
+	public bool DropsResources = true;
+
 	// Спавн encounter'а для узла на карте. Детерминированно от seed — клиент
 	// и сервер получают идентичный набор врагов. Seed — это battleSeed, который
 	// сам выводится из (runSeed, nodeId) на сервере, см. Session.DeriveBattleSeed.
@@ -124,6 +130,7 @@ public partial class EnemyData
 			// Тутор-волк не дропает деньги — стартового лута и так гора.
 			MoneyMin = 0,
 			MoneyMax = 0,
+			DropsResources = false,   // тутор не сорит крафт-сырьём.
 		};
 		e.Intents.Add(new Intent { Type = "attack", Amount = 4, Name = "Укус" });
 		e.Intents.Add(new Intent { Type = "attack", Amount = 6, Name = "Бросок" });

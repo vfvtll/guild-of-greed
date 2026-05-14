@@ -79,6 +79,11 @@ public class CharacterData
 	// уровне 1+ стартовые карты заменяются на улучшенные (см. CardsDB.DeckFor).
 	public Dictionary<string, int> WeaponXp = new();
 
+	// Скиллы крафта (см. CraftingDB / CraftingSkills). Ключ — skill id вида
+	// "craft_sword_1h" / "craft_light". 0–100 уровней, опыт детерминирован
+	// функцией CraftingDB.LevelFromXp. Старые сейвы без поля → пустой dict.
+	public CraftingSkills Crafting = new();
+
 	// Нераспределённые очки статов. Копятся +2 за каждый ап персонажа,
 	// игрок тратит вручную из инвентаря (CharacterData.TrySpendStatPoint).
 	// Старые сейвы без поля → 0 (JSON default).

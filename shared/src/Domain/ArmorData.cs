@@ -47,6 +47,10 @@ public class ArmorData
 	// (например стартовый light_chest_strength_low до того, как был улучшен).
 	public List<AppliedAffix> Affixes = new();
 
+	// Имя крафтера, если предмет скрафчен игроком. Пусто = system-сгенерирован
+	// (UI показывает "Неизвестный авантюрист"). Старые сейвы → null/"".
+	public string CrafterName;
+
 	public ArmorData Clone()
 	{
 		var c = (ArmorData)MemberwiseClone();

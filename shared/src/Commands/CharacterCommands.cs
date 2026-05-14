@@ -14,7 +14,7 @@ namespace GuildOfGreed.Shared.Commands;
 // от клиента — клиент шлёт только параметры команды, сервер сам пересчитывает.
 //
 // Контракт ошибок: коды стабильны для UI-перевода (см. CharacterCommandError).
-public static class CharacterCommands
+public static partial class CharacterCommands
 {
 	// Слоты экипировки для UnequipSlot. Расширенный набор по сравнению с
 	// ArmorSlot — включает Weapon/Offhand/Shield (которые не броня).
@@ -396,6 +396,8 @@ public static class CharacterCommands
 		return Result.Fail(CharacterCommandError.NotForgeable);
 	}
 
+	// Crafting — отдельный файл CharacterCommands.Craft.cs.
+
 	// ===================================================================
 	// Stat point
 	// ===================================================================
@@ -448,4 +450,7 @@ public static class CharacterCommandError
 	public const string NoStatPoints    = "no_stat_points";
 	public const string LockedInRun     = "locked_in_run";
 	public const string LockedInBattle  = "locked_in_battle";
+	public const string NoRecipe        = "no_recipe";
+	public const string LowSkill        = "low_skill";
+	public const string NoResources     = "no_resources";
 }

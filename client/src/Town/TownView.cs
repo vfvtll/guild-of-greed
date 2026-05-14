@@ -15,6 +15,7 @@ public partial class TownView : Control
 	private StashOverlay _stashOverlay;
 	private ShopOverlay _shopOverlay;
 	private ForgeOverlay _forgeOverlay;
+	private CraftingOverlay _craftingOverlay;
 	private Label _kosheLabel;
 
 	public override void _Ready()
@@ -95,6 +96,11 @@ public partial class TownView : Control
 			"⚒", "Кузница",
 			"Распыли лишнее в магическую эссенцию.\nУлучшай редкость и перекатывай аффиксы.",
 			OnForgePressed));
+
+		cardsRow.AddChild(MakeBuildingCard(
+			"🛠", "Мастерская",
+			"Скрафти оружие и броню из ресурсов.\nE/D — без рецептов, чисто по навыку.",
+			OnCraftingPressed));
 	}
 
 	private PanelContainer MakeBuildingCard(string icon, string name, string hint, System.Action onEnter)
@@ -179,6 +185,23 @@ public partial class TownView : Control
 		RemoveChild(_forgeOverlay);
 		_forgeOverlay.QueueFree();
 		_forgeOverlay = null;
+		RefreshKoshel();
+	}
+
+	private void OnCraftingPressed()
+	{
+		if (_craftingOverlay != null) return;
+		_craftingOverlay = new CraftingOverlay();
+		_craftingOverlay.Closed += OnCraftingClosed;
+		AddChild(_craftingOverlay);
+	}
+
+	private void OnCraftingClosed()
+	{
+		if (_craftingOverlay == null) return;
+		RemoveChild(_craftingOverlay);
+		_craftingOverlay.QueueFree();
+		_craftingOverlay = null;
 		RefreshKoshel();
 	}
 

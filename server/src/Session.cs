@@ -171,6 +171,7 @@ public class Session
 				ForgeUpgradeRequest r        => HandleForgeUpgrade(r),
 				ForgeRerollRequest r         => HandleForgeReroll(r),
 				SpendStatPointRequest r      => HandleSpendStatPoint(r),
+				CraftItemRequest r           => HandleCraftItem(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -299,6 +300,15 @@ public class Session
 		{
 			ch.ResetForCombat();
 			_store.UpdateCharacter(_accountId.Value, ch);
+		}
+
+		// TODO(dev, crafting v0): убрать после теста крафта. Топим каждый
+		// крафт-ресурс до 100 если меньше — чтобы тестовый персонаж всегда
+		// мог сразу скрафтить top-E робу/комплект.
+		if (TopUpDevResources(ch))
+		{
+			_store.UpdateCharacter(_accountId.Value, ch);
+			Logger.Info($"[{_peer}] dev-grant: топ-ап крафт-ресурсов до 100");
 		}
 
 		Logger.Info($"[{_peer}] selected char id={r.CharacterId} hp={ch.CurrentHp}/{ch.MaxHp()}");
@@ -576,9 +586,34 @@ public class Session
 	private ServerMessage HandleSpendStatPoint(SpendStatPointRequest r)
 		=> RunCharacterCommand("SpendStat", ch => CharacterCommands.SpendStatPoint(ch, r.Stat));
 
+	// Крафт E/D предметов. Серверный RNG для роллa rarity и аффиксов
+	// (см. CharacterCommands.Craft). Клиент replace'ит state после ответа.
+	private ServerMessage HandleCraftItem(CraftItemRequest r)
+		=> RunCharacterCommand("Craft", ch =>
+			CharacterCommands.Craft(ch, r.ItemId, MakeForgeRng()));
+
 	// RandomSource для одной forge-операции. Сид берётся из _serverRng — не
 	// детерминирован между запусками, но это и не нужно (форж не воспроизводим).
 	private RandomSource MakeForgeRng() => new(_serverRng.Next());
+
+	// Dev-only: добивает каждый крафт-ресурс до 100 в инвентаре, если меньше.
+	// Возвращает true если что-то добавилось (требуется UpdateCharacter).
+	// Использовать как короткий бэкдор на время теста крафт-системы; убрать
+	// вместе с вызовом из HandleSelectCharacter.
+	private static bool TopUpDevResources(CharacterData ch)
+	{
+		const int target = 100;
+		bool changed = false;
+		foreach (var res in ResourcesDB.AllResources())
+		{
+			int have = ch.Inventory.CountOf(res.Id);
+			if (have >= target) continue;
+			int need = target - have;
+			if (ch.Inventory.TryAdd(res.Id, need, ResourcesDB.MaxStack))
+				changed = true;
+		}
+		return changed;
+	}
 
 	// Детерминированный вывод seed'а боя из runSeed + nodeId. Простая mix-функция
 	// (multiplicative hash с золотым отношением 0x9E3779B9). Достаточно для

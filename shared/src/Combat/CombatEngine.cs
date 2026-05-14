@@ -759,7 +759,7 @@ public static class CombatEngine
 			}
 
 			int count = state.Rng.Range(entry.MinCount, entry.MaxCount + 1);
-			int maxStack = PotionsDB.Get(entry.ItemId) != null ? PotionMaxStack : 1;
+			int maxStack = StackLimitFor(entry.ItemId);
 			if (state.Player.Inventory.TryAdd(entry.ItemId, count, maxStack))
 			{
 				dropped.Add($"{entry.ItemId}×{count}");
@@ -779,7 +779,47 @@ public static class CombatEngine
 				dropped.Add($"money:{money}");
 			}
 		}
+
+		// Крафтовые ресурсы. Базовый уровень крафт-системы: независимо от
+		// грейда моба роняем 0–2 случайных ресурса E/D (см. .claude_design_crafting.md).
+		// Туторный болванчик и враги без лута имеют DropsResources=false.
+		if (enemy.DropsResources)
+			RollResourceDrops(state, dropped);
+
 		return dropped;
+	}
+
+	// Кэп стака для itemId: потионы — PotionMaxStack, ресурсы — ResourcesDB.MaxStack,
+	// прочие baseId-предметы — 1 (нестакаемые).
+	private static int StackLimitFor(string itemId)
+	{
+		if (PotionsDB.Get(itemId) != null) return PotionMaxStack;
+		if (ResourcesDB.IsResource(itemId)) return ResourcesDB.MaxStack;
+		return 1;
+	}
+
+	// Ролл 0–2 случайных крафтовых ресурсов с детерминированным state.Rng.
+	// Грейд: 70% E / 30% D. Кол-во: 1–2 шт. Если инвентарь полон — пропуск.
+	private static void RollResourceDrops(BattleState state, List<string> dropped)
+	{
+		// Сколько именно стаков выпадет: 0/1/2 с весами 30/50/20.
+		int roll = state.Rng.Next(100);
+		int stacks = roll < 30 ? 0 : roll < 80 ? 1 : 2;
+		var kinds = new[]
+		{
+			ResourcesDB.Kind.Ore, ResourcesDB.Kind.Leather, ResourcesDB.Kind.Cloth,
+			ResourcesDB.Kind.Wood, ResourcesDB.Kind.Essence,
+		};
+		for (int i = 0; i < stacks; i++)
+		{
+			if (state.Player.Inventory.IsFull) break;
+			var kind = kinds[state.Rng.Next(kinds.Length)];
+			string grade = state.Rng.Chance(0.30f) ? "D" : "E";
+			string resId = ResourcesDB.Id(kind, grade);
+			int count = state.Rng.Range(1, 3);
+			if (state.Player.Inventory.TryAdd(resId, count, ResourcesDB.MaxStack))
+				dropped.Add($"{resId}×{count}");
+		}
 	}
 
 	private static bool AllEnemiesDead(BattleState state)

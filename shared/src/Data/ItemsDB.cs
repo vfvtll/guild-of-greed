@@ -7,6 +7,16 @@ namespace GuildOfGreed.Shared.Data;
 // Сами POCO-определения (WeaponData, ArmorData, ArmorSlot) — в Domain/.
 public static class ItemsDB
 {
+	// Догрузка сгенерированных комплектов (light/robe/heavy × low/mid/top на
+	// всех грейдах). Старые E-уровневые предметы определены inline ниже и
+	// каталогом НЕ переписываются.
+	static ItemsDB()
+	{
+		ItemsCatalog.RegisterAll(Armors);
+		WeaponsCatalog.RegisterAll(Weapons);
+	}
+
+
 	// =====================================================================
 	// Оружие
 	// =====================================================================

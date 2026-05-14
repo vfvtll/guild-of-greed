@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 15;  // Anti-cheat: PushCharacter удалён, мутации через отдельные CharacterCommand* RPC.
+	public const int Current = 16;  // Crafting v0: CraftItemRequest + ResourcesDB + CraftingSkills/CrafterName в Character/Items.
 }

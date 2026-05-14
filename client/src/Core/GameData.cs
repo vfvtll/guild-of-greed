@@ -244,4 +244,8 @@ public partial class GameData : Node
 	// === Очки статов ===
 	public Task<CommandOutcome> SpendStatPointAsync(string stat)
 		=> RunAsync(net => net.SpendStatPointAsync(stat), "SpendStat");
+
+	// === Крафт ===
+	public Task<CommandOutcome> CraftItemAsync(string itemId)
+		=> RunAsync(net => net.CraftItemAsync(itemId), "Craft");
 }
