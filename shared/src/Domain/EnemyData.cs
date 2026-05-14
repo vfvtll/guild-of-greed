@@ -74,6 +74,13 @@ public partial class EnemyData
 		// из 3–4 врагов: это там, где у игрока проседает MagDef/HP, давление пакета
 		// заметно сильнее одиночки. ~33% шанс +1.
 		if ((locationIndex == 3 || locationIndex == 4) && rng.Chance(0.33f)) count++;
+		// D-grade локации (5-7) — нагрузка постепенно растёт. Турнирная ставка (8)
+		// фиксированный pull в 1 врага: одиночные дуэли, чтобы трудность шла от HP/dps,
+		// а не от количества.
+		if (locationIndex == 5 && rng.Chance(0.25f)) count++;
+		if (locationIndex == 6 && rng.Chance(0.40f)) count++;
+		if (locationIndex == 7 && rng.Chance(0.50f)) count++;
+		if (locationIndex == 8) count = 1;
 		count = System.Math.Min(count, 4);
 		for (int i = 0; i < count; i++)
 			list.Add(pool[rng.Next(pool.Count)]());
@@ -97,6 +104,14 @@ public partial class EnemyData
 				return new() { CreateBrownWolf, CreateWildBoar, CreateWolverine, CreateForestWitch, CreateRunawayConvict };
 			case 4: // "Разбойничья застава" — бандиты, каторжники, наёмники, знахарь (lvl≥5, самое длинное).
 				return new() { CreateBanditVeteran, CreateMercenary, CreateChainedConvict, CreateBerserkConvict, CreateAmbushArcher, CreateGangHealer };
+			case 5: // "Каменоломня Гримсхольд" — D low. Бандиты, контрабандисты, болотные знахари.
+				return new() { CreateQuarryBrute, CreateBanditElderD, CreateSwampHerbalist, CreateSmuggler };
+			case 6: // "Полузатопленный храм" — D mid. Фанатики и охранники культа.
+				return new() { CreateZealotSpearman, CreateCultGuard, CreateMadPilgrim, CreateSchismHealer };
+			case 7: // "Холмы Когтя" — D top. Звери и рыцари-затворники.
+				return new() { CreateMountainGrizzly, CreateGyrokhotak, CreateRenegadeKnight };
+			case 8: // "Турнирная ставка Каркаса" — C-trial. Ветераны и чемпионы арены.
+				return new() { CreateArenaVeteran, CreateArenaChampion };
 			default:
 				return new() { CreateGoblinRogue };
 		}
@@ -105,11 +120,15 @@ public partial class EnemyData
 	// Босс локации — конкретная фабрика. Все скромные — это всё ещё первый грейд.
 	private static EnemyData CreateBossFor(int locationIndex) => locationIndex switch
 	{
-		0 => CreateBanditElder(),    // Подземелье — старший разбойник
-		1 => CreateAlphaWolf(),      // Лес — альфа стаи
-		2 => CreateGoblinChief(),    // Логово — вождь гоблинов
-		3 => CreateBrownBear(),      // Звериная балка — бурый медведь
-		4 => CreateGangLeader(),     // Разбойничья застава — главарь шайки
+		0 => CreateBanditElder(),         // Подземелье — старший разбойник
+		1 => CreateAlphaWolf(),           // Лес — альфа стаи
+		2 => CreateGoblinChief(),         // Логово — вождь гоблинов
+		3 => CreateBrownBear(),           // Звериная балка — бурый медведь
+		4 => CreateGangLeader(),          // Разбойничья застава — главарь шайки
+		5 => CreateQuarryOverseer(),      // Каменоломня (D low) — надзиратель
+		6 => CreateSchismHierarch(),      // Храм (D mid) — иерарх раскола
+		7 => CreateAlphaGrizzly(),        // Холмы Когтя (D top) — альфа-гризли
+		8 => CreateKarkasTheFingerless(), // Турнирная ставка — Каркас (C-trial)
 		_ => CreateBanditElder(),
 	};
 

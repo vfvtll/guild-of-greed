@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
@@ -9,8 +10,8 @@ using GuildOfGreed.Shared.Data;
 //   LocationChosen(int index)     — игрок выбрал локацию.
 //   ResetCharacterRequested()      — кнопка «Новый персонаж».
 //
-// На прототипе — простой список карточек. В будущем здесь же появится
-// доступ к Stash, лавке, крафту, кораблю на новые континенты и т.п.
+// Локации сгруппированы по грейду (E/D/C/...) — вверху лента табов, переключают
+// фильтр. Карточки выбранного грейда лежат в ScrollContainer (на случай 4+ карт).
 public partial class LocationSelectView : Control
 {
 	[Signal] public delegate void LocationChosenEventHandler(int index);
@@ -18,6 +19,9 @@ public partial class LocationSelectView : Control
 	[Signal] public delegate void TownRequestedEventHandler();
 
 	private InventoryOverlay _inventoryOverlay;
+	private string _selectedGradeTab = "E";
+	private HBoxContainer _tabRow;
+	private HFlowContainer _cardsRow;
 
 	public override void _Ready()
 	{
@@ -74,21 +78,99 @@ public partial class LocationSelectView : Control
 		sub.Position = new Vector2(440, 130);
 		AddChild(sub);
 
-		// === Карточки локаций ===
-		// 5 локаций не помещаются в один ряд — раскладываем сеткой 3 в ряд.
-		// HFlowContainer переносит карточки на следующую строку автоматически.
-		var cardsRow = new HFlowContainer
+		// === Табы по грейдам ===
+		// Дефолтная вкладка — грейд персонажа, если есть локации для неё.
+		var available = AvailableGradeTabs();
+		if (p != null && available.Contains(p.Grade))
+			_selectedGradeTab = p.Grade;
+		else if (available.Count > 0)
+			_selectedGradeTab = available[0];
+
+		_tabRow = new HBoxContainer
 		{
-			Position = new Vector2(60, 200),
+			Position = new Vector2(60, 170),
+			Size = new Vector2(1160, 40),
+		};
+		_tabRow.AddThemeConstantOverride("separation", 8);
+		AddChild(_tabRow);
+
+		// === Карточки в ScrollContainer ===
+		var scroll = new ScrollContainer
+		{
+			Position = new Vector2(60, 220),
 			Size = new Vector2(1160, 760),
 		};
-		cardsRow.AddThemeConstantOverride("h_separation", 18);
-		cardsRow.AddThemeConstantOverride("v_separation", 18);
-		AddChild(cardsRow);
+		scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		scroll.VerticalScrollMode = ScrollContainer.ScrollMode.Auto;
+		AddChild(scroll);
 
+		_cardsRow = new HFlowContainer
+		{
+			SizeFlagsHorizontal = SizeFlags.ExpandFill,
+			SizeFlagsVertical = SizeFlags.ExpandFill,
+		};
+		_cardsRow.AddThemeConstantOverride("h_separation", 18);
+		_cardsRow.AddThemeConstantOverride("v_separation", 18);
+		scroll.AddChild(_cardsRow);
+
+		RebuildTabs();
+		RebuildCards();
+	}
+
+	// Список грейдов, которые встречаются среди локаций (для рисования табов).
+	// Сохраняет порядок E → D → C → B → A → S.
+	private static List<string> AvailableGradeTabs()
+	{
+		var seen = new HashSet<string>();
+		for (int i = 0; i < GameData.LocationRequiredLevel.Length; i++)
+			seen.Add(GradeForLocation(i));
+		var order = new[] { "E", "D", "C", "B", "A", "S" };
+		var result = new List<string>();
+		foreach (var g in order) if (seen.Contains(g)) result.Add(g);
+		return result;
+	}
+
+	private static string GradeForLocation(int index)
+	{
+		int req = index < GameData.LocationRequiredLevel.Length
+			? GameData.LocationRequiredLevel[index] : 1;
+		return CharacterData.GradeForLevel(req);
+	}
+
+	private void RebuildTabs()
+	{
+		foreach (Node c in _tabRow.GetChildren())
+		{
+			_tabRow.RemoveChild(c);
+			c.QueueFree();
+		}
+		foreach (var grade in AvailableGradeTabs())
+		{
+			var btn = new Button { Text = $"{grade}-грейд" };
+			UIStyle.StyleButton(btn, primary: grade == _selectedGradeTab);
+			btn.CustomMinimumSize = new Vector2(140, 36);
+			string captured = grade;
+			btn.Pressed += () =>
+			{
+				_selectedGradeTab = captured;
+				RebuildTabs();
+				RebuildCards();
+			};
+			_tabRow.AddChild(btn);
+		}
+	}
+
+	private void RebuildCards()
+	{
+		foreach (Node c in _cardsRow.GetChildren())
+		{
+			_cardsRow.RemoveChild(c);
+			c.QueueFree();
+		}
 		for (int i = 0; i < GameData.LocationNames.Length; i++)
 		{
-			cardsRow.AddChild(MakeLocationCard(i));
+			if (GradeForLocation(i) != _selectedGradeTab) continue;
+			_cardsRow.AddChild(MakeLocationCard(i));
 		}
 	}
 

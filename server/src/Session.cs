@@ -322,6 +322,15 @@ public class Session
 			Logger.Info($"[{_peer}] dev-grant: топ-ап крафт-ресурсов до 100");
 		}
 
+		// TODO(dev, D-grade content): убрать после теста D-локаций. Если Level
+		// меньше DevTargetLevel — бустим до него и обнуляем Exp. Сразу пускает
+		// тестового персонажа в D-grade локации (req. 21+) и к C-trial (38+).
+		if (TopUpDevLevel(ch, DevTargetLevel))
+		{
+			_store.UpdateCharacter(_accountId.Value, ch);
+			Logger.Info($"[{_peer}] dev-grant: уровень поднят до {ch.Level}/{ch.Grade}");
+		}
+
 		Logger.Info($"[{_peer}] selected char id={r.CharacterId} hp={ch.CurrentHp}/{ch.MaxHp()}");
 		return new SelectCharacterResponse
 		{
@@ -370,7 +379,7 @@ public class Session
 				if (eff != null) runEffects.Add(eff);
 			}
 
-		_battle = new BattleSession(character, enemies, deck, seed, nodeType, runEffects);
+		_battle = new BattleSession(character, enemies, deck, seed, nodeType, r.LocationIndex, runEffects);
 		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
 			$"seed={seed} enemies={enemies.Count} effects={runEffects.Count}");
 
@@ -406,6 +415,19 @@ public class Session
 			// При поражении флаг сохраняется — стартовый бой будет повторён.
 			if (victory && _battle.NodeType == MapNodeType.Tutorial)
 				_battle.Character.IsNewCharacter = false;
+
+			// C-trial: победа над боссом локации TrialLocationIndex даёт авто-промо
+			// в C-грейд, если перс на D. Сделано серверной логикой, чтобы клиент
+			// не мог сфабриковать промоушн. Идемпотентно: повтор боя ничего не
+			// добавляет — Grade уже C/выше.
+			if (victory
+				&& _battle.NodeType == MapNodeType.Boss
+				&& _battle.LocationIndex == TrialLocationIndex
+				&& _battle.Character.Grade == "D")
+			{
+				_battle.Character.PromoteGrade();
+				Logger.Info($"[{_peer}] C-trial passed → promoted to {_battle.Character.Grade}/{_battle.Character.Level}");
+			}
 
 			// И5в.5 persistence: сохраняем character_json с актуальным
 			// инвентарём, эффектами, HP/MP. Engine уже мутировал state.Player.
@@ -611,6 +633,24 @@ public class Session
 	// детерминирован между запусками, но это и не нужно (форж не воспроизводим).
 	private RandomSource MakeForgeRng() => new(_serverRng.Next());
 
+	// Целевой уровень dev-бэкдора (см. TopUpDevLevel). Убрать вместе с вызовом
+	// в HandleSelectCharacter после теста D-grade контента.
+	private const int DevTargetLevel = 40;
+
+	// Dev-only: бустит Level персонажа до target, если он меньше. Через
+	// LevelUpCharacter — статпоинты копятся как при обычном апе. Затем
+	// RecomputeGrade синхронизирует Grade с новым Level и Exp обнуляется.
+	// Возвращает true если что-то поменялось.
+	private static bool TopUpDevLevel(CharacterData ch, int target)
+	{
+		if (ch.Level >= target) return false;
+		while (ch.Level < target)
+			ch.LevelUpCharacter();
+		ch.RecomputeGrade();
+		ch.Exp = 0;
+		return true;
+	}
+
 	// Dev-only: добивает каждый крафт-ресурс до 100 в инвентаре, если меньше.
 	// Возвращает true если что-то добавилось (требуется UpdateCharacter).
 	// Использовать как короткий бэкдор на время теста крафт-системы; убрать
@@ -629,6 +669,10 @@ public class Session
 		}
 		return changed;
 	}
+
+	// Индекс локации, прохождение боссa которой даёт C-грейд (см. HandleBattleAction).
+	// Совпадает с порядком в GameData.LocationNames на клиенте.
+	private const int TrialLocationIndex = 8;
 
 	// Детерминированный вывод seed'а боя из runSeed + nodeId. Простая mix-функция
 	// (multiplicative hash с золотым отношением 0x9E3779B9). Достаточно для

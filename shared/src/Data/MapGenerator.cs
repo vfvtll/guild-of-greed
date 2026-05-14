@@ -33,6 +33,10 @@ public static class MapGenerator
 		new() { Rows = 6, Paths = 3, Cols = 5 }, // Логово босса — длинное.
 		new() { Rows = 8, Paths = 3, Cols = 5 }, // Заброшенные катакомбы — длинное (lvl≥5).
 		new() { Rows = 10, Paths = 4, Cols = 6 }, // Развалины старого замка — самое длинное (lvl≥5).
+		new() { Rows = 8, Paths = 3, Cols = 5 }, // Каменоломня Гримсхольд — D low (lvl≥21).
+		new() { Rows = 9, Paths = 4, Cols = 5 }, // Полузатопленный храм — D mid (lvl≥26).
+		new() { Rows = 10, Paths = 4, Cols = 6 }, // Холмы Когтя — D top (lvl≥32).
+		new() { Rows = 4, Paths = 2, Cols = 3 }, // Турнирная ставка Каркаса — C-trial (lvl≥38).
 	};
 
 	// Главный API — детерминированная генерация из seed. Клиент и сервер
