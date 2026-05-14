@@ -92,15 +92,19 @@ public static class UIStyle
 	// Layout helpers
 	// =====================================================================
 
-	// Растягивает Control на весь родительский Rect (Anchors + Offsets = 0).
-	// Используется для модалок/оверлеев: голый SetAnchorsPreset(FullRect)
-	// при keep_offsets=false сохраняет ТЕКУЩИЙ rect — а у только что созданного
-	// Control'а он 0×0, поэтому модалка визуально схлопывается, особенно когда
-	// внутреннего контента мало (например, пустая кузница).
-	// Этот хелпер прибивает offsets к нулю явно — модалка ВСЕГДА на весь экран.
+	// Растягивает Control на весь родительский Rect.
+	//
+	// Использует SetAnchorsAndOffsetsPreset(FullRect) — он одной операцией ставит
+	// anchors=(0,0,1,1) И offsets=(0,0,0,0). Голый SetAnchorsPreset(FullRect) с
+	// keep_offsets=false сохраняет текущий rect, а у только что созданного
+	// Control'а он 0×0 — поэтому модалка/view визуально схлопывается, особенно
+	// если её родитель тоже схлопнулся по той же причине (TownView/Combat).
+	//
+	// Этот хелпер обязателен ВЕЗДЕ, где view или оверлей должен покрыть родителя:
+	// сам Control + ColorRect-фон. Иначе родительский view 0×0 → дочерние тоже.
 	public static void FillParent(Control c, float margin = 0f)
 	{
-		c.SetAnchorsPreset(LayoutPreset.FullRect);
+		c.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 		c.OffsetLeft = margin;
 		c.OffsetTop = margin;
 		c.OffsetRight = -margin;
@@ -111,7 +115,7 @@ public static class UIStyle
 	// внутри оверлея, который не должен впритык лежать к краям экрана.
 	public static void FillParent(Control c, float marginX, float marginY)
 	{
-		c.SetAnchorsPreset(LayoutPreset.FullRect);
+		c.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 		c.OffsetLeft = marginX;
 		c.OffsetTop = marginY;
 		c.OffsetRight = -marginX;

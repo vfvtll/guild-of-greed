@@ -50,7 +50,7 @@ public partial class Combat : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		BuildUI();
 		_ = StartNewCombatAsync();
 	}

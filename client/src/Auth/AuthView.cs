@@ -31,7 +31,7 @@ public partial class AuthView : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		BuildUI();
 		ApplyMode();
 	}
@@ -39,7 +39,7 @@ public partial class AuthView : Control
 	private void BuildUI()
 	{
 		var bg = new ColorRect { Color = UIStyle.BgDeep };
-		bg.SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(bg);
 		bg.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(bg);
 

@@ -21,14 +21,14 @@ public partial class ConnectingView : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		BuildUI();
 	}
 
 	private void BuildUI()
 	{
 		var bg = new ColorRect { Color = UIStyle.BgDeep };
-		bg.SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(bg);
 		bg.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(bg);
 

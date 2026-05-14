@@ -22,7 +22,7 @@ public partial class Combat
 	private void BuildUI()
 	{
 		var bg = new ColorRect { Color = UIStyle.BgDeep };
-		bg.SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(bg);
 		bg.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(bg);
 

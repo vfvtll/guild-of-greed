@@ -46,7 +46,7 @@ public partial class CharacterCreation : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		BuildUI();
 		Reroll();
 	}
@@ -141,7 +141,7 @@ public partial class CharacterCreation : Control
 	private void BuildUI()
 	{
 		var bg = new ColorRect { Color = UIStyle.BgDeep };
-		bg.SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(bg);
 		bg.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(bg);
 

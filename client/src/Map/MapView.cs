@@ -32,7 +32,7 @@ public partial class MapView : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		BuildUI();
 		BuildNodes();
 	}
@@ -40,7 +40,7 @@ public partial class MapView : Control
 	private void BuildUI()
 	{
 		var bg = new ColorRect { Color = UIStyle.BgDeep };
-		bg.SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(bg);
 		bg.MouseFilter = MouseFilterEnum.Ignore;
 		AddChild(bg);
 

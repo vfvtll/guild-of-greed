@@ -23,7 +23,7 @@ public partial class Main : Control
 
 	public override void _Ready()
 	{
-		SetAnchorsPreset(LayoutPreset.FullRect);
+		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Ignore;
 		StartFlow();
 	}
