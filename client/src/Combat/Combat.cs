@@ -47,6 +47,7 @@ public partial class Combat : Control
 	private CombatLogOverlay _logOverlay;
 	private readonly List<string> _logLines = new();
 	private RunEffectChoiceOverlay _runEffectOverlay;
+	private ArtifactChoiceOverlay _artifactOverlay;
 
 	public override void _Ready()
 	{
@@ -76,11 +77,12 @@ public partial class Combat : Control
 		// идентично в CombatEngine — обе стороны строят список из этого же
 		// массива ID через RunEffectsDB.Get.
 		var activeEffectIds = GameData.Instance.CurrentRun?.ActiveEffects;
+		var activeArtifactIds = GameData.Instance.CurrentRun?.ActiveArtifacts;
 
 		BattleStartedResponse resp;
 		try
 		{
-			resp = await Net.StartBattleAsync(locationIndex, nodeType, nodeId, activeEffectIds);
+			resp = await Net.StartBattleAsync(locationIndex, nodeType, nodeId, activeEffectIds, activeArtifactIds);
 		}
 		catch (ServerException ex)
 		{
@@ -123,8 +125,17 @@ public partial class Combat : Control
 				var eff = RunEffectsDB.Get(id);
 				if (eff != null) runEffects.Add(eff);
 			}
+		// То же для артефактов — клиент-сервер симметрия гарантируется
+		// ArtifactsDB.Get на обеих сторонах.
+		var artifacts = new List<Artifact>();
+		if (activeArtifactIds != null)
+			foreach (var id in activeArtifactIds)
+			{
+				var a = ArtifactsDB.Get(id);
+				if (a != null) artifacts.Add(a);
+			}
 
-		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, resp.Seed, runEffects);
+		var (state, events) = CombatEngine.StartBattle(character, enemies, deck, resp.Seed, runEffects, artifacts);
 		_state = state;
 		_endTurnButton.Disabled = false;
 		_busy = false;
@@ -170,6 +181,19 @@ public partial class Combat : Control
 			}
 			if (names.Count > 0)
 				Log($"[color=#fa3]⚗ Эффекты подземелья: {string.Join(", ", names)}[/color]");
+		}
+		// Активные артефакты забега.
+		var artifactIds = GameData.Instance.CurrentRun?.ActiveArtifacts;
+		if (artifactIds != null && artifactIds.Count > 0)
+		{
+			var names = new List<string>();
+			foreach (var id in artifactIds)
+			{
+				var a = GuildOfGreed.Shared.Data.ArtifactsDB.Get(id);
+				if (a != null) names.Add(a.Name);
+			}
+			if (names.Count > 0)
+				Log($"[color=#fc6]✦ Артефакты: {string.Join(", ", names)}[/color]");
 		}
 		Log($"👕 {pc.Chest?.Name ?? "—"}  ⛑ {pc.Helmet?.Name ?? "—"}");
 		Log($"🧤 {pc.Gloves?.Name ?? "—"}  👢 {pc.Boots?.Name ?? "—"}");
@@ -581,6 +605,58 @@ public partial class Combat : Control
 			_runEffectOverlay = null;
 		}
 
+		// Сразу после эффекта подземелья — выбор артефакта (если есть кандидаты).
+		ShowArtifactChoice();
+	}
+
+	// =====================================================================
+	// Выбор артефакта после эффекта подземелья
+	// =====================================================================
+
+	private void ShowArtifactChoice()
+	{
+		if (_artifactOverlay != null) return;
+		var run = GameData.Instance.CurrentRun;
+		var character = GameData.Instance.Character;
+		if (run == null || character == null)
+		{
+			OpenAdvanceButton();
+			return;
+		}
+		// Другой seed mix чем у RunEffect — чтобы пул артефактов был независим.
+		var rng = new RandomSource(unchecked(_state.Seed ^ 0x4117FAC7));
+		var choices = GuildOfGreed.Shared.Data.ArtifactsDB.RollChoices(
+			3, rng, character, run.ActiveArtifacts);
+		if (choices == null || choices.Count == 0)
+		{
+			// Пул иссяк (всё собрано / нет совместимой экипировки) — пропускаем.
+			Log("[color=#888]✦ Артефактов для тебя в этой комнате не нашлось.[/color]");
+			OpenAdvanceButton();
+			return;
+		}
+		_artifactOverlay = new ArtifactChoiceOverlay(choices);
+		_artifactOverlay.Chosen += OnArtifactChosen;
+		AddChild(_artifactOverlay);
+	}
+
+	private void OnArtifactChosen(string artifactId)
+	{
+		var a = GuildOfGreed.Shared.Data.ArtifactsDB.Get(artifactId);
+		GameData.Instance.CurrentRun?.ActiveArtifacts.Add(artifactId);
+		Log($"[color=#fc6]✦ Артефакт получен: {a?.Name ?? artifactId}[/color]");
+
+		if (_artifactOverlay != null)
+		{
+			RemoveChild(_artifactOverlay);
+			_artifactOverlay.QueueFree();
+			_artifactOverlay = null;
+		}
+
+		OpenAdvanceButton();
+	}
+
+	private void OpenAdvanceButton()
+	{
 		_endTurnButton.Text = "🗺 Переход на карту";
 		_endTurnButton.Disabled = false;
 	}

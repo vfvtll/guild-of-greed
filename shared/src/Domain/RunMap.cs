@@ -61,6 +61,12 @@ public class RunMap
 	// уничтожается → эффекты исчезают.
 	public List<string> ActiveEffects = new();
 
+	// Активные артефакты подземелья — параллельно с ActiveEffects. ID из
+	// ArtifactsDB. Артефакт действует только на игрока и всегда положителен.
+	// Список фильтруется по экипировке игрока при ролле (см. ArtifactsDB).
+	// При EndRun уничтожается вместе с RunMap.
+	public List<string> ActiveArtifacts = new();
+
 	// Все узлы текущей строки (для отрисовки колонкой).
 	public IEnumerable<MapNode> NodesInRow(int row)
 	{

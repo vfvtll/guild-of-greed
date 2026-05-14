@@ -131,6 +131,9 @@ public class StartBattleRequest : ClientMessage
 	// их при построении BattleState — применяет в CombatEngine. null/пусто
 	// для туториал-боёв.
 	[Key(4)] public List<string> ActiveRunEffects;
+	// ID-ы активных артефактов забега (RunMap.ActiveArtifacts). Сервер
+	// резолвит через ArtifactsDB.Get и передаёт в CombatEngine как Artifact-список.
+	[Key(5)] public List<string> ActiveArtifacts;
 }
 
 // Одно действие игрока в активном бою. Маппится на BattleAction в shared/Combat.

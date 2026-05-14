@@ -378,10 +378,18 @@ public class Session
 				var eff = RunEffectsDB.Get(id);
 				if (eff != null) runEffects.Add(eff);
 			}
+		// Артефакты — аналогично RunEffects, но действуют только на игрока.
+		var artifacts = new System.Collections.Generic.List<Artifact>();
+		if (r.ActiveArtifacts != null)
+			foreach (var id in r.ActiveArtifacts)
+			{
+				var art = ArtifactsDB.Get(id);
+				if (art != null) artifacts.Add(art);
+			}
 
-		_battle = new BattleSession(character, enemies, deck, seed, nodeType, r.LocationIndex, runEffects);
+		_battle = new BattleSession(character, enemies, deck, seed, nodeType, r.LocationIndex, runEffects, artifacts);
 		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
-			$"seed={seed} enemies={enemies.Count} effects={runEffects.Count}");
+			$"seed={seed} enemies={enemies.Count} effects={runEffects.Count} artifacts={artifacts.Count}");
 
 		return new BattleStartedResponse { Success = true, Seed = seed };
 	}

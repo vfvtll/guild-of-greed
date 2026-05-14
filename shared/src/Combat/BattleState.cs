@@ -47,4 +47,9 @@ public class BattleState
 	// Стандарт: bleed добавляется в BeginPlayerTurn; damage-pct применяется
 	// в исходящем уроне обеих сторон.
 	public List<RunEffect> RunEffects = new();
+
+	// Артефакты забега. В отличие от RunEffects действуют только на игрока и
+	// всегда положительны. Скопированы из RunMap.ActiveArtifacts на старте боя.
+	// Применение — см. CombatEngine.ApplyArtifact* и BeginPlayerTurn.
+	public List<Artifact> Artifacts = new();
 }

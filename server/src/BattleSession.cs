@@ -23,9 +23,10 @@ public class BattleSession
 	public int LocationIndex { get; }
 
 	public BattleSession(CharacterData player, List<EnemyData> enemies, List<string> deck,
-		int seed, MapNodeType nodeType, int locationIndex, List<RunEffect> runEffects = null)
+		int seed, MapNodeType nodeType, int locationIndex,
+		List<RunEffect> runEffects = null, List<Artifact> artifacts = null)
 	{
-		var (state, _) = CombatEngine.StartBattle(player, enemies, deck, seed, runEffects);
+		var (state, _) = CombatEngine.StartBattle(player, enemies, deck, seed, runEffects, artifacts);
 		State = state;
 		NodeType = nodeType;
 		LocationIndex = locationIndex;

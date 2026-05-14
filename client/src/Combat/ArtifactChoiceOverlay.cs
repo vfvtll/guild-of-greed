@@ -1,0 +1,113 @@
+using Godot;
+using System.Collections.Generic;
+using GuildOfGreed.Shared.Domain;
+
+// Окно выбора артефакта после победы. Показывается ПОСЛЕ выбора RunEffect
+// (см. Combat.OnRunEffectChosen → ShowArtifactChoice). 3 варианта, игрок
+// кликает — эмитится Chosen(artifactId).
+//
+// Содержит общие артефакты и специфичные под оружие/броню игрока — пул
+// фильтрует ArtifactsDB.RollChoices в Combat. Если подходящих кандидатов
+// нет (всё уже собрано / нет совместимой экипировки) — оверлей вообще не
+// показывается (skip в Combat).
+public partial class ArtifactChoiceOverlay : Control
+{
+	[Signal] public delegate void ChosenEventHandler(string artifactId);
+
+	private readonly List<Artifact> _choices;
+	private PanelContainer _panel;
+	private ColorRect _dim;
+
+	public ArtifactChoiceOverlay(List<Artifact> choices)
+	{
+		_choices = choices ?? new List<Artifact>();
+	}
+
+	public override void _Ready()
+	{
+		UIStyle.FillParent(this);
+		MouseFilter = MouseFilterEnum.Stop;
+		BuildUI();
+		PlayOpenAnimation();
+	}
+
+	private void BuildUI()
+	{
+		_dim = new ColorRect { Color = new Color(0, 0, 0, 0.7f) };
+		_dim.MouseFilter = MouseFilterEnum.Stop;
+		AddChild(_dim);
+		UIStyle.FillParent(_dim);
+
+		_panel = new PanelContainer();
+		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
+		AddChild(_panel);
+		UIStyle.FillParent(_panel, marginX: 140, marginY: 100);
+
+		var v = new VBoxContainer();
+		v.AddThemeConstantOverride("separation", 16);
+		_panel.AddChild(v);
+
+		var title = UIStyle.MakeLabel("✦ Артефакт", 26, UIStyle.GoldBright);
+		title.HorizontalAlignment = HorizontalAlignment.Center;
+		v.AddChild(title);
+
+		var sub = UIStyle.MakeLabel(
+			"Заберите один артефакт — он останется с вами до конца забега.",
+			14, UIStyle.TextSecondary);
+		sub.HorizontalAlignment = HorizontalAlignment.Center;
+		v.AddChild(sub);
+
+		v.AddChild(new HSeparator());
+
+		var row = new HBoxContainer();
+		row.AddThemeConstantOverride("separation", 16);
+		row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		row.SizeFlagsVertical = SizeFlags.ExpandFill;
+		v.AddChild(row);
+
+		foreach (var a in _choices)
+			row.AddChild(MakeArtifactCard(a));
+	}
+
+	private PanelContainer MakeArtifactCard(Artifact a)
+	{
+		var card = new PanelContainer
+		{
+			CustomMinimumSize = new Vector2(300, 340),
+		};
+		card.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
+
+		var col = new VBoxContainer();
+		col.AddThemeConstantOverride("separation", 10);
+		card.AddChild(col);
+
+		col.AddChild(UIStyle.MakeSectionTitle(a.Name));
+
+		var desc = UIStyle.MakeLabel(a.Description, 13, UIStyle.TextPrimary);
+		desc.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		desc.CustomMinimumSize = new Vector2(260, 0);
+		col.AddChild(desc);
+
+		var spacer = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
+		col.AddChild(spacer);
+
+		var btn = new Button { Text = "Забрать" };
+		UIStyle.StyleButton(btn, primary: true);
+		btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		string capturedId = a.Id;
+		btn.Pressed += () => EmitSignal(SignalName.Chosen, capturedId);
+		col.AddChild(btn);
+
+		return card;
+	}
+
+	private void PlayOpenAnimation()
+	{
+		_panel.Modulate = new Color(1, 1, 1, 0);
+		_dim.Modulate = new Color(1, 1, 1, 0);
+		var t = CreateTween().SetParallel(true)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+		t.TweenProperty(_panel, "modulate:a", 1f, 0.22f);
+		t.TweenProperty(_dim, "modulate:a", 1f, 0.22f);
+	}
+}

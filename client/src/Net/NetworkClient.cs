@@ -136,6 +136,7 @@ public class NetworkClient : IDisposable
 
 	public Task<BattleStartedResponse> StartBattleAsync(int locationIndex, int nodeType,
 		int nodeId = -1, System.Collections.Generic.List<string> activeRunEffects = null,
+		System.Collections.Generic.List<string> activeArtifacts = null,
 		CancellationToken ct = default)
 		=> ExchangeAsync<BattleStartedResponse>(new StartBattleRequest
 		{
@@ -143,6 +144,7 @@ public class NetworkClient : IDisposable
 			NodeType = nodeType,
 			NodeId = nodeId,
 			ActiveRunEffects = activeRunEffects,
+			ActiveArtifacts = activeArtifacts,
 		}, ct);
 
 	public Task<StartRunResponse> StartRunAsync(int locationIndex, CancellationToken ct = default)

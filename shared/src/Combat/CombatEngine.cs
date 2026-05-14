@@ -51,7 +51,8 @@ public static class CombatEngine
 		List<EnemyData> enemies,
 		List<string> deckSource,
 		int seed,
-		List<RunEffect> runEffects = null)
+		List<RunEffect> runEffects = null,
+		List<Artifact> artifacts = null)
 	{
 		var state = new BattleState
 		{
@@ -60,6 +61,7 @@ public static class CombatEngine
 			Seed = seed,
 			Rng = new RandomSource(seed),
 			RunEffects = runEffects ?? new List<RunEffect>(),
+			Artifacts = artifacts ?? new List<Artifact>(),
 		};
 
 		// Подготовка к бою: HP/MP переносятся из прошлого боя (persist между
@@ -180,7 +182,8 @@ public static class CombatEngine
 
 		if (regenMp)
 		{
-			int amount = state.Player.MpRegen();
+			int amount = state.Player.MpRegen()
+				+ ArtifactsDB.MagnitudeSum(state.Artifacts, state.Player, Artifact.KindMpRegenFlat);
 			int oldMp = state.Player.CurrentMp;
 			state.Player.CurrentMp = Math.Min(state.Player.MaxMp(), state.Player.CurrentMp + amount);
 			int delta = state.Player.CurrentMp - oldMp;
@@ -190,7 +193,9 @@ public static class CombatEngine
 
 		// HpRegen (И6.2) — от аффиксов/сетов. У персонажа базы нет; если игрок
 		// ничего "регенерирующего" не надел, amount=0 и event не эмитится.
-		int hpRegen = state.Player.HpRegen();
+		// Артефакты могут накинуть свой бонус (silver_chalice).
+		int hpRegen = state.Player.HpRegen()
+			+ ArtifactsDB.MagnitudeSum(state.Artifacts, state.Player, Artifact.KindHpRegenFlat);
 		if (hpRegen > 0)
 		{
 			int oldHp = state.Player.CurrentHp;
@@ -214,8 +219,20 @@ public static class CombatEngine
 			}
 		}
 
-		// Добор руки до HandSize.
-		DrawToHand(state, events, state.Player.HandSize());
+		// Артефакт "block_start_turn" (aegis_charge): плоский блок в начале хода.
+		int artifactBlock = ArtifactsDB.MagnitudeSum(
+			state.Artifacts, state.Player, Artifact.KindBlockStartTurn);
+		if (artifactBlock > 0)
+		{
+			state.Player.CurrentBlock += artifactBlock;
+			events.Add(new BattleEvent { Type = BattleEventType.BlockGained, Amount = artifactBlock });
+		}
+
+		// Добор руки до HandSize. Артефакт "extra_draw" (quickdraw_belt) расширяет
+		// руку игрока — добавляем к базовой HandSize() из CharacterData.
+		int handSize = state.Player.HandSize()
+			+ ArtifactsDB.MagnitudeSum(state.Artifacts, state.Player, Artifact.KindExtraDraw);
+		DrawToHand(state, events, handSize);
 
 		events.Add(new BattleEvent { Type = BattleEventType.TurnStarted, Amount = state.TurnCount });
 	}
@@ -383,6 +400,54 @@ public static class CombatEngine
 		}
 	}
 
+	// Crit-tick игрока с учётом артефактов crit_every_n_minus (runic_focus,
+	// shadow_step). Сдвигает эффективный кулдаун крита вниз на сумму магнитуд,
+	// нижняя граница — 2 удара (как в CharacterData.EffectiveCritEveryN).
+	private static bool TryConsumeCritWithArtifacts(BattleState state)
+	{
+		var p = state.Player;
+		if (p == null || p.Weapon == null) return false;
+		int offset = ArtifactsDB.MagnitudeSum(
+			state.Artifacts, p, Artifact.KindCritEveryNMinus);
+		int effective = Math.Max(2, p.EffectiveCritEveryN() - offset);
+		p.AttacksSinceLastCrit++;
+		if (p.AttacksSinceLastCrit >= effective)
+		{
+			p.AttacksSinceLastCrit = 0;
+			return true;
+		}
+		return false;
+	}
+
+	// Бонус игрока к исходящему урону от артефактов. В отличие от ApplyRunDmgPct
+	// работает только для атак игрока: суммирует phys/mag/weapon_dmg_pct из
+	// активных артефактов, учитывая Requires (если игрок снял оружие/броню,
+	// требующий артефакт молчит).
+	private static int ApplyArtifactPlayerDmgPct(int dmg, BattleState state, bool isPhys)
+	{
+		if (state.Artifacts == null || state.Artifacts.Count == 0) return dmg;
+		int pct = 0;
+		string weaponType = state.Player.Weapon?.Type;
+		foreach (var a in state.Artifacts)
+		{
+			if (a == null) continue;
+			if (!ArtifactsDB.Matches(a, state.Player)) continue;
+			switch (a.Kind)
+			{
+				case Artifact.KindPhysDmgPct: if (isPhys)  pct += a.Magnitude; break;
+				case Artifact.KindMagDmgPct:  if (!isPhys) pct += a.Magnitude; break;
+				case Artifact.KindWeaponDmgPct:
+					if (!string.IsNullOrEmpty(weaponType)
+						&& a.Requires == "weapon:" + weaponType)
+						pct += a.Magnitude;
+					break;
+			}
+		}
+		if (pct == 0) return dmg;
+		long scaled = (long)dmg * (100 + pct) / 100;
+		return (int)Math.Max(0, scaled);
+	}
+
 	// Run-эффекты all_dmg_pct / weapon_dmg_pct → множитель к исходящему урону.
 	// sourceWeaponType: тип оружия атакующего (player.Weapon.Type или intent.WeaponType).
 	// Может быть null — тогда weapon_dmg_pct не применяется.
@@ -410,7 +475,14 @@ public static class CombatEngine
 		// Регенерация съедает часть стака. Остаток ляжет уроном.
 		enemy.BleedStack = Math.Max(0, enemy.BleedStack - enemy.HpRegen);
 		if (enemy.BleedStack <= 0) return;
-		int dmg = Math.Min(enemy.BleedStack, enemy.CurrentHp);
+		int rawTick = enemy.BleedStack;
+		// Артефакт bleed_amp_pct (bleeding_edge): амплифицирует тик от bleed.
+		// Стак при этом не растёт — увеличивается только удар при тике.
+		int bleedAmp = ArtifactsDB.MagnitudeSum(
+			state.Artifacts, state.Player, Artifact.KindBleedAmpPct);
+		if (bleedAmp > 0)
+			rawTick = (int)((long)rawTick * (100 + bleedAmp) / 100);
+		int dmg = Math.Min(rawTick, enemy.CurrentHp);
 		enemy.CurrentHp -= dmg;
 		events.Add(new BattleEvent
 		{
@@ -444,10 +516,56 @@ public static class CombatEngine
 		int absorbed = Math.Min(state.Player.CurrentBlock, rawDamage);
 		state.Player.CurrentBlock -= absorbed;
 		int hpDamage = Math.Max(0, rawDamage - absorbed);
-		// Mitigation: PhysDef для физ.урона, MagDef для маг.
+		// Mitigation: PhysDef для физ.урона, MagDef для маг. Артефакты накидывают
+		// плоский бонус (iron_skin / mage_ward / hunter_resolve / crystal_aegis).
 		int defense = isPhys ? state.Player.PhysDef() : state.Player.MagDef();
+		defense += ArtifactsDB.MagnitudeSum(state.Artifacts, state.Player,
+			isPhys ? Artifact.KindPhysDefFlat : Artifact.KindMagDefFlat);
 		hpDamage = Math.Max(0, hpDamage - defense);
 		state.Player.CurrentHp = Math.Max(0, state.Player.CurrentHp - hpDamage);
+
+		// Thorns (thorny_carapace): возврат плоского урона атакующему, если
+		// удар был физический и игрок реально получил урон в HP.
+		if (isPhys && hpDamage > 0 && sourceEnemyIndex >= 0 && sourceEnemyIndex < state.Enemies.Count)
+		{
+			int thorns = ArtifactsDB.MagnitudeSum(
+				state.Artifacts, state.Player, Artifact.KindThornsFlat);
+			if (thorns > 0)
+			{
+				var src = state.Enemies[sourceEnemyIndex];
+				if (src.CurrentHp > 0)
+				{
+					int actual = Math.Min(thorns, src.CurrentHp);
+					src.CurrentHp -= actual;
+					events.Add(new BattleEvent
+					{
+						Type = BattleEventType.DamageDealtToEnemy,
+						EnemyIndex = sourceEnemyIndex,
+						Amount = actual,
+						IsPhys = true,
+					});
+					if (src.CurrentHp <= 0)
+					{
+						events.Add(new BattleEvent
+						{
+							Type = BattleEventType.EnemyDied,
+							EnemyIndex = sourceEnemyIndex,
+						});
+						GrantKillXp(state, src, events);
+						var dropped = DropLoot(state, src);
+						if (dropped.Count > 0)
+							events.Add(new BattleEvent
+							{
+								Type = BattleEventType.LootDropped,
+								EnemyIndex = sourceEnemyIndex,
+								DroppedItems = dropped,
+							});
+						if (AllEnemiesDead(state))
+							EndBattle(state, events, victory: true);
+					}
+				}
+			}
+		}
 		events.Add(new BattleEvent
 		{
 			Type = BattleEventType.DamageDealtToPlayer,
@@ -561,7 +679,9 @@ public static class CombatEngine
 				int dmg = CardsDB.ComputePhysDamage(card, state.Player, target, state.Hand);
 				// Run-эффекты: множитель к исходящему урону (all_dmg_pct + weapon_dmg_pct).
 				dmg = ApplyRunDmgPct(dmg, state.RunEffects, state.Player.Weapon?.Type);
-				bool isCrit = state.Player.TryConsumeCrit();
+				// Артефакты: бонус игрока к физ.урону (phys_dmg_pct + weapon_dmg_pct).
+				dmg = ApplyArtifactPlayerDmgPct(dmg, state, isPhys: true);
+				bool isCrit = TryConsumeCritWithArtifacts(state);
 				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
 				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: true, isCrit);
 				break;
@@ -571,7 +691,9 @@ public static class CombatEngine
 				int chain = state.SpellsCastThisTurn;
 				int dmg = CardsDB.ComputeMagicDamage(card, state.Player, target, chain);
 				dmg = ApplyRunDmgPct(dmg, state.RunEffects, state.Player.Weapon?.Type);
-				bool isCrit = state.Player.TryConsumeCrit();
+				// Артефакты: бонус игрока к маг.урону (mag_dmg_pct + weapon_dmg_pct под посох).
+				dmg = ApplyArtifactPlayerDmgPct(dmg, state, isPhys: false);
+				bool isCrit = TryConsumeCritWithArtifacts(state);
 				if (isCrit) dmg = (int)Math.Round(dmg * state.Player.CritMultiplier());
 				ApplyDamageToEnemy(state, events, action.TargetEnemyIndex, dmg, isPhys: false, isCrit);
 				// Инкрементим счётчик ТОЛЬКО для атакующих маг.заклинаний.
@@ -658,6 +780,27 @@ public static class CombatEngine
 			IsCrit = isCrit,
 			IsPhys = isPhys,
 		});
+
+		// Lifesteal (vampiric_fang): % от нанесённого физ.урона восстанавливает
+		// игроку HP. Срабатывает только на физ.удары игрока — игровая логика.
+		if (isPhys && hpDamage > 0)
+		{
+			int lifestealPct = ArtifactsDB.MagnitudeSum(
+				state.Artifacts, state.Player, Artifact.KindLifestealPct);
+			if (lifestealPct > 0)
+			{
+				int heal = hpDamage * lifestealPct / 100;
+				if (heal > 0)
+				{
+					int before = state.Player.CurrentHp;
+					state.Player.CurrentHp = Math.Min(
+						state.Player.MaxHp(), state.Player.CurrentHp + heal);
+					int delta = state.Player.CurrentHp - before;
+					if (delta > 0)
+						events.Add(new BattleEvent { Type = BattleEventType.HpHealed, Amount = delta });
+				}
+			}
+		}
 
 		// Bleed-накопление (И6.3). Только физический урон по HP (после
 		// защиты+блока) и только если оружие игрока имеет bleed_on_hit.
