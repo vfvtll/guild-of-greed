@@ -90,13 +90,16 @@ public static class ForgeDB
 
 	// Стоимость улучшения rarity → rarity+1 в эссенции. -1 если нельзя
 	// (уже на потолке для grade или уже Legendary).
+	// Math.Max(1, …) защищает от целочисленного зануления: для Low E (BasePrice=1)
+	// Common→Uncommon = 1*20/100 = 0, а 0 эссенции ломает UI-условие "кнопка
+	// активна если cost>0" и логически странно (бесплатный ап). Минимум 1.
 	public static long UpgradeCost(string grade, string rank, ItemRarity currentRarity)
 	{
 		if (!CanUpgrade(grade, currentRarity)) return -1;
 		int idx = (int)currentRarity;
 		if (idx < 0) idx = 0;
 		if (idx >= UpgradeCostPct.Length) idx = UpgradeCostPct.Length - 1;
-		return BasePrice(grade, rank) * UpgradeCostPct[idx] / 100;
+		return Math.Max(1, BasePrice(grade, rank) * UpgradeCostPct[idx] / 100);
 	}
 
 	// Может ли предмет ещё подняться по rarity (учитывает кап grade).

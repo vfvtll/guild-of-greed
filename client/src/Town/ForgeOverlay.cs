@@ -249,7 +249,10 @@ public partial class ForgeOverlay : Control
 		actions.AddChild(distillBtn);
 
 		long upgradeCost = ForgeDB.UpgradeCost(grade, rank, rarity);
-		bool canUp = upgradeCost > 0;
+		// UpgradeCost: -1 = нельзя апать (потолок rarity для grade), иначе >=1.
+		// Раньше тут было > 0, и для E-low Common кнопка отключалась из-за того,
+		// что 1*20/100 = 0 в int-делении. Чинено и здесь, и в ForgeDB.
+		bool canUp = upgradeCost >= 0;
 		var upgradeBtn = new Button
 		{
 			Text = canUp
