@@ -299,6 +299,87 @@ public static class ItemsDB
 		return parts.Count == 0 ? a.Name : $"{a.Name}: {string.Join(", ", parts)}";
 	}
 
+	// =====================================================================
+	// Multiline-описания для tooltip'ов инвентаря
+	// =====================================================================
+	//
+	// Возвращают только тело описания (без имени предмета — имя UI рисует
+	// отдельно). Группы разделяются пустой строкой:
+	//   1. Базовые статы (по одной строке).
+	//   2. "Аффиксы:" — отдельная группа с именем аффикса и его величиной.
+	//   3. "Пассив:" — для оружия, если уник.эффекты есть.
+
+	public static string DescribeWeaponMultiline(WeaponData w)
+	{
+		if (w == null) return "—";
+		var lines = new List<string>();
+
+		// База.
+		lines.Add($"Физ ×{w.PhysMult:F1}    Маг ×{w.MagicMult:F1}");
+		if (w.PhysAtk  > 0) lines.Add($"+{w.PhysAtk} ФизАтк");
+		if (w.MagicAtk > 0) lines.Add($"+{w.MagicAtk} МагАтк");
+		if (w.ExtraDraw > 0) lines.Add($"+{w.ExtraDraw} карта в руке");
+		if (w.CritEveryNAttacks > 0 && w.CritEveryNAttacks < 999)
+			lines.Add($"Крит каждые {w.CritEveryNAttacks} ат.");
+		if (w.IsTwoHanded) lines.Add("Двуручное");
+
+		// Аффиксы.
+		if (w.Affixes != null && w.Affixes.Count > 0)
+		{
+			lines.Add("");
+			lines.Add("Аффиксы:");
+			foreach (var aff in w.Affixes)
+				lines.Add($"  • {AffixesDB.DisplayName(aff)} ({AffixesDB.DescribeShort(aff)})");
+		}
+
+		// Пассивы.
+		if (w.Passives != null && w.Passives.Count > 0)
+		{
+			bool headerAdded = false;
+			foreach (var p in w.Passives)
+			{
+				var d = DescribePassive(p);
+				if (string.IsNullOrEmpty(d)) continue;
+				if (!headerAdded)
+				{
+					lines.Add("");
+					lines.Add("Пассив:");
+					headerAdded = true;
+				}
+				lines.Add($"  • {d}");
+			}
+		}
+
+		return string.Join("\n", lines);
+	}
+
+	public static string DescribeArmorMultiline(ArmorData a)
+	{
+		if (a == null) return "—";
+		var lines = new List<string>();
+
+		// База.
+		if (a.PhysDef > 0)         lines.Add($"{a.PhysDef} ФизЗащ");
+		if (a.HpBonus > 0)         lines.Add($"+{a.HpBonus} ХП");
+		if (a.MpMaxBonus > 0)      lines.Add($"+{a.MpMaxBonus} МакМП");
+		if (a.MpRegenBonus > 0)    lines.Add($"+{a.MpRegenBonus} РегМП");
+		if (a.PhysAtkBonus > 0)    lines.Add($"+{a.PhysAtkBonus} ФизАтк");
+		if (a.MagicAtkBonus > 0)   lines.Add($"+{a.MagicAtkBonus} МагАтк");
+		if (a.MagicAtkPct > 0)     lines.Add($"+{a.MagicAtkPct}% МагАтк");
+		if (a.ExtraDrawBonus > 0)  lines.Add($"+{a.ExtraDrawBonus} карта в руке");
+
+		// Аффиксы.
+		if (a.Affixes != null && a.Affixes.Count > 0)
+		{
+			if (lines.Count > 0) lines.Add("");
+			lines.Add("Аффиксы:");
+			foreach (var aff in a.Affixes)
+				lines.Add($"  • {AffixesDB.DisplayName(aff)} ({AffixesDB.DescribeShort(aff)})");
+		}
+
+		return lines.Count == 0 ? "—" : string.Join("\n", lines);
+	}
+
 	// Возвращает все brony данного слота — для будущего инвентарного UI выбора.
 	public static IEnumerable<ArmorData> ArmorsBySlot(ArmorSlot slot)
 	{

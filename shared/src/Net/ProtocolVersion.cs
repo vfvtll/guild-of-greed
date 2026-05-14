@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 14;  // Run effects: StartBattleRequest.ActiveRunEffects + Intent.WeaponType. New enemy roster.
+	public const int Current = 15;  // Anti-cheat: PushCharacter удалён, мутации через отдельные CharacterCommand* RPC.
 }

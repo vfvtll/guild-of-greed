@@ -281,53 +281,56 @@ public partial class ForgeOverlay : Control
 
 	// === Handlers ===
 
-	private void OnDistill(int slotIndex)
+	private async void OnDistill(int slotIndex)
 	{
-		long got = GameData.Instance.ForgeDismantle(slotIndex);
-		if (got <= 0)
+		var outcome = await GameData.Instance.ForgeDismantleAsync(slotIndex);
+		if (!outcome.Ok)
 		{
-			SetStatus("Не удалось распылить.", error: true);
+			SetStatus(TranslateError(outcome.Error, "Не удалось распылить."), error: true);
+			Refresh();
 			return;
 		}
-		SetStatus($"Получено эссенции: +{got}.", error: false);
+		SetStatus($"Получено эссенции: +{outcome.Value}.", error: false);
 		Refresh();
 	}
 
-	private void OnUpgrade(int slotIndex)
+	private async void OnUpgrade(int slotIndex)
 	{
-		var (ok, reason) = GameData.Instance.ForgeUpgrade(slotIndex);
-		if (!ok)
+		var outcome = await GameData.Instance.ForgeUpgradeAsync(slotIndex);
+		if (!outcome.Ok)
 		{
-			string msg = reason switch
-			{
-				"no_essence"     => "Не хватает эссенции.",
-				"cant_upgrade"   => "Этот предмет уже на максимальной редкости для своего grade.",
-				_                => "Не удалось улучшить.",
-			};
-			SetStatus(msg, error: true);
+			SetStatus(TranslateError(outcome.Error, "Не удалось улучшить."), error: true);
+			Refresh();
 			return;
 		}
 		SetStatus("Редкость повышена.", error: false);
 		Refresh();
 	}
 
-	private void OnReroll(int slotIndex)
+	private async void OnReroll(int slotIndex)
 	{
-		var (ok, reason) = GameData.Instance.ForgeReroll(slotIndex);
-		if (!ok)
+		var outcome = await GameData.Instance.ForgeRerollAsync(slotIndex);
+		if (!outcome.Ok)
 		{
-			string msg = reason switch
-			{
-				"no_essence"      => "Не хватает эссенции.",
-				"not_rerollable"  => "У этого предмета нельзя перекатать аффиксы.",
-				_                 => "Не удалось перекатать.",
-			};
-			SetStatus(msg, error: true);
+			SetStatus(TranslateError(outcome.Error, "Не удалось перекатать."), error: true);
+			Refresh();
 			return;
 		}
 		SetStatus("Аффиксы перекатаны.", error: false);
 		Refresh();
 	}
+
+	private static string TranslateError(string code, string fallback) => code switch
+	{
+		"no_essence"       => "Не хватает эссенции.",
+		"cant_upgrade"     => "Этот предмет уже на максимальной редкости для своего grade.",
+		"not_forgeable"    => "Этот предмет нельзя обработать в кузнице.",
+		"bad_slot"         => "Неверный слот.",
+		"locked_in_run"    => "Нельзя в подземелье — выйдите в город.",
+		"locked_in_battle" => "Нельзя во время боя.",
+		"network_error"    => "Нет связи с сервером.",
+		_                  => fallback,
+	};
 
 	private void SetStatus(string text, bool error)
 	{

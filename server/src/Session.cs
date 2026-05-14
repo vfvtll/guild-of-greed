@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GuildOfGreed.Shared.Auth;
 using GuildOfGreed.Shared.Combat;
+using GuildOfGreed.Shared.Commands;
 using GuildOfGreed.Shared.Crypto;
 using GuildOfGreed.Shared.Data;
 using GuildOfGreed.Shared.Domain;
@@ -25,7 +26,11 @@ public class Session
 {
 	// Минимальная версия клиента, которую мы ещё поддерживаем. Поднимать когда
 	// ломаем обратную совместимость на серверной стороне.
-	public const int MinSupportedClientVersion = 1;
+	//
+	// v15 удалил PushCharacterRequest и ввёл CharacterCommand*. Старые клиенты
+	// (v14 и ниже) будут пытаться слепо пушить полный JSON — это уже не работает,
+	// поэтому минимум поднимаем до 15.
+	public const int MinSupportedClientVersion = 15;
 
 	private readonly TcpClient _tcp;
 	private readonly Stream _stream;
@@ -145,17 +150,27 @@ public class Session
 		{
 			reply = msg switch
 			{
-				LogoutRequest r           => HandleLogout(r),
-				ListCharactersRequest r   => HandleListCharacters(r),
-				CreateCharacterRequest r  => HandleCreateCharacter(r),
-				SelectCharacterRequest r  => HandleSelectCharacter(r),
-				DeleteCharacterRequest r  => HandleDeleteCharacter(r),
-				StartBattleRequest r      => HandleStartBattle(r),
-				BattleActionRequest r     => HandleBattleAction(r),
-				GetBattleStateRequest r   => HandleGetBattleState(r),
-				PushCharacterRequest r    => HandlePushCharacter(r),
-				StartRunRequest r         => HandleStartRun(r),
-				EndRunRequest r           => HandleEndRun(r),
+				LogoutRequest r              => HandleLogout(r),
+				ListCharactersRequest r      => HandleListCharacters(r),
+				CreateCharacterRequest r     => HandleCreateCharacter(r),
+				SelectCharacterRequest r     => HandleSelectCharacter(r),
+				DeleteCharacterRequest r     => HandleDeleteCharacter(r),
+				StartBattleRequest r         => HandleStartBattle(r),
+				BattleActionRequest r        => HandleBattleAction(r),
+				GetBattleStateRequest r      => HandleGetBattleState(r),
+				StartRunRequest r            => HandleStartRun(r),
+				EndRunRequest r              => HandleEndRun(r),
+				BuyItemRequest r             => HandleBuyItem(r),
+				SellSlotRequest r            => HandleSellSlot(r),
+				EquipFromInventoryRequest r  => HandleEquipFromInventory(r),
+				UnequipSlotRequest r         => HandleUnequipSlot(r),
+				UsePotionRequest r           => HandleUsePotion(r),
+				DepositToStashRequest r      => HandleDepositToStash(r),
+				WithdrawFromStashRequest r   => HandleWithdrawFromStash(r),
+				ForgeDismantleRequest r      => HandleForgeDismantle(r),
+				ForgeUpgradeRequest r        => HandleForgeUpgrade(r),
+				ForgeRerollRequest r         => HandleForgeReroll(r),
+				SpendStatPointRequest r      => HandleSpendStatPoint(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -411,89 +426,32 @@ public class Session
 	}
 
 	// =======================================================================
-	// Run lifecycle + character persistence
+	// Run lifecycle + character commands (anti-cheat)
 	// =======================================================================
+	//
+	// Архитектура: сервер — единственный источник правды для CharacterData.
+	// Клиент шлёт командные параметры (BuyItem/Equip/Forge/...), сервер сам
+	// загружает character из БД, применяет CharacterCommands.<X>, сохраняет
+	// обратно и отдаёт авторитетный JSON. Клиент клобберит свой Character
+	// этой копией. PushCharacterRequest удалён в v15.
 
 	private static readonly System.Text.Json.JsonSerializerOptions CharJsonOpts =
 		new() { IncludeFields = true };
-
-	private ServerMessage HandlePushCharacter(PushCharacterRequest r)
-	{
-		if (_accountId == null || _selectedCharacterId == null)
-			return new PushCharacterResponse { Success = false, Error = "no_character_selected" };
-		if (string.IsNullOrEmpty(r.CharacterJson))
-			return new PushCharacterResponse { Success = false, Error = "empty_json" };
-
-		CharacterData ch;
-		try
-		{
-			ch = System.Text.Json.JsonSerializer.Deserialize<CharacterData>(r.CharacterJson, CharJsonOpts);
-		}
-		catch (System.Exception ex)
-		{
-			Logger.Warn($"[{_peer}] PushCharacter: bad JSON: {ex.Message}");
-			return new PushCharacterResponse { Success = false, Error = "bad_json" };
-		}
-		if (ch == null)
-			return new PushCharacterResponse { Success = false, Error = "null_character" };
-		if (ch.Id != _selectedCharacterId.Value)
-		{
-			Logger.Warn($"[{_peer}] PushCharacter: id mismatch (got {ch.Id}, expected {_selectedCharacterId})");
-			return new PushCharacterResponse { Success = false, Error = "id_mismatch" };
-		}
-
-		// Запрет менять экипировку И базовые статы во время забега. Лут/HP/MP/XP/
-		// инвентарь меняться могут (бой, зелья); equipment + статы — нет.
-		if (_runSnapshot != null)
-		{
-			if (!EquipmentMatches(_runSnapshot, ch))
-				return new PushCharacterResponse { Success = false, Error = "equipment_locked_in_run" };
-			if (!StatsMatch(_runSnapshot, ch))
-				return new PushCharacterResponse { Success = false, Error = "stats_locked_in_run" };
-		}
-
-		// TODO: серверная валидация инвентаря/денег (anti-cheat). Сейчас
-		// доверяем JSON от клиента — та же модель что у combat-CSP (Confirmed=true).
-		if (!_store.UpdateCharacter(_accountId.Value, ch))
-		{
-			Logger.Warn($"[{_peer}] PushCharacter: UpdateCharacter failed");
-			return new PushCharacterResponse { Success = false, Error = "save_failed" };
-		}
-		return new PushCharacterResponse { Success = true };
-	}
-
-	// Сравнение всех слотов экипировки. Простой JSON-roundtrip — учитывает
-	// и базовый Id, и рандомные аффиксы/редкость instance-предметов.
-	private static bool EquipmentMatches(CharacterData a, CharacterData b)
-	{
-		string sa = System.Text.Json.JsonSerializer.Serialize(new
-		{
-			a.Weapon, a.Offhand, a.Shield, a.Chest, a.Helmet, a.Gloves, a.Boots,
-			a.Amulet, a.Ring1, a.Ring2,
-		}, CharJsonOpts);
-		string sb = System.Text.Json.JsonSerializer.Serialize(new
-		{
-			b.Weapon, b.Offhand, b.Shield, b.Chest, b.Helmet, b.Gloves, b.Boots,
-			b.Amulet, b.Ring1, b.Ring2,
-		}, CharJsonOpts);
-		return sa == sb;
-	}
-
-	// Базовые статы тоже заморожены — игрок не может потратить очки мид-ран.
-	// UnspentStatPoints может расти (level-up в бою) — это нормально, проверяется
-	// только что 6 статов не изменились.
-	private static bool StatsMatch(CharacterData a, CharacterData b)
-	{
-		return a.Str == b.Str && a.Int == b.Int && a.Con == b.Con
-			&& a.Wit == b.Wit && a.Men == b.Men && a.Dex == b.Dex;
-	}
 
 	private ServerMessage HandleStartRun(StartRunRequest r)
 	{
 		if (_accountId == null || _selectedCharacterId == null)
 			return new StartRunResponse { Success = false, Error = "no_character_selected" };
+		if (_battle != null)
+			return new StartRunResponse { Success = false, Error = "battle_in_progress" };
 		var ch = _store.LoadCharacter(_accountId.Value, _selectedCharacterId.Value);
 		if (ch == null) return new StartRunResponse { Success = false, Error = "character_missing" };
+
+		// Полный restore HP/MP — "вы отдохнули в хабе перед заходом". Между
+		// узлами одного забега HP/MP переносятся, но вход в подземелье — фреш.
+		ch.ResetForCombat();
+		if (!_store.UpdateCharacter(_accountId.Value, ch))
+			return new StartRunResponse { Success = false, Error = "save_failed" };
 
 		// Снэпшот = глубокая копия через JSON-цикл. Дешевле собственного DeepCopy,
 		// безопаснее: новые поля Character'а попадут в снэпшот без правок здесь.
@@ -505,7 +463,7 @@ public class Session
 
 		Logger.Info($"[{_peer}] run started loc={r.LocationIndex} seed={_runSeed} " +
 			$"snapshot weapon={_runSnapshot.Weapon?.Type ?? "(none)"}");
-		return new StartRunResponse { Success = true, RunSeed = _runSeed };
+		return new StartRunResponse { Success = true, RunSeed = _runSeed, CharacterJson = json };
 	}
 
 	private ServerMessage HandleEndRun(EndRunRequest r)
@@ -515,6 +473,112 @@ public class Session
 		Logger.Info($"[{_peer}] run ended");
 		return new EndRunResponse { Success = true };
 	}
+
+	// =======================================================================
+	// Character commands
+	// =======================================================================
+	//
+	// Делегат: applies — функция (char) → Result, где Result.Ok/Error/Value
+	// идут в ответ, а character (если ok) персистится в БД и сериализуется в
+	// CharacterJson. opName — короткая метка для логов.
+	//
+	// allowDuringRun: false → команда отвергается во время забега (equip/buy/
+	// stash/forge/spend). UsePotion разрешён всегда.
+	// allowDuringBattle: false → во время активного боя любая town-команда
+	// отвергается. Внутри боя мутации идут через BattleAction.
+	private ServerMessage RunCharacterCommand(
+		string opName,
+		Func<CharacterData, CharacterCommands.Result> applies,
+		bool allowDuringRun = false,
+		bool allowDuringBattle = false)
+	{
+		if (_accountId == null || _selectedCharacterId == null)
+			return CommandError(CharacterCommandError.NoCharacter);
+		if (!allowDuringBattle && _battle != null)
+			return CommandError(CharacterCommandError.LockedInBattle);
+		if (!allowDuringRun && _runSnapshot != null)
+			return CommandError(CharacterCommandError.LockedInRun);
+
+		var ch = _store.LoadCharacter(_accountId.Value, _selectedCharacterId.Value);
+		if (ch == null) return CommandError(CharacterCommandError.NoCharacter);
+
+		var result = applies(ch);
+		if (!result.Ok)
+		{
+			Logger.Info($"[{_peer}] cmd {opName}: rejected ({result.Error})");
+			// На fail возвращаем серверную копию — клиент сможет перерисовать
+			// state, если до этого был рассинхрон.
+			return new CharacterCommandResponse
+			{
+				Success = false,
+				Error = result.Error,
+				CharacterJson = System.Text.Json.JsonSerializer.Serialize(ch, CharJsonOpts),
+				Value = 0,
+			};
+		}
+
+		if (!_store.UpdateCharacter(_accountId.Value, ch))
+		{
+			Logger.Warn($"[{_peer}] cmd {opName}: UpdateCharacter failed");
+			return CommandError("save_failed");
+		}
+
+		return new CharacterCommandResponse
+		{
+			Success = true,
+			Error = null,
+			CharacterJson = System.Text.Json.JsonSerializer.Serialize(ch, CharJsonOpts),
+			Value = result.Value,
+		};
+	}
+
+	private static CharacterCommandResponse CommandError(string code)
+		=> new() { Success = false, Error = code, CharacterJson = null, Value = 0 };
+
+	private ServerMessage HandleBuyItem(BuyItemRequest r)
+		=> RunCharacterCommand("BuyItem", ch => CharacterCommands.BuyItem(ch, r.ItemId));
+
+	private ServerMessage HandleSellSlot(SellSlotRequest r)
+		=> RunCharacterCommand("SellSlot", ch => CharacterCommands.SellSlot(ch, r.SlotIndex));
+
+	private ServerMessage HandleEquipFromInventory(EquipFromInventoryRequest r)
+		=> RunCharacterCommand("Equip", ch => CharacterCommands.EquipFromInventory(ch, r.SlotIndex));
+
+	private ServerMessage HandleUnequipSlot(UnequipSlotRequest r)
+		=> RunCharacterCommand("Unequip", ch =>
+			CharacterCommands.UnequipSlot(ch, (CharacterCommands.EquipSlotKind)r.Slot));
+
+	// Зелья пьются и в подземелье (между боями) — единственная команда, которая
+	// разрешена во время run. В бою — через BattleAction.UsePotion, не через эту.
+	private ServerMessage HandleUsePotion(UsePotionRequest r)
+		=> RunCharacterCommand("UsePotion", ch => CharacterCommands.UsePotion(ch, r.ItemId),
+			allowDuringRun: true);
+
+	private ServerMessage HandleDepositToStash(DepositToStashRequest r)
+		=> RunCharacterCommand("Deposit", ch => CharacterCommands.DepositToStash(ch, r.SlotIndex));
+
+	private ServerMessage HandleWithdrawFromStash(WithdrawFromStashRequest r)
+		=> RunCharacterCommand("Withdraw", ch => CharacterCommands.WithdrawFromStash(ch, r.SlotIndex));
+
+	private ServerMessage HandleForgeDismantle(ForgeDismantleRequest r)
+		=> RunCharacterCommand("ForgeDismantle", ch => CharacterCommands.ForgeDismantle(ch, r.SlotIndex));
+
+	// Forge upgrade/reroll используют серверный RNG. Клиент НЕ может предиктить
+	// результирующие аффиксы — replace state после ответа.
+	private ServerMessage HandleForgeUpgrade(ForgeUpgradeRequest r)
+		=> RunCharacterCommand("ForgeUpgrade", ch =>
+			CharacterCommands.ForgeUpgrade(ch, r.SlotIndex, MakeForgeRng()));
+
+	private ServerMessage HandleForgeReroll(ForgeRerollRequest r)
+		=> RunCharacterCommand("ForgeReroll", ch =>
+			CharacterCommands.ForgeReroll(ch, r.SlotIndex, MakeForgeRng()));
+
+	private ServerMessage HandleSpendStatPoint(SpendStatPointRequest r)
+		=> RunCharacterCommand("SpendStat", ch => CharacterCommands.SpendStatPoint(ch, r.Stat));
+
+	// RandomSource для одной forge-операции. Сид берётся из _serverRng — не
+	// детерминирован между запусками, но это и не нужно (форж не воспроизводим).
+	private RandomSource MakeForgeRng() => new(_serverRng.Next());
 
 	// Детерминированный вывод seed'а боя из runSeed + nodeId. Простая mix-функция
 	// (multiplicative hash с золотым отношением 0x9E3779B9). Достаточно для

@@ -195,27 +195,42 @@ public partial class StashOverlay : Control
 		}
 	}
 
-	private void OnInvSlotClicked(int idx)
+	private async void OnInvSlotClicked(int idx)
 	{
-		if (!GameData.Instance.DepositToStash(idx))
+		var outcome = await GameData.Instance.DepositToStashAsync(idx);
+		if (!outcome.Ok)
 		{
-			SetStatus("Стэш полон.", error: true);
+			SetStatus(TranslateError(outcome.Error, "Не удалось положить в стэш."), error: true);
+			Refresh();
 			return;
 		}
 		SetStatus("Перенесено в стэш.", error: false);
 		Refresh();
 	}
 
-	private void OnStashSlotClicked(int idx)
+	private async void OnStashSlotClicked(int idx)
 	{
-		if (!GameData.Instance.WithdrawFromStash(idx))
+		var outcome = await GameData.Instance.WithdrawFromStashAsync(idx);
+		if (!outcome.Ok)
 		{
-			SetStatus("Инвентарь полон.", error: true);
+			SetStatus(TranslateError(outcome.Error, "Не удалось забрать из стэша."), error: true);
+			Refresh();
 			return;
 		}
 		SetStatus("Перенесено в инвентарь.", error: false);
 		Refresh();
 	}
+
+	private static string TranslateError(string code, string fallback) => code switch
+	{
+		"no_space"         => "Инвентарь полон.",
+		"stash_full"       => "Стэш полон.",
+		"bad_slot"         => "Неверный слот.",
+		"locked_in_run"    => "Нельзя в подземелье — выйдите в город.",
+		"locked_in_battle" => "Нельзя во время боя.",
+		"network_error"    => "Нет связи с сервером.",
+		_                  => fallback,
+	};
 
 	private void SetStatus(string text, bool error)
 	{

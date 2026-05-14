@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using GuildOfGreed.Shared.Commands;
 using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Data;
 
@@ -175,18 +176,18 @@ public partial class InventoryOverlay : Control
 		}
 	}
 
-	private void OnSpendStatPressed(string stat)
+	private async void OnSpendStatPressed(string stat)
 	{
 		if (BlockedForCharChange()) return;
-		var ch = GameData.Instance.Character;
-		if (ch == null) return;
-		if (!ch.TrySpendStatPoint(stat))
+		var outcome = await GameData.Instance.SpendStatPointAsync(stat);
+		if (!outcome.Ok)
 		{
-			SetStatus("Нет очков для распределения.", error: true);
+			SetStatus(TranslateError(outcome.Error, "Не удалось распределить очко."), error: true);
+			Refresh();
 			return;
 		}
-		GameData.Instance.PushCharacterToServer();
-		SetStatus($"+1 {stat}. Осталось очков: {ch.UnspentStatPoints}.", error: false);
+		var ch = GameData.Instance.Character;
+		SetStatus($"+1 {stat}. Осталось очков: {ch?.UnspentStatPoints ?? 0}.", error: false);
 		Refresh();
 	}
 
@@ -257,43 +258,37 @@ public partial class InventoryOverlay : Control
 	// Действия игрока
 	// =====================================================================
 
-	private void UnequipWeapon()
+	private async void UnequipWeapon() => await UnequipKind(CharacterCommands.EquipSlotKind.Weapon, "Оружие снято.");
+	private async void UnequipOffhand() => await UnequipKind(CharacterCommands.EquipSlotKind.Offhand, "Второе оружие снято.");
+	private async void UnequipShield() => await UnequipKind(CharacterCommands.EquipSlotKind.Shield, "Щит снят.");
+
+	private async void UnequipArmor(ArmorSlot slot)
+	{
+		var kind = slot switch
+		{
+			ArmorSlot.Chest  => CharacterCommands.EquipSlotKind.Chest,
+			ArmorSlot.Helmet => CharacterCommands.EquipSlotKind.Helmet,
+			ArmorSlot.Gloves => CharacterCommands.EquipSlotKind.Gloves,
+			ArmorSlot.Boots  => CharacterCommands.EquipSlotKind.Boots,
+			ArmorSlot.Amulet => CharacterCommands.EquipSlotKind.Amulet,
+			ArmorSlot.Ring1  => CharacterCommands.EquipSlotKind.Ring1,
+			ArmorSlot.Ring2  => CharacterCommands.EquipSlotKind.Ring2,
+			_                => CharacterCommands.EquipSlotKind.Chest,
+		};
+		await UnequipKind(kind, "Снято в инвентарь.");
+	}
+
+	private async System.Threading.Tasks.Task UnequipKind(CharacterCommands.EquipSlotKind kind, string okMsg)
 	{
 		if (BlockedForCharChange()) return;
-		if (!GameData.Instance.UnequipWeapon())
-			SetStatus("Не получилось снять — инвентарь полон.", error: true);
-		else SetStatus("Оружие снято.", error: false);
+		var outcome = await GameData.Instance.UnequipSlotAsync(kind);
+		if (!outcome.Ok)
+			SetStatus(TranslateError(outcome.Error, "Не получилось снять."), error: true);
+		else SetStatus(okMsg, error: false);
 		Refresh();
 	}
 
-	private void UnequipOffhand()
-	{
-		if (BlockedForCharChange()) return;
-		if (!GameData.Instance.UnequipOffhand())
-			SetStatus("Не получилось снять — инвентарь полон.", error: true);
-		else SetStatus("Второе оружие снято.", error: false);
-		Refresh();
-	}
-
-	private void UnequipShield()
-	{
-		if (BlockedForCharChange()) return;
-		if (!GameData.Instance.UnequipShield())
-			SetStatus("Не получилось снять — инвентарь полон.", error: true);
-		else SetStatus("Щит снят.", error: false);
-		Refresh();
-	}
-
-	private void UnequipArmor(ArmorSlot slot)
-	{
-		if (BlockedForCharChange()) return;
-		if (!GameData.Instance.UnequipSlot(slot))
-			SetStatus("Не получилось снять — инвентарь полон.", error: true);
-		else SetStatus("Снято в инвентарь.", error: false);
-		Refresh();
-	}
-
-	private void UseInventorySlot(int slotIndex)
+	private async void UseInventorySlot(int slotIndex)
 	{
 		// Бой блокирует ВСЁ (зелья — через панель игрока), забег блокирует
 		// только смену экипировки — зелья из инвентаря разрешены.
@@ -306,9 +301,9 @@ public partial class InventoryOverlay : Control
 		if (st.WeaponInstance == null && st.ArmorInstance == null
 			&& PotionsDB.Get(st.ItemId) != null)
 		{
-			if (GameData.Instance.UsePotion(st.ItemId))
-				SetStatus("Зелье выпито.", error: false);
-			else SetStatus("Не удалось применить зелье.", error: true);
+			var outcome = await GameData.Instance.UsePotionAsync(st.ItemId);
+			if (outcome.Ok) SetStatus("Зелье выпито.", error: false);
+			else SetStatus(TranslateError(outcome.Error, "Не удалось применить зелье."), error: true);
 			Refresh();
 			return;
 		}
@@ -319,11 +314,25 @@ public partial class InventoryOverlay : Control
 			SetStatus("В подземелье нельзя менять экипировку. Выйдите в город.", error: true);
 			return;
 		}
-		if (GameData.Instance.EquipFromInventory(slotIndex))
-			SetStatus("Надето.", error: false);
-		else SetStatus("Не удалось надеть.", error: true);
+		var equipOutcome = await GameData.Instance.EquipFromInventoryAsync(slotIndex);
+		if (equipOutcome.Ok) SetStatus("Надето.", error: false);
+		else SetStatus(TranslateError(equipOutcome.Error, "Не удалось надеть."), error: true);
 		Refresh();
 	}
+
+	private static string TranslateError(string code, string fallback) => code switch
+	{
+		"no_space"         => "Инвентарь полон.",
+		"slot_empty"       => "Слот пуст.",
+		"not_equippable"   => "Это нельзя надеть.",
+		"no_potion"        => "Нет такого зелья.",
+		"bad_slot"         => "Неверный слот.",
+		"no_stat_points"   => "Нет очков для распределения.",
+		"locked_in_run"    => "Нельзя в подземелье — выйдите в город.",
+		"locked_in_battle" => "Нельзя во время боя.",
+		"network_error"    => "Нет связи с сервером.",
+		_                  => fallback,
+	};
 
 	// Если открыли инвентарь во время боя — все мутирующие действия запрещены.
 	// Зелья пьются через отдельные кнопки в панели игрока.

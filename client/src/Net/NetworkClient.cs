@@ -145,12 +145,6 @@ public class NetworkClient : IDisposable
 			ActiveRunEffects = activeRunEffects,
 		}, ct);
 
-	public Task<PushCharacterResponse> PushCharacterAsync(string characterJson, CancellationToken ct = default)
-		=> ExchangeAsync<PushCharacterResponse>(new PushCharacterRequest
-		{
-			CharacterJson = characterJson,
-		}, ct);
-
 	public Task<StartRunResponse> StartRunAsync(int locationIndex, CancellationToken ct = default)
 		=> ExchangeAsync<StartRunResponse>(new StartRunRequest
 		{
@@ -159,6 +153,44 @@ public class NetworkClient : IDisposable
 
 	public Task<EndRunResponse> EndRunAsync(CancellationToken ct = default)
 		=> ExchangeAsync<EndRunResponse>(new EndRunRequest(), ct);
+
+	// === Character commands (v15) ====================================
+	// Каждая мутация инвентаря/экипа/денег — отдельный RPC. Сервер
+	// применяет CharacterCommands.<X>, возвращает авторитетный CharacterJson;
+	// клиент replace'ит свой Character. Подробнее: CharacterCommands.cs в shared.
+
+	public Task<CharacterCommandResponse> BuyItemAsync(string itemId, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new BuyItemRequest { ItemId = itemId }, ct);
+
+	public Task<CharacterCommandResponse> SellSlotAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new SellSlotRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> EquipFromInventoryAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new EquipFromInventoryRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> UnequipSlotAsync(int slot, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new UnequipSlotRequest { Slot = slot }, ct);
+
+	public Task<CharacterCommandResponse> UsePotionAsync(string itemId, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new UsePotionRequest { ItemId = itemId }, ct);
+
+	public Task<CharacterCommandResponse> DepositToStashAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new DepositToStashRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> WithdrawFromStashAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new WithdrawFromStashRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> ForgeDismantleAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new ForgeDismantleRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> ForgeUpgradeAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new ForgeUpgradeRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> ForgeRerollAsync(int slotIndex, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new ForgeRerollRequest { SlotIndex = slotIndex }, ct);
+
+	public Task<CharacterCommandResponse> SpendStatPointAsync(string stat, CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new SpendStatPointRequest { Stat = stat }, ct);
 
 	public Task<BattleActionResponse> SendBattleActionAsync(int actionType, int handIndex,
 		int targetEnemyIndex, string potionId, CancellationToken ct = default)

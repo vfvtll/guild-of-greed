@@ -287,25 +287,35 @@ public partial class ShopOverlay : Control
 		return panel;
 	}
 
-	private void OnBuyClicked(string itemId)
+	private async void OnBuyClicked(string itemId)
 	{
-		var (ok, reason) = GameData.Instance.BuyOne(itemId);
-		if (!ok)
+		var outcome = await GameData.Instance.BuyOneAsync(itemId);
+		if (!outcome.Ok)
 		{
-			string msg = reason switch
-			{
-				"no_money"     => "Не хватает монет.",
-				"no_space"     => "Инвентарь полон.",
-				"not_for_sale" => "Лавка этого не продаёт.",
-				_              => "Не удалось купить.",
-			};
-			SetStatus(msg, error: true);
+			SetStatus(TranslateError(outcome.Error), error: true);
+			Refresh();
 			return;
 		}
 		var (name, _, _) = ResolveBaseItem(itemId);
 		SetStatus($"Куплено: {name}.", error: false);
 		Refresh();
 	}
+
+	// Маппинг кодов CharacterCommandError на UI-сообщения. Дублируется в
+	// других оверлеях; вынесем в Lang когда подключим локализацию.
+	private static string TranslateError(string code) => code switch
+	{
+		"no_money"        => "Не хватает монет.",
+		"no_space"        => "Инвентарь полон.",
+		"not_for_sale"    => "Лавка этого не продаёт.",
+		"not_sellable"    => "Это нельзя продать.",
+		"bad_slot"        => "Неверный слот.",
+		"locked_in_run"   => "Нельзя в подземелье — выйдите в город.",
+		"locked_in_battle"=> "Нельзя во время боя.",
+		"no_character"    => "Персонаж не выбран.",
+		"network_error"   => "Нет связи с сервером.",
+		_                 => "Не удалось купить.",
+	};
 
 	// ===== Sell =====
 
@@ -354,15 +364,16 @@ public partial class ShopOverlay : Control
 		return panel;
 	}
 
-	private void OnSellClicked(int slotIndex)
+	private async void OnSellClicked(int slotIndex)
 	{
-		long gained = GameData.Instance.SellSlot(slotIndex);
-		if (gained <= 0)
+		var outcome = await GameData.Instance.SellSlotAsync(slotIndex);
+		if (!outcome.Ok)
 		{
-			SetStatus("Не удалось продать.", error: true);
+			SetStatus(TranslateError(outcome.Error), error: true);
+			Refresh();
 			return;
 		}
-		SetStatus($"Продано на {Currency.FormatShort(gained)}.", error: false);
+		SetStatus($"Продано на {Currency.FormatShort(outcome.Value)}.", error: false);
 		Refresh();
 	}
 

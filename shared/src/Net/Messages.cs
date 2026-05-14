@@ -33,9 +33,22 @@ namespace GuildOfGreed.Shared.Net;
 [Union(9, typeof(StartBattleRequest))]
 [Union(10, typeof(BattleActionRequest))]
 [Union(11, typeof(GetBattleStateRequest))]
-[Union(12, typeof(PushCharacterRequest))]
+// Union(12) был PushCharacterRequest — удалён в protocol v15. Все мутации
+// персонажа теперь идут как отдельные RPC ниже (CharacterCommand*). Номер
+// 12 НЕ переиспользуем — иначе старые клиенты могут случайно совпасть.
 [Union(13, typeof(StartRunRequest))]
 [Union(14, typeof(EndRunRequest))]
+[Union(15, typeof(BuyItemRequest))]
+[Union(16, typeof(SellSlotRequest))]
+[Union(17, typeof(EquipFromInventoryRequest))]
+[Union(18, typeof(UnequipSlotRequest))]
+[Union(19, typeof(UsePotionRequest))]
+[Union(20, typeof(DepositToStashRequest))]
+[Union(21, typeof(WithdrawFromStashRequest))]
+[Union(22, typeof(ForgeDismantleRequest))]
+[Union(23, typeof(ForgeUpgradeRequest))]
+[Union(24, typeof(ForgeRerollRequest))]
+[Union(25, typeof(SpendStatPointRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -135,24 +148,12 @@ public class BattleActionRequest : ClientMessage
 [MessagePackObject]
 public class GetBattleStateRequest : ClientMessage { }
 
-// Полный JSON CharacterData → сохраняется в БД. Клиент шлёт после ЛЮБОЙ
-// локальной мутации (equip/unequip, покупка/продажа, стэш, очки статов),
-// чтобы DB всегда отражала актуальное состояние и логин с другого устройства
-// показывал ту же экипировку и деньги. ВРЕМЕННО доверяем JSON от клиента —
-// валидация серверная появится в отдельном инкременте.
-[MessagePackObject]
-public class PushCharacterRequest : ClientMessage
-{
-	[Key(0)] public string CharacterJson;
-}
-
-// Старт забега: сервер снимает снэпшот текущего DB-состояния персонажа
-// (для расчёта колоды через CardsDB.DeckFor). Снэпшот живёт на Session
-// до EndRunRequest. Во время run все StartBattleRequest используют
-// этот снэпшот для построения колоды — никакие мутации мид-ран
-// (например, ап оружия) на колоду не влияют. Клиент обязан вызвать
-// PushCharacterRequest ДО этого RPC, чтобы DB содержала актуальное
-// состояние (HP/MP/equip).
+// Старт забега: сервер сам делает ResetForCombat (полное HP/MP), снимает
+// снэпшот персонажа (для расчёта колоды через CardsDB.DeckFor). Снэпшот живёт
+// на Session до EndRunRequest. Во время run все StartBattleRequest используют
+// этот снэпшот для построения колоды — никакие мутации мид-ран не влияют.
+// Клиенту больше не нужно пушить персонажа перед StartRun — мутации шли
+// через CharacterCommand* RPC и БД уже актуальна.
 [MessagePackObject]
 public class StartRunRequest : ClientMessage
 {
@@ -163,6 +164,81 @@ public class StartRunRequest : ClientMessage
 // будет считать колоду по живому персонажу (туториал-режим или новый run).
 [MessagePackObject]
 public class EndRunRequest : ClientMessage { }
+
+// === Character commands (anti-cheat: каждая мутация — отдельный RPC) =========
+//
+// До v15 клиент шлёт полный CharacterData JSON в PushCharacterRequest, сервер
+// слепо принимал. С v15 любая мутация инвентаря/экипа/денег/стэша/кузницы —
+// отдельная команда; сервер хранит persistent state в БД, применяет команду
+// сам через CharacterCommands из shared, отвечает CharacterCommandResponse
+// с авторитетным CharacterJson. Клиент replace'ит свой Character копией с
+// сервера.
+
+[MessagePackObject]
+public class BuyItemRequest : ClientMessage
+{
+	[Key(0)] public string ItemId;
+}
+
+[MessagePackObject]
+public class SellSlotRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;
+}
+
+[MessagePackObject]
+public class EquipFromInventoryRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;
+}
+
+[MessagePackObject]
+public class UnequipSlotRequest : ClientMessage
+{
+	[Key(0)] public int Slot;          // (int)CharacterCommands.EquipSlotKind
+}
+
+[MessagePackObject]
+public class UsePotionRequest : ClientMessage
+{
+	[Key(0)] public string ItemId;
+}
+
+[MessagePackObject]
+public class DepositToStashRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;     // индекс в Inventory
+}
+
+[MessagePackObject]
+public class WithdrawFromStashRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;     // индекс в Stash
+}
+
+[MessagePackObject]
+public class ForgeDismantleRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;
+}
+
+[MessagePackObject]
+public class ForgeUpgradeRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;
+}
+
+[MessagePackObject]
+public class ForgeRerollRequest : ClientMessage
+{
+	[Key(0)] public int SlotIndex;
+}
+
+[MessagePackObject]
+public class SpendStatPointRequest : ClientMessage
+{
+	[Key(0)] public string Stat;       // "STR" / "INT" / "CON" / "WIT" / "MEN" / "DEX"
+}
 
 // === Server → Client ===========================================================
 
@@ -179,9 +255,10 @@ public class EndRunRequest : ClientMessage { }
 [Union(10, typeof(BattleStartedResponse))]
 [Union(11, typeof(BattleActionResponse))]
 [Union(12, typeof(BattleStateResponse))]
-[Union(13, typeof(PushCharacterResponse))]
+// Union(13) был PushCharacterResponse — удалён в protocol v15.
 [Union(14, typeof(StartRunResponse))]
 [Union(15, typeof(EndRunResponse))]
+[Union(16, typeof(CharacterCommandResponse))]
 public abstract class ServerMessage { }
 
 [MessagePackObject]
@@ -326,13 +403,6 @@ public class BattleStateResponse : ServerMessage
 }
 
 [MessagePackObject]
-public class PushCharacterResponse : ServerMessage
-{
-	[Key(0)] public bool Success;
-	[Key(1)] public string Error;
-}
-
-[MessagePackObject]
 public class StartRunResponse : ServerMessage
 {
 	[Key(0)] public bool Success;
@@ -341,6 +411,24 @@ public class StartRunResponse : ServerMessage
 	// Клиент использует его в MapGenerator.Generate. Все StartBattleRequest
 	// внутри забега получают на сервере battleSeed = deriveFrom(RunSeed, NodeId).
 	[Key(2)] public int RunSeed;
+	// Авторитетная копия персонажа после server-side ResetForCombat. Клиент
+	// клобберит свой Character этой копией, чтобы HP/MP и runtime-флаги
+	// гарантированно совпадали с серверным снэпшотом забега.
+	[Key(3)] public string CharacterJson;
+}
+
+// Универсальный ответ на любую CharacterCommand* (Buy/Sell/Equip/Unequip/Use/
+// Stash/Forge/SpendStat). Success=true — клиент должен заменить свой Character
+// на десериализованный CharacterJson, чтобы гарантировать синхрон с сервером
+// (включая аффиксы при rolling-операциях). Value — опциональное значение для
+// команд с numeric result (ForgeDismantle yield, SellSlot price).
+[MessagePackObject]
+public class CharacterCommandResponse : ServerMessage
+{
+	[Key(0)] public bool Success;
+	[Key(1)] public string Error;          // см. CharacterCommandError
+	[Key(2)] public string CharacterJson;  // полный авторитетный state (пусто при Success=false)
+	[Key(3)] public long Value;            // dismantle yield / sold price; 0 если нет
 }
 
 [MessagePackObject]

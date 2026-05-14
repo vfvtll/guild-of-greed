@@ -32,10 +32,10 @@ public partial class Main : Control
 	{
 		_net?.Dispose();
 		_net = NewNet();
-		// GameData использует _net для пуша CharacterData после любой мутации
-		// (equip/buy/sell/стэш/spend). Должен быть выставлен ДО первых мутаций —
-		// фактически как только handshake пройдёт (для пушей нужен авторизованный
-		// канал), но безопаснее ставить сразу: PushCharacterToServer проверит Net != null.
+		// GameData использует _net для отправки command-RPC после любой мутации
+		// (equip/buy/sell/стэш/forge/spend). Должен быть выставлен ДО первых
+		// мутаций — фактически как только handshake пройдёт; безопаснее ставить
+		// сразу: GameData проверяет Net != null перед отправкой.
 		GameData.Instance.Net = _net;
 		ShowConnecting();
 	}
@@ -327,8 +327,7 @@ public partial class Main : Control
 			return;
 		}
 		// Победа: сервер уже сбросил IsNewCharacter и положил лут в инвентарь.
-		// Локально тоже обнуляем флаг — иначе при повторном SetCharacter в
-		// этой сессии EnsureDefaults будет считать персонажа новым.
+		// Локально тоже обнуляем флаг для консистентности с серверной копией.
 		if (character != null) character.IsNewCharacter = false;
 		ShowEquipmentTutorial();
 	}
@@ -398,14 +397,10 @@ public partial class Main : Control
 
 	private async void OnLocationChosen(int index)
 	{
-		// 1. Локально восстанавливаем HP/MP — забег начинается отдохнувшим.
-		GameData.Instance.Character?.ResetForCombat();
-
-		// 2. Пушим обновлённый Character в БД ДО того как сервер снимет run-snapshot.
-		try { await GameData.Instance.PushCharacterAndAwaitAsync(); }
-		catch (System.Exception ex) { GD.PrintErr($"OnLocationChosen push error: {ex.Message}"); }
-
-		// 3. Сервер генерит runSeed (один на всё подземелье) и снимает character snapshot.
+		// 1. Сервер делает ResetForCombat (полное HP/MP), снимает run-snapshot
+		//    с актуального DB-состояния (мутации до этого момента шли через
+		//    CharacterCommand* RPC, БД уже актуальна). Возвращает свежий
+		//    CharacterJson — клиент клобберит свою копию.
 		StartRunResponse resp;
 		try { resp = await _net.StartRunAsync(index); }
 		catch (System.Exception ex)
@@ -421,7 +416,22 @@ public partial class Main : Control
 			return;
 		}
 
-		// 4. Локально строим карту и фиксируем колоду по серверному seed'у.
+		// 2. Применяем серверный snapshot персонажа (HP/MP сброшены сервером).
+		if (!string.IsNullOrEmpty(resp.CharacterJson))
+		{
+			try
+			{
+				var fresh = JsonSerializer.Deserialize<CharacterData>(resp.CharacterJson,
+					new JsonSerializerOptions { IncludeFields = true });
+				if (fresh != null) GameData.Instance.SetCharacter(fresh);
+			}
+			catch (System.Exception ex)
+			{
+				GD.PrintErr($"StartRun: bad CharacterJson: {ex.Message}");
+			}
+		}
+
+		// 3. Локально строим карту и фиксируем колоду по серверному seed'у.
 		GameData.Instance.StartRun(index, resp.RunSeed);
 		ShowMap();
 	}

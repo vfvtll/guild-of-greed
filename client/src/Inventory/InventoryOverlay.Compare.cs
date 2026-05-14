@@ -94,17 +94,9 @@ public partial class InventoryOverlay
 	private static (string name, string detail, string icon) DescribeItem(string id)
 	{
 		var w = ItemsDB.GetWeapon(id);
-		if (w != null)
-		{
-			var detail = $"Физ ×{w.PhysMult:F1}, Маг ×{w.MagicMult:F1}";
-			if (w.PhysAtk > 0) detail += $", +{w.PhysAtk} ФизАтк";
-			if (w.MagicAtk > 0) detail += $", +{w.MagicAtk} МагАтк";
-			if (w.ExtraDraw > 0) detail += $", +{w.ExtraDraw} карта";
-			detail += $", крит каждые {w.CritEveryNAttacks}";
-			return (w.Name, detail, "⚔");
-		}
+		if (w != null) return (w.Name, ItemsDB.DescribeWeaponMultiline(w), "⚔");
 		var a = ItemsDB.GetArmor(id);
-		if (a != null) return (a.Name, ItemsDB.DescribeArmor(a), SlotIcon(a.Slot));
+		if (a != null) return (a.Name, ItemsDB.DescribeArmorMultiline(a), SlotIcon(a.Slot));
 
 		var p = PotionsDB.Get(id);
 		if (p != null) return (p.Name, p.Description, p.Icon);

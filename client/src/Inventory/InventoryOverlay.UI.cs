@@ -205,7 +205,7 @@ public partial class InventoryOverlay
 	private Control MakeWeaponSlotRow(string icon, string slotName, WeaponData item, Action onClick)
 	{
 		string itemName = item?.Name ?? "—";
-		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeWeapon(item);
+		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeWeaponMultiline(item);
 		var rarity = item?.Rarity ?? ItemRarity.Common;
 		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
 	}
@@ -213,7 +213,7 @@ public partial class InventoryOverlay
 	private Control MakeShieldSlotRow(string icon, string slotName, ShieldData item, Action onClick)
 	{
 		string itemName = item?.Name ?? "—";
-		string detail   = item == null ? "(пусто)" : DescribeShield(item);
+		string detail   = item == null ? "(пусто)" : DescribeShieldMultiline(item);
 		var rarity = item?.Rarity ?? ItemRarity.Common;
 		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
 	}
@@ -239,12 +239,12 @@ public partial class InventoryOverlay
 			true, ItemRarity.Common, () => { });
 	}
 
-	private static string DescribeShield(ShieldData s)
+	private static string DescribeShieldMultiline(ShieldData s)
 	{
 		if (s == null) return "—";
-		var parts = new System.Collections.Generic.List<string>();
-		if (s.PhysDef > 0) parts.Add($"{s.PhysDef} ФизЗащ");
-		if (s.MagDef > 0)  parts.Add($"{s.MagDef} МагЗащ");
+		var lines = new System.Collections.Generic.List<string>();
+		if (s.PhysDef > 0) lines.Add($"{s.PhysDef} ФизЗащ");
+		if (s.MagDef > 0)  lines.Add($"{s.MagDef} МагЗащ");
 		string effect = s.Type switch
 		{
 			ShieldType.Magic    => $"+{s.EffectMagnitude}% возврат маг.урона",
@@ -252,14 +252,19 @@ public partial class InventoryOverlay
 			ShieldType.Balanced => $"+{s.EffectMagnitude}% counter-buff (1 ход)",
 			_                    => "",
 		};
-		if (!string.IsNullOrEmpty(effect)) parts.Add(effect);
-		return $"{s.Name}: {string.Join(", ", parts)}";
+		if (!string.IsNullOrEmpty(effect))
+		{
+			if (lines.Count > 0) lines.Add("");
+			lines.Add("Эффект:");
+			lines.Add($"  • {effect}");
+		}
+		return lines.Count == 0 ? "—" : string.Join("\n", lines);
 	}
 
 	private Control MakeArmorSlotRow(string icon, string slotName, ArmorData item, Action onClick)
 	{
 		string itemName = item?.Name ?? "—";
-		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeArmor(item);
+		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeArmorMultiline(item);
 		var rarity = item?.Rarity ?? ItemRarity.Common;
 		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
 	}
@@ -312,21 +317,21 @@ public partial class InventoryOverlay
 		if (stack.WeaponInstance != null)
 		{
 			name = stack.WeaponInstance.Name;
-			detail = ItemsDB.DescribeWeapon(stack.WeaponInstance);
+			detail = ItemsDB.DescribeWeaponMultiline(stack.WeaponInstance);
 			icon = "⚔";
 			rarity = stack.WeaponInstance.Rarity;
 		}
 		else if (stack.ArmorInstance != null)
 		{
 			name = stack.ArmorInstance.Name;
-			detail = ItemsDB.DescribeArmor(stack.ArmorInstance);
+			detail = ItemsDB.DescribeArmorMultiline(stack.ArmorInstance);
 			icon = SlotIcon(stack.ArmorInstance.Slot);
 			rarity = stack.ArmorInstance.Rarity;
 		}
 		else if (stack.ShieldInstance != null)
 		{
 			name = stack.ShieldInstance.Name;
-			detail = DescribeShield(stack.ShieldInstance);
+			detail = DescribeShieldMultiline(stack.ShieldInstance);
 			icon = "🛡";
 			rarity = stack.ShieldInstance.Rarity;
 		}
@@ -337,7 +342,7 @@ public partial class InventoryOverlay
 			if (sd != null)
 			{
 				name = sd.Name;
-				detail = DescribeShield(sd);
+				detail = DescribeShieldMultiline(sd);
 				icon = "🛡";
 				rarity = sd.Rarity;
 			}
