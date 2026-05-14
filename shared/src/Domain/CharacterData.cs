@@ -373,52 +373,84 @@ public class CharacterData
 
 	public int XpForNextCharacterLevel() => Level * 100;
 
-	// === Грейды и сквозной отображаемый уровень =============================
+	// === Грейды (сквозной Level) ===========================================
 	//
-	// Внутри одного грейда персонаж может развиться до LevelsPerGrade уровней.
-	// Дальше — promotion в следующий грейд (E → D → C → B → A → S), Level
-	// сбрасывается в 1, Exp обнуляется. Снаружи (UI) показывается сквозной
-	// «отображаемый» уровень = gradeIndex * LevelsPerGrade + Level, чтобы при
-	// переходе E20 → D1 цифра не упала в ноль, а продолжилась с 21.
+	// Level — сквозной счётчик уровней (1..N). Каждый грейд занимает свой
+	// отрезок по LevelsPerGrade уровней:
+	//   E:  1..20
+	//   D: 21..40
+	//   C: 41..60
+	//   B: 61..80
+	//   A: 81..100
+	//   S: 101..120
+	// Поле Grade — производное от Level: достаточно сделать RecomputeGrade()
+	// после любого изменения Level, чтобы оно соответствовало текущему отрезку.
+	// Хранится в JSON для совместимости и удобства UI/CharacterSummary.
 	public const int LevelsPerGrade = 20;
 
-	public static int DisplayLevelFor(int level, string grade)
-		=> (int)ItemGrades.Parse(grade) * LevelsPerGrade + level;
+	public static string GradeForLevel(int level)
+	{
+		if (level < 1) level = 1;
+		int gi = (level - 1) / LevelsPerGrade;
+		if (gi > (int)ItemGrade.S) gi = (int)ItemGrade.S;
+		return ItemGrades.Code((ItemGrade)gi);
+	}
 
-	public int DisplayLevel() => DisplayLevelFor(Level, Grade);
+	public static int MaxLevelOfGrade(string grade)
+		=> ((int)ItemGrades.Parse(grade) + 1) * LevelsPerGrade;
 
-	public bool IsAtGradeCap() => Level >= LevelsPerGrade;
+	public static int MinLevelOfGrade(string grade)
+		=> (int)ItemGrades.Parse(grade) * LevelsPerGrade + 1;
+
+	// Level внутри текущего грейда (1..LevelsPerGrade). Используется UI для
+	// прогресс-индикатора «D-грейд 2/20».
+	public int LevelWithinGrade() => Level - MinLevelOfGrade(Grade) + 1;
+
+	public bool IsAtGradeCap() => Level >= MaxLevelOfGrade(Grade);
 
 	public bool CanPromoteGrade()
 		=> ItemGrades.Parse(Grade) < ItemGrade.S;
 
-	// Промоушн в следующий грейд. Level → 1, Exp → 0. Возвращает true если
-	// апгрейд состоялся. На S-грейде ничего не делает (возвращает false).
+	// Промоушн в следующий грейд. Level прыгает в начало нового отрезка
+	// (E top → D mid 21, и т.д.), Exp → 0. На S-грейде возвращает false.
 	public bool PromoteGrade()
 	{
 		if (!CanPromoteGrade()) return false;
 		var next = (ItemGrade)((int)ItemGrades.Parse(Grade) + 1);
 		Grade = ItemGrades.Code(next);
-		Level = 1;
+		Level = MinLevelOfGrade(Grade);
 		Exp = 0;
 		return true;
 	}
 
-	// Миграция старых сейвов, где Level накопился выше LevelsPerGrade без
-	// введённого ещё промоушна. Пример: Level=22 / Grade=E → станет
-	// Level=2 / Grade=D, чтобы DisplayLevel остался 22, а внутренний счётчик
-	// уложился в новую модель (E1..20, D1..20, ...). Вызывается на загрузке
-	// персонажа в Session. Возвращает true если что-то поменялось.
+	// Синхронизирует Grade с Level. Вызывать после изменений Level или при
+	// загрузке старого сейва. Возвращает true если Grade поменялся.
+	public bool RecomputeGrade()
+	{
+		var fresh = GradeForLevel(Level);
+		if (fresh == Grade) return false;
+		Grade = fresh;
+		return true;
+	}
+
+	// Миграция старых сейвов. Покрывает два формата:
+	//   1. Уровни внутри грейда: Level=2 / Grade=D → восстанавливаем сквозной
+	//      Level = gradeIndex*20 + Level = 22 (Grade остаётся D).
+	//   2. Просто рассинхрон Grade vs Level: Level=22 / Grade=E (старая модель
+	//      до introduction грейдов) → пересчитываем Grade = D.
+	// Возвращает true если что-то поменялось.
 	public bool MigrateLevelToGrade()
 	{
 		bool changed = false;
-		while (Level > LevelsPerGrade && ItemGrades.Parse(Grade) < ItemGrade.S)
+		// (1) Восстановить сквозной Level из старого «локального» сегмента.
+		if (Grade != null && ItemGrades.Parse(Grade) > ItemGrade.E && Level <= LevelsPerGrade)
 		{
-			Level -= LevelsPerGrade;
-			Grade = ItemGrades.Code((ItemGrade)((int)ItemGrades.Parse(Grade) + 1));
+			int gi = (int)ItemGrades.Parse(Grade);
+			Level = gi * LevelsPerGrade + Level;
 			changed = true;
 		}
-		if (Level > LevelsPerGrade) { Level = LevelsPerGrade; changed = true; }
+		// (2) Привести Grade к соответствию Level в любом случае.
+		if (RecomputeGrade()) changed = true;
 		return changed;
 	}
 

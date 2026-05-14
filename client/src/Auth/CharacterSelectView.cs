@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using Godot;
-using GuildOfGreed.Shared.Domain;
 using GuildOfGreed.Shared.Net;
 
 // Экран выбора персонажа после логина. Тащит список с сервера через
@@ -145,7 +144,7 @@ public partial class CharacterSelectView : Control
 		var info = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
 		info.AddChild(UIStyle.MakeLabel(c.Name, 18, UIStyle.GoldBright));
 		info.AddChild(UIStyle.MakeLabel(
-			$"Уровень {CharacterData.DisplayLevelFor(c.Level, c.Grade)} · Грейд {c.Grade}",
+			$"Уровень {c.Level} · Грейд {c.Grade}",
 			13, UIStyle.TextSecondary));
 		row.AddChild(info);
 

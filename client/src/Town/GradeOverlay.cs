@@ -142,7 +142,7 @@ public partial class GradeOverlay : Control
 
 		_currentGradeLabel.Text = $"Грейд {ch.Grade}";
 		_levelLabel.Text =
-			$"Уровень {ch.DisplayLevel()}   ·   в грейде {ch.Level}/{CharacterData.LevelsPerGrade}";
+			$"Уровень {ch.Level}   ·   в грейде {ch.LevelWithinGrade()}/{CharacterData.LevelsPerGrade}";
 		_xpLabel.Text = $"Опыт: {ch.Exp} / {ch.XpForNextCharacterLevel()}";
 
 		_ladderLabel.Text = BuildLadder(ch.Grade);
