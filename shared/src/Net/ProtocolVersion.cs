@@ -15,5 +15,5 @@ namespace GuildOfGreed.Shared.Net;
 // читать запросы версии 1).
 public static class ProtocolVersion
 {
-	public const int Current = 18;  // Run artifacts: ActiveArtifacts в StartBattleRequest.
+	public const int Current = 20;  // BattleState persistence: SelectCharacterResponse.HasActiveBattle.
 }

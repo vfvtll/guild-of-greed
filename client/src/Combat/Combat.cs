@@ -37,6 +37,12 @@ public partial class Combat : Control
 	public int? LocationOverride { get; set; }
 	public int? NodeTypeOverride { get; set; }
 
+	// A1 resume: если задано — Combat не вызывает StartBattleAsync, а
+	// десериализует BattleSnapshotDto и продолжает уже идущий бой.
+	// Используется при reconnect / реселекте персонажа, когда сервер сообщил
+	// что у этого char'a в active_battles лежит snapshot.
+	public string ResumeBattleJson { get; set; }
+
 	// === Боевое состояние — через shared engine ===
 	private BattleState _state;
 
@@ -53,7 +59,47 @@ public partial class Combat : Control
 	{
 		UIStyle.FillParent(this);
 		BuildUI();
-		_ = StartNewCombatAsync();
+		if (!string.IsNullOrEmpty(ResumeBattleJson))
+			ResumeFromSnapshot();
+		else
+			_ = StartNewCombatAsync();
+	}
+
+	// Альтернатива StartNewCombatAsync: восстанавливает state из server snapshot
+	// (см. SelectCharacterResponse.ActiveBattleJson). StartBattle на сервер не
+	// идёт — серверный _battle уже восстановлен из той же записи в БД.
+	private void ResumeFromSnapshot()
+	{
+		_selectedHandIndex = -1;
+		_targetingBanner.Visible = false;
+		try
+		{
+			var snap = BattleSnapshotDto.FromJson(ResumeBattleJson);
+			if (snap?.State == null)
+			{
+				GD.PrintErr("Combat: ResumeBattleJson invalid, falling back to StartNew");
+				_ = StartNewCombatAsync();
+				return;
+			}
+			snap.RestoreRng();
+			snap.RestoreToPlayer();
+			_state = snap.State;
+			// Серверный snapshot хранит Player отдельно от GameData.Instance.Character.
+			// Подменяем GameData на восстановленную копию — UI и команды читают
+			// именно её. Если копия отличается от текущей (мутации до боя успели
+			// записаться) — снапшот авторитетнее: он совпадает со State на сервере.
+			GameData.Instance.SetCharacter(_state.Player);
+			_endTurnButton.Disabled = false;
+			_busy = false;
+			ClearLog();
+			AddLogLine("Бой восстановлен после дисконнекта");
+			RefreshUI();
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr($"Combat: failed to resume from snapshot: {ex.Message}");
+			_ = StartNewCombatAsync();
+		}
 	}
 
 	// =====================================================================

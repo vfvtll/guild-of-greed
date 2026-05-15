@@ -410,18 +410,62 @@ public static partial class CharacterCommands
 		return Result.Success();
 	}
 
+	// Цена респека в медяках. Линейно растёт с уровнем: 100 * Level (минимум 100).
+	// Формула временная; если станет дешёвым «без боли крутить билды каждый день»
+	// — поднять до Level^1.5 или ввести cooldown.
+	public static long RespecCost(int level)
+	{
+		int l = level < 1 ? 1 : level;
+		return 100L * l;
+	}
+
+	public static Result RespecStats(CharacterData ch)
+	{
+		if (ch == null) return Result.Fail(CharacterCommandError.NoCharacter);
+		ch.EnsureBaseStats();
+		int spent = ch.SpentStatPoints();
+		if (spent <= 0) return Result.Fail(CharacterCommandError.NothingToRespec);
+		long cost = RespecCost(ch.Level);
+		if (ch.Inventory.Money < cost) return Result.Fail(CharacterCommandError.NoMoney);
+		ch.Inventory.Money -= cost;
+		ch.ResetStatsToBase();
+		return Result.Success(cost);
+	}
+
 	// ===================================================================
 	// Grade promotion
 	// ===================================================================
 	//
-	// Dev-mode: бесплатно, без требований к уровню. Игрок в городе жмёт
-	// "Повысить грейд" — Level → 1, Grade → следующий, Exp → 0. На S-грейде
-	// возвращает CantPromote.
+	// Требования:
+	//   1. Грейд должен быть на cap'е своего отрезка (Level == MaxLevelOfGrade).
+	//   2. Хватает медяков (PromoteCost растёт с грейдом).
+	//   3. Грейд ниже S.
+	// Auto-промо при прохождении trial-локации (см. Session.HandleBattleAction
+	// TrialLocationIndex) обходит этот платный путь — это альтернатива.
+	public static long PromoteCost(string fromGrade)
+	{
+		// E→D=1000, D→C=3000, C→B=8000, B→A=20000, A→S=50000 медяков.
+		return fromGrade switch
+		{
+			"E" => 1000L,
+			"D" => 3000L,
+			"C" => 8000L,
+			"B" => 20000L,
+			"A" => 50000L,
+			_   => 0L,
+		};
+	}
+
 	public static Result PromoteGrade(CharacterData ch)
 	{
 		if (ch == null) return Result.Fail(CharacterCommandError.NoCharacter);
+		if (!ch.CanPromoteGrade()) return Result.Fail(CharacterCommandError.CantPromote);
+		if (!ch.IsAtGradeCap()) return Result.Fail(CharacterCommandError.GradeNotCapped);
+		long cost = PromoteCost(ch.Grade);
+		if (ch.Inventory.Money < cost) return Result.Fail(CharacterCommandError.NoMoney);
+		ch.Inventory.Money -= cost;
 		if (!ch.PromoteGrade()) return Result.Fail(CharacterCommandError.CantPromote);
-		return Result.Success();
+		return Result.Success(cost);
 	}
 
 	// ===================================================================
@@ -468,4 +512,6 @@ public static class CharacterCommandError
 	public const string LowSkill        = "low_skill";
 	public const string NoResources     = "no_resources";
 	public const string CantPromote     = "cant_promote";
+	public const string NothingToRespec = "nothing_to_respec";
+	public const string GradeNotCapped  = "grade_not_capped";
 }

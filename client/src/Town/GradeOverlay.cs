@@ -1,10 +1,13 @@
 using Godot;
+using GuildOfGreed.Shared.Commands;
 using GuildOfGreed.Shared.Domain;
 
-// Гильдия — окно повышения грейда. Dev-режим: бесплатно, без требований к
-// уровню или ресурсам. Показывает текущий грейд/уровень внутри грейда и
-// сквозной отображаемый уровень (DisplayLevel). Кнопка "Повысить грейд"
-// шлёт PromoteGrade на сервер. На S-грейде кнопка задизейблена.
+// Гильдия — окно повышения грейда + респек статов.
+// Промоушн: требует cap текущего грейда (Level == MaxLevelOfGrade) и плату
+// в медяках (см. CharacterCommands.PromoteCost). Alternative-путь через
+// trial-локации обходит платный (см. Session.HandleBattleAction).
+// Респек: возвращает все распределённые поверх базы очки в UnspentStatPoints,
+// статы откатываются на BaseXxx. Цена = CharacterCommands.RespecCost(Level).
 public partial class GradeOverlay : Control
 {
 	[Signal] public delegate void ClosedEventHandler();
@@ -17,6 +20,9 @@ public partial class GradeOverlay : Control
 	private Label _ladderLabel;
 	private Label _statusLabel;
 	private Button _promoteBtn;
+	private Label _respecInfoLabel;
+	private Button _respecBtn;
+	private Label _respecStatusLabel;
 
 	public override void _Ready()
 	{
@@ -126,6 +132,30 @@ public partial class GradeOverlay : Control
 		_statusLabel.HorizontalAlignment = HorizontalAlignment.Center;
 		v.AddChild(_statusLabel);
 
+		// === Респек статов ===
+		v.AddChild(new HSeparator());
+
+		var respecTitle = UIStyle.MakeLabel("⚙ Перераспределение статов", 16, UIStyle.GoldMid);
+		respecTitle.HorizontalAlignment = HorizontalAlignment.Center;
+		v.AddChild(respecTitle);
+
+		_respecInfoLabel = UIStyle.MakeLabel("", 13, UIStyle.TextSecondary);
+		_respecInfoLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		_respecInfoLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		v.AddChild(_respecInfoLabel);
+
+		var respecRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+		v.AddChild(respecRow);
+		_respecBtn = new Button();
+		UIStyle.StyleButton(_respecBtn);
+		_respecBtn.CustomMinimumSize = new Vector2(240, 40);
+		_respecBtn.Pressed += OnRespecPressed;
+		respecRow.AddChild(_respecBtn);
+
+		_respecStatusLabel = UIStyle.MakeLabel("", 12, UIStyle.WarnAmber);
+		_respecStatusLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		v.AddChild(_respecStatusLabel);
+
 		var closeRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
 		v.AddChild(closeRow);
 		var closeBtn = new Button { Text = "Закрыть" };
@@ -147,18 +177,47 @@ public partial class GradeOverlay : Control
 
 		_ladderLabel.Text = BuildLadder(ch.Grade);
 
-		bool canPromote = ch.CanPromoteGrade();
-		if (canPromote)
-		{
-			string next = NextGradeOf(ch.Grade);
-			_promoteBtn.Text = $"Повысить до грейда {next}";
-			_promoteBtn.Disabled = false;
-		}
-		else
+		if (!ch.CanPromoteGrade())
 		{
 			_promoteBtn.Text = "Достигнут максимальный грейд";
 			_promoteBtn.Disabled = true;
 		}
+		else if (!ch.IsAtGradeCap())
+		{
+			int capLevel = CharacterData.MaxLevelOfGrade(ch.Grade);
+			_promoteBtn.Text = $"Нужен уровень {capLevel} (cap грейда {ch.Grade})";
+			_promoteBtn.Disabled = true;
+		}
+		else
+		{
+			long cost = CharacterCommands.PromoteCost(ch.Grade);
+			long money = ch.Inventory?.Money ?? 0;
+			string next = NextGradeOf(ch.Grade);
+			_promoteBtn.Text = $"Повысить до {next} · {Currency.FormatShort(cost)}";
+			_promoteBtn.Disabled = money < cost;
+		}
+
+		RefreshRespec();
+	}
+
+	private void RefreshRespec()
+	{
+		var ch = GameData.Instance.Character;
+		if (ch == null) return;
+		ch.EnsureBaseStats();
+		int spent = ch.SpentStatPoints();
+		long cost = CharacterCommands.RespecCost(ch.Level);
+		long money = ch.Inventory?.Money ?? 0;
+
+		_respecInfoLabel.Text =
+			$"Распределено очков: {spent}   ·   Кошель: {Currency.FormatShort(money)}\n" +
+			"Статы откатятся к выпавшей базе, очки вернутся в нераспределённые.";
+
+		bool can = spent > 0 && money >= cost;
+		_respecBtn.Disabled = !can;
+		_respecBtn.Text = spent == 0
+			? "Нечего перераспределять"
+			: $"Перераспределить · {Currency.FormatShort(cost)}";
 	}
 
 	private static string BuildLadder(string current)
@@ -201,12 +260,58 @@ public partial class GradeOverlay : Control
 
 	private static string TranslateError(string code, string fallback) => code switch
 	{
-		"cant_promote"     => "Грейд уже максимальный.",
-		"locked_in_run"    => "Нельзя в подземелье — выйдите в город.",
-		"locked_in_battle" => "Нельзя во время боя.",
-		"network_error"    => "Нет связи с сервером.",
-		_                  => fallback,
+		"cant_promote"      => "Грейд уже максимальный.",
+		"grade_not_capped"  => "Нужно достичь cap'а текущего грейда.",
+		"nothing_to_respec" => "Все очки уже на базе.",
+		"no_money"          => "Не хватает медяков.",
+		"locked_in_run"     => "Нельзя в подземелье — выйдите в город.",
+		"locked_in_battle"  => "Нельзя во время боя.",
+		"network_error"     => "Нет связи с сервером.",
+		_                   => fallback,
 	};
+
+	private void OnRespecPressed()
+	{
+		var ch = GameData.Instance.Character;
+		if (ch == null) return;
+		int spent = ch.SpentStatPoints();
+		long cost = CharacterCommands.RespecCost(ch.Level);
+
+		var dialog = new ConfirmDialog
+		{
+			Title = "Перераспределить статы?",
+			Body =
+				$"Цена: {Currency.FormatShort(cost)}\n" +
+				$"Будет возвращено очков: {spent}\n\n" +
+				"Статы откатятся к выпавшей при создании базе.",
+			ConfirmText = "Перераспределить",
+			CancelText = "Отмена",
+		};
+		dialog.Confirmed += DoRespec;
+		AddChild(dialog);
+	}
+
+	private async void DoRespec()
+	{
+		_respecBtn.Disabled = true;
+		SetRespecStatus("", error: false);
+		var outcome = await GameData.Instance.RespecStatsAsync();
+		if (!outcome.Ok)
+		{
+			SetRespecStatus(TranslateError(outcome.Error, "Не удалось перераспределить."), error: true);
+			RefreshRespec();
+			return;
+		}
+		SetRespecStatus("Статы перераспределены. Очки в инвентаре.", error: false);
+		Refresh();
+	}
+
+	private void SetRespecStatus(string text, bool error)
+	{
+		_respecStatusLabel.Text = text;
+		_respecStatusLabel.AddThemeColorOverride("font_color",
+			error ? UIStyle.DangerRed : UIStyle.HealGreen);
+	}
 
 	private void SetStatus(string text, bool error)
 	{

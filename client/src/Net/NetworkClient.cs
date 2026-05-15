@@ -121,11 +121,15 @@ public class NetworkClient : IDisposable
 		=> ExchangeAsync<ListCharactersResponse>(new ListCharactersRequest(), ct);
 
 	public Task<CreateCharacterResponse> CreateCharacterAsync(string name,
-		int str, int @int, int con, int wit, int men, int dex, CancellationToken ct = default)
+		int str, int @int, int con, int wit, int men, int dex,
+		int baseStr, int baseInt, int baseCon, int baseWit, int baseMen, int baseDex,
+		CancellationToken ct = default)
 		=> ExchangeAsync<CreateCharacterResponse>(new CreateCharacterRequest
 		{
 			CharacterName = name,
 			Str = str, Int = @int, Con = con, Wit = wit, Men = men, Dex = dex,
+			BaseStr = baseStr, BaseInt = baseInt, BaseCon = baseCon,
+			BaseWit = baseWit, BaseMen = baseMen, BaseDex = baseDex,
 		}, ct);
 
 	public Task<SelectCharacterResponse> SelectCharacterAsync(Guid characterId, CancellationToken ct = default)
@@ -199,6 +203,9 @@ public class NetworkClient : IDisposable
 
 	public Task<CharacterCommandResponse> PromoteGradeAsync(CancellationToken ct = default)
 		=> ExchangeAsync<CharacterCommandResponse>(new PromoteGradeRequest(), ct);
+
+	public Task<CharacterCommandResponse> RespecStatsAsync(CancellationToken ct = default)
+		=> ExchangeAsync<CharacterCommandResponse>(new RespecStatsRequest(), ct);
 
 	public Task<BattleActionResponse> SendBattleActionAsync(int actionType, int handIndex,
 		int targetEnemyIndex, string potionId, CancellationToken ct = default)

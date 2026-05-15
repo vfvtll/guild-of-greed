@@ -82,6 +82,7 @@ public partial class CharacterSelectView : Control
 	private async Task LoadCharactersAsync()
 	{
 		_statusLabel.Text = "Загрузка персонажей...";
+		_statusLabel.AddThemeColorOverride("font_color", UIStyle.TextSecondary);
 		try
 		{
 			var resp = await _net.ListCharactersAsync();
@@ -91,6 +92,7 @@ public partial class CharacterSelectView : Control
 		catch (Exception ex)
 		{
 			_statusLabel.Text = $"Не удалось загрузить персонажей: {ex.Message}";
+			_statusLabel.AddThemeColorOverride("font_color", UIStyle.DangerRed);
 		}
 	}
 
@@ -159,31 +161,58 @@ public partial class CharacterSelectView : Control
 
 		var deleteBtn = new Button { Text = "Удалить" };
 		UIStyle.StyleButton(deleteBtn);
-		bool armedDelete = false;
-		deleteBtn.Pressed += async () =>
-		{
-			if (!armedDelete)
-			{
-				armedDelete = true;
-				deleteBtn.Text = "Точно удалить?";
-				return;
-			}
-			try
-			{
-				var resp = await _net.DeleteCharacterAsync(capturedId);
-				if (resp.Success) await LoadCharactersAsync();
-				else _statusLabel.Text = $"Не удалось удалить: {resp.Error}";
-			}
-			catch (Exception ex)
-			{
-				_statusLabel.Text = $"Ошибка удаления: {ex.Message}";
-			}
-		};
+		deleteBtn.Pressed += () => OpenDeleteDialog(c);
 		actions.AddChild(deleteBtn);
 		row.AddChild(actions);
 
 		return card;
 	}
+
+	private void OpenDeleteDialog(CharacterSummary c)
+	{
+		var dialog = new ConfirmDialog
+		{
+			Title = "Удалить персонажа?",
+			Body =
+				$"«{c.Name}», уровень {c.Level}, грейд {c.Grade}.\n\n" +
+				"Удаление переводит персонажа в скрытый список. " +
+				"Восстановление возможно в течение 7 дней через поддержку.",
+			ConfirmText = "Удалить навсегда",
+			CancelText = "Отмена",
+			RequireTypedConfirmation = c.Name,
+		};
+		var capturedId = c.Id;
+		dialog.Confirmed += () => _ = DoDeleteAsync(capturedId);
+		AddChild(dialog);
+	}
+
+	private async Task DoDeleteAsync(Guid characterId)
+	{
+		try
+		{
+			var resp = await _net.DeleteCharacterAsync(characterId);
+			if (resp.Success)
+			{
+				_statusLabel.Text = "";
+				await LoadCharactersAsync();
+				return;
+			}
+			_statusLabel.Text = TranslateDeleteError(resp.Error);
+			_statusLabel.AddThemeColorOverride("font_color", UIStyle.DangerRed);
+		}
+		catch (Exception ex)
+		{
+			_statusLabel.Text = $"Ошибка удаления: {ex.Message}";
+			_statusLabel.AddThemeColorOverride("font_color", UIStyle.DangerRed);
+		}
+	}
+
+	private static string TranslateDeleteError(string code) => code switch
+	{
+		"not_found"    => "Персонаж не найден (возможно уже удалён).",
+		"rate_limited" => "Слишком много удалений за час. Подождите.",
+		_              => $"Не удалось удалить: {code}",
+	};
 
 	private void ClearList()
 	{

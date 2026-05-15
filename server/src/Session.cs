@@ -52,6 +52,13 @@ public class Session
 	// (deriveBattleSeed). 0 = вне забега; ставится в HandleStartRun.
 	private int _runSeed;
 
+	// Rate-limiting per-session (per-IP лимит — задача отдельная):
+	//   _commandRate — общий лимит сообщений (60/сек). Защита от спам-флуда.
+	//   _authRate    — попытки логина/регистрации (5 за 30 секунд). Брут-форс.
+	// При превышении сессия закрывается с ServerError.
+	private readonly RateLimiter _commandRate = new(limit: 60, window: TimeSpan.FromSeconds(1));
+	private readonly RateLimiter _authRate    = new(limit: 5,  window: TimeSpan.FromSeconds(30));
+
 	public Session(TcpClient tcp, Stream stream, AccountStore store, string peer, CancellationToken shutdown)
 	{
 		_tcp = tcp;
@@ -122,6 +129,12 @@ public class Session
 		while (!_shutdown.IsCancellationRequested)
 		{
 			ClientMessage msg = await Codec.ReceiveAsync<ClientMessage>(_stream, _shutdown).ConfigureAwait(false);
+			if (!_commandRate.Allow())
+			{
+				Logger.Warn($"[{_peer}] command-rate exceeded; closing session");
+				await TrySendErrorAsync("rate_limited", "too many requests").ConfigureAwait(false);
+				return;
+			}
 			ServerMessage reply = await DispatchAsync(msg).ConfigureAwait(false);
 			if (reply != null) await SendAsync(reply).ConfigureAwait(false);
 		}
@@ -173,6 +186,7 @@ public class Session
 				SpendStatPointRequest r      => HandleSpendStatPoint(r),
 				CraftItemRequest r           => HandleCraftItem(r),
 				PromoteGradeRequest r        => HandlePromoteGrade(r),
+				RespecStatsRequest r         => HandleRespecStats(r),
 				_ => UnknownReply(msg),
 			};
 		}
@@ -181,6 +195,11 @@ public class Session
 
 	private ServerMessage HandleRegister(RegisterRequest r)
 	{
+		if (!_authRate.Allow())
+		{
+			Logger.Warn($"[{_peer}] auth-rate exceeded on register for '{r.Login}'");
+			return new RegisterResponse { Success = false, Error = "rate_limited" };
+		}
 		var result = _store.CreateAccount(r.Login, r.Email, r.Password, out var account);
 		if (result != AccountStore.CreateResult.Ok)
 		{
@@ -201,6 +220,11 @@ public class Session
 
 	private ServerMessage HandleLogin(LoginRequest r)
 	{
+		if (!_authRate.Allow())
+		{
+			Logger.Warn($"[{_peer}] auth-rate exceeded on login for '{r.Login}'");
+			return new LoginResponse { Success = false, Error = "rate_limited" };
+		}
 		var account = _store.FindByLogin(r.Login ?? "");
 		if (account == null || !PasswordHasher.Verify(r.Password ?? "", account.PasswordHash))
 		{
@@ -273,8 +297,10 @@ public class Session
 		var ch = new CharacterData
 		{
 			Id = Guid.NewGuid(),
-			CharacterName = r.CharacterName ?? "",
+			CharacterName = (r.CharacterName ?? "").Trim(),
 			Str = r.Str, Int = r.Int, Con = r.Con, Wit = r.Wit, Men = r.Men, Dex = r.Dex,
+			BaseStr = r.BaseStr, BaseInt = r.BaseInt, BaseCon = r.BaseCon,
+			BaseWit = r.BaseWit, BaseMen = r.BaseMen, BaseDex = r.BaseDex,
 			IsNewCharacter = true,
 		};
 		// Новый персонаж должен начать с полным HP/MP (поля persist'ятся).
@@ -331,12 +357,50 @@ public class Session
 			Logger.Info($"[{_peer}] dev-grant: уровень поднят до {ch.Level}/{ch.Grade}");
 		}
 
-		Logger.Info($"[{_peer}] selected char id={r.CharacterId} hp={ch.CurrentHp}/{ch.MaxHp()}");
+		// Active battle resume: если в БД лежит snapshot — восстанавливаем
+		// _battle, отдаём клиенту JSON чтобы он сразу зашёл в Combat в режиме
+		// resume вместо LocationSelect. Невалидный JSON / схема не сходится —
+		// просто молча чистим snapshot, игрока кидаем в обычный flow.
+		string activeJson = null;
+		MapNodeType activeNodeType = default;
+		int activeLocationIndex = -1;
+		try
+		{
+			var raw = _store.LoadActiveBattle(r.CharacterId);
+			if (!string.IsNullOrEmpty(raw))
+			{
+				_battle = BattleSnapshot.Deserialize(raw);
+				if (_battle != null)
+				{
+					activeJson = raw;
+					activeNodeType = _battle.NodeType;
+					activeLocationIndex = _battle.LocationIndex;
+				}
+				else
+				{
+					Logger.Warn($"[{_peer}] active battle JSON invalid, clearing");
+					_store.ClearActiveBattle(r.CharacterId);
+				}
+			}
+		}
+		catch (System.Exception ex)
+		{
+			Logger.Warn($"[{_peer}] active battle resume failed: {ex.Message}, clearing");
+			_store.ClearActiveBattle(r.CharacterId);
+			_battle = null;
+		}
+
+		Logger.Info($"[{_peer}] selected char id={r.CharacterId} hp={ch.CurrentHp}/{ch.MaxHp()}"
+			+ (_battle != null ? " (with active battle resume)" : ""));
 		return new SelectCharacterResponse
 		{
 			Success = true,
 			CharacterJson = System.Text.Json.JsonSerializer.Serialize(ch,
 				new System.Text.Json.JsonSerializerOptions { IncludeFields = true }),
+			HasActiveBattle = _battle != null,
+			ActiveBattleJson = activeJson,
+			ActiveBattleNodeType = (int)activeNodeType,
+			ActiveBattleLocationIndex = activeLocationIndex,
 		};
 	}
 
@@ -388,10 +452,29 @@ public class Session
 			}
 
 		_battle = new BattleSession(character, enemies, deck, seed, nodeType, r.LocationIndex, runEffects, artifacts);
+		// A1: stale snapshot предыдущего боя (например, незакрытый из-за краша
+		// сервера) — затираем сразу после успешного создания нового.
+		PersistActiveBattle();
 		Logger.Info($"[{_peer}] battle started loc={r.LocationIndex} node={r.NodeType} " +
 			$"seed={seed} enemies={enemies.Count} effects={runEffects.Count} artifacts={artifacts.Count}");
 
 		return new BattleStartedResponse { Success = true, Seed = seed };
+	}
+
+	// A1 persistence: пишем snapshot текущего _battle в БД (UPSERT). Зовётся
+	// после каждой мутации боевого состояния — StartBattle и BattleAction.
+	private void PersistActiveBattle()
+	{
+		if (_battle == null || _selectedCharacterId == null) return;
+		try
+		{
+			var json = BattleSnapshot.Serialize(_battle);
+			_store.SaveActiveBattle(_selectedCharacterId.Value, json);
+		}
+		catch (System.Exception ex)
+		{
+			Logger.Warn($"[{_peer}] failed to persist active battle: {ex.Message}");
+		}
 	}
 
 	private ServerMessage HandleBattleAction(BattleActionRequest r)
@@ -399,9 +482,34 @@ public class Session
 		if (_battle == null)
 			return new BattleActionResponse { Confirmed = false, Error = "no_active_battle" };
 
+		// Bounds-валидация ДО ApplyAction. Engine не делает мягких отказов
+		// — кривой индекс уронит сессию с ArgumentOutOfRangeException.
+		// Семантику (таргетная ли карта, есть ли зелье в инвентаре) проверяет
+		// сам Engine; здесь только защита от мусорных значений.
+		if (!Enum.IsDefined(typeof(BattleActionType), r.ActionType))
+			return new BattleActionResponse { Confirmed = false, Error = "bad_action_type" };
+
+		var type = (BattleActionType)r.ActionType;
+		var state = _battle.State;
+
+		if (type == BattleActionType.PlayCard)
+		{
+			if (r.HandIndex < 0 || r.HandIndex >= state.Hand.Count)
+				return new BattleActionResponse { Confirmed = false, Error = "bad_hand_index" };
+			// -1 = карта не таргетная (Engine разберётся); иначе должен быть валидным.
+			if (r.TargetEnemyIndex != -1 &&
+				(r.TargetEnemyIndex < 0 || r.TargetEnemyIndex >= state.Enemies.Count))
+				return new BattleActionResponse { Confirmed = false, Error = "bad_target_index" };
+		}
+		else if (type == BattleActionType.UsePotion)
+		{
+			if (string.IsNullOrEmpty(r.PotionId))
+				return new BattleActionResponse { Confirmed = false, Error = "bad_potion_id" };
+		}
+
 		var action = new BattleAction
 		{
-			Type = (BattleActionType)r.ActionType,
+			Type = type,
 			HandIndex = r.HandIndex,
 			TargetEnemyIndex = r.TargetEnemyIndex,
 			PotionId = r.PotionId,
@@ -442,7 +550,17 @@ public class Session
 			if (!_store.UpdateCharacter(_accountId.Value, _battle.Character))
 				Logger.Warn($"[{_peer}] failed to persist character after battle");
 			Logger.Info($"[{_peer}] battle ended victory={victory} hp={_battle.Character.CurrentHp}");
+			// A1: бой закончен — стираем snapshot, чтобы при следующем
+			// SelectCharacter не пытались возобновить покойный бой.
+			if (_selectedCharacterId.HasValue)
+				_store.ClearActiveBattle(_selectedCharacterId.Value);
 			_battle = null;
+		}
+		else
+		{
+			// Бой продолжается — пишем свежий snapshot для устойчивости к
+			// дисконнекту/крашу сервера между BattleAction'ами.
+			PersistActiveBattle();
 		}
 
 		return new BattleActionResponse
@@ -521,6 +639,10 @@ public class Session
 	{
 		_runSnapshot = null;
 		_runSeed = 0;
+		// A1: завершение забега инвалидирует активный бой (если был).
+		_battle = null;
+		if (_selectedCharacterId.HasValue)
+			_store.ClearActiveBattle(_selectedCharacterId.Value);
 		Logger.Info($"[{_peer}] run ended");
 		return new EndRunResponse { Success = true };
 	}
@@ -637,6 +759,9 @@ public class Session
 	private ServerMessage HandlePromoteGrade(PromoteGradeRequest r)
 		=> RunCharacterCommand("PromoteGrade", ch => CharacterCommands.PromoteGrade(ch));
 
+	private ServerMessage HandleRespecStats(RespecStatsRequest r)
+		=> RunCharacterCommand("RespecStats", ch => CharacterCommands.RespecStats(ch));
+
 	// RandomSource для одной forge-операции. Сид берётся из _serverRng — не
 	// детерминирован между запусками, но это и не нужно (форж не воспроизводим).
 	private RandomSource MakeForgeRng() => new(_serverRng.Next());
@@ -698,10 +823,20 @@ public class Session
 
 	private ServerMessage HandleDeleteCharacter(DeleteCharacterRequest r)
 	{
-		bool deleted = _store.DeleteCharacter(_accountId.Value, r.CharacterId);
-		if (!deleted) return new DeleteCharacterResponse { Success = false, Error = "not_found" };
-		Logger.Info($"[{_peer}] deleted char id={r.CharacterId}");
-		return new DeleteCharacterResponse { Success = true };
+		var result = _store.DeleteCharacter(_accountId.Value, r.CharacterId);
+		switch (result)
+		{
+			case AccountStore.DeleteCharResult.Ok:
+				Logger.Info($"[{_peer}] soft-deleted char id={r.CharacterId}");
+				return new DeleteCharacterResponse { Success = true };
+			case AccountStore.DeleteCharResult.NotFound:
+				return new DeleteCharacterResponse { Success = false, Error = "not_found" };
+			case AccountStore.DeleteCharResult.RateLimited:
+				Logger.Warn($"[{_peer}] delete rate-limited for char id={r.CharacterId}");
+				return new DeleteCharacterResponse { Success = false, Error = "rate_limited" };
+			default:
+				return new DeleteCharacterResponse { Success = false, Error = "unknown" };
+		}
 	}
 
 	private ServerMessage UnauthorizedReply(ClientMessage msg)
@@ -748,8 +883,13 @@ public class Session
 
 	private static string ErrorString(AccountStore.CreateCharResult r) => r switch
 	{
-		AccountStore.CreateCharResult.SlotsFull    => "slots_full",
-		AccountStore.CreateCharResult.InvalidStats => "invalid_stats",
+		AccountStore.CreateCharResult.SlotsFull     => "slots_full",
+		AccountStore.CreateCharResult.InvalidStats  => "invalid_stats",
+		AccountStore.CreateCharResult.NameTooShort  => "name_too_short",
+		AccountStore.CreateCharResult.NameTooLong   => "name_too_long",
+		AccountStore.CreateCharResult.NameBadChars  => "name_bad_chars",
+		AccountStore.CreateCharResult.NameReserved  => "name_reserved",
+		AccountStore.CreateCharResult.NameProfanity => "name_profanity",
 		_ => "unknown",
 	};
 }

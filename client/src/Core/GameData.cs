@@ -262,4 +262,8 @@ public partial class GameData : Node
 	// === Грейд (Гильдия) ===
 	public Task<CommandOutcome> PromoteGradeAsync()
 		=> RunAsync(net => net.PromoteGradeAsync(), "PromoteGrade");
+
+	// === Респек статов (Гильдия) ===
+	public Task<CommandOutcome> RespecStatsAsync()
+		=> RunAsync(net => net.RespecStatsAsync(), "RespecStats");
 }

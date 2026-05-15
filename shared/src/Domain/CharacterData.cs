@@ -34,13 +34,28 @@ public class CharacterData
 	// Сбрасывается в false после победы в Tutorial-узле + UpdateCharacter.
 	public bool IsNewCharacter = false;
 
-	// Статы (35..45 + распределённые игроком 10 очков).
+	// Статы (35..45 + распределённые игроком 10 очков + 2 за каждый level-up).
 	public int Str;
 	public int Int;
 	public int Con;
 	public int Wit;
 	public int Men;
 	public int Dex;
+
+	// База статов на момент создания (35..45 рандом). Используется ТОЛЬКО для
+	// респека в Гильдии: статы откатываются на BaseXxx, а разница
+	// (Str-BaseStr + Int-BaseInt + ...) возвращается в UnspentStatPoints.
+	// Базу выпавшую судьбой респек не трогает.
+	//
+	// Старые сейвы без поля: System.Text.Json оставит 0; EnsureBaseStats()
+	// (вызывается при загрузке) заполнит базу текущими статами — респек
+	// у такого персонажа ничего не вернёт, что безопасно.
+	public int BaseStr;
+	public int BaseInt;
+	public int BaseCon;
+	public int BaseWit;
+	public int BaseMen;
+	public int BaseDex;
 
 	// === Экипировка ===
 	// Хранится как полноценные instance-объекты (с аффиксами), а не как
@@ -124,6 +139,37 @@ public class CharacterData
 	}
 
 	private static int RollStat() => Rng.Range(35, 46);
+
+	// Старые сейвы без BaseXxx → 0. Считаем что у такого персонажа база =
+	// текущие статы (респек ничего не вернёт). Идемпотентна: повторный вызов
+	// после успешного заполнения ничего не меняет.
+	public void EnsureBaseStats()
+	{
+		if (BaseStr != 0 || BaseInt != 0 || BaseCon != 0 ||
+		    BaseWit != 0 || BaseMen != 0 || BaseDex != 0) return;
+		BaseStr = Str; BaseInt = Int; BaseCon = Con;
+		BaseWit = Wit; BaseMen = Men; BaseDex = Dex;
+	}
+
+	// Считает сколько очков игрок суммарно распределил поверх базы.
+	// Сумма Str-BaseStr + Int-BaseInt + ... Не может быть отрицательной при
+	// нормальной игре (TrySpendStatPoint только прибавляет), но clamp на всякий.
+	public int SpentStatPoints()
+	{
+		int spent = (Str - BaseStr) + (Int - BaseInt) + (Con - BaseCon)
+		          + (Wit - BaseWit) + (Men - BaseMen) + (Dex - BaseDex);
+		return spent < 0 ? 0 : spent;
+	}
+
+	// Откатывает статы к базе и возвращает потраченные очки в UnspentStatPoints.
+	// Чисто механика — деньги списываются командой-обёрткой.
+	public void ResetStatsToBase()
+	{
+		int returned = SpentStatPoints();
+		Str = BaseStr; Int = BaseInt; Con = BaseCon;
+		Wit = BaseWit; Men = BaseMen; Dex = BaseDex;
+		UnspentStatPoints += returned;
+	}
 
 	// === Производные параметры (с учётом всех 4 слотов брони + аффиксов) ===
 	//

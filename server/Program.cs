@@ -8,7 +8,9 @@ using GuildOfGreed.Shared.Net;
 // Точка входа сервера. Поднимает SQLite, загружает/создаёт TLS-сертификат
 // и запускает TLS-листенер. Ctrl+C / SIGTERM — корректный shutdown.
 
+Logger.ConfigureFileSink(NetworkConfig.DataDir);
 Logger.Info($"GuildOfGreed.Server starting (protocol v{ProtocolVersion.Current})");
+Logger.Info($"file logs at {NetworkConfig.DataDir}/logs/server-YYYY-MM-DD.log");
 
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>

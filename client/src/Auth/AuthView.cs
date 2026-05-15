@@ -222,6 +222,7 @@ public partial class AuthView : Control
 		"invalid_login"        => "Неверный формат логина (3-24 символа).",
 		"invalid_email"        => "Неверный формат email.",
 		"invalid_credentials"  => "Неверный логин или пароль.",
+		"rate_limited"         => "Слишком много попыток. Подождите минуту.",
 		_                      => $"Ошибка: {code}",
 	};
 }

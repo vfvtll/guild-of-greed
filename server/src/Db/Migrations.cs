@@ -42,5 +42,31 @@ public static class Migrations
 				CREATE INDEX IF NOT EXISTS idx_sessions_account   ON sessions(account_id);
 			""",
 		},
+		new()
+		{
+			Version = 2,
+			Description = "soft-delete для characters (deleted_at)",
+			// deleted_at IS NULL = жив. INTEGER (Unix ms) = soft-deleted.
+			// Существующие записи остаются с NULL — никто не теряется.
+			Sql = """
+				ALTER TABLE characters ADD COLUMN deleted_at INTEGER;
+				CREATE INDEX IF NOT EXISTS idx_characters_alive
+					ON characters(account_id) WHERE deleted_at IS NULL;
+			""",
+		},
+		new()
+		{
+			Version = 3,
+			Description = "active_battles: persistence активного боя",
+			// 1:1 на персонажа. Запись создаётся в HandleStartBattle и
+			// обновляется после каждого BattleAction. Удаляется при ended.
+			Sql = """
+				CREATE TABLE IF NOT EXISTS active_battles (
+					character_id BLOB PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+					snapshot_json TEXT NOT NULL,
+					updated_at INTEGER NOT NULL
+				);
+			""",
+		},
 	};
 }

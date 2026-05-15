@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using GuildOfGreed.Shared.Domain;
 
 namespace GuildOfGreed.Shared.Combat;
@@ -30,11 +31,10 @@ public class BattleState
 	public int SpellsCastThisTurn;
 
 	// Per-battle seed. Сервер выдаёт его в BattleStarted; клиент использует
-	// для своего Rng. RngState и сам объект Rng отдельно — для удобства
-	// сериализации (если когда-нибудь будем восстанавливать бой после
-	// reconnect, сериализуем Seed + counter).
+	// для своего Rng. Rng не сериализуется (приватные сеттеры) — при resume
+	// он пересоздаётся из Seed + RngCalls (см. BattleSnapshotDto.RestoreRng).
 	public int Seed;
-	public RandomSource Rng;
+	[JsonIgnore] public RandomSource Rng;
 
 	// Снэпшот уровней ДО начала боя — чтобы при resolve в BattleEnded
 	// корректно эмитить CharacterLevelUp / WeaponLevelUp только по новым

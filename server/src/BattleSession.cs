@@ -13,14 +13,14 @@ namespace GuildOfGreed.Server;
 // клиенту, он лишь сообщает Confirmed/NotConfirmed и BattleEnded.
 public class BattleSession
 {
-	public BattleState State { get; }
+	public BattleState State { get; private set; }
 	public CharacterData Character => State.Player;
 	// Запоминаем тип узла, чтобы при ended+victory сервер мог отличить
 	// стартовый бой (Tutorial) от обычного и сбросить IsNewCharacter.
-	public MapNodeType NodeType { get; }
+	public MapNodeType NodeType { get; private set; }
 	// Индекс локации боя — нужен серверу для пост-боевых триггеров
 	// (например, авто-промо в C-грейд после победы над боссом C-trial локации).
-	public int LocationIndex { get; }
+	public int LocationIndex { get; private set; }
 
 	public BattleSession(CharacterData player, List<EnemyData> enemies, List<string> deck,
 		int seed, MapNodeType nodeType, int locationIndex,
@@ -31,6 +31,19 @@ public class BattleSession
 		NodeType = nodeType;
 		LocationIndex = locationIndex;
 	}
+
+	// Только для BattleSnapshot.Deserialize. Восстанавливает сессию из
+	// сохранённого State без вызова CombatEngine.StartBattle — состояние уже
+	// финальное на момент сохранения.
+	private BattleSession() { }
+
+	public static BattleSession FromSnapshot(BattleState state, MapNodeType nodeType, int locationIndex)
+		=> new()
+		{
+			State = state,
+			NodeType = nodeType,
+			LocationIndex = locationIndex,
+		};
 
 	public List<BattleEvent> ApplyAction(BattleAction action)
 		=> CombatEngine.Apply(State, action);

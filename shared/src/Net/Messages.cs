@@ -51,6 +51,7 @@ namespace GuildOfGreed.Shared.Net;
 [Union(25, typeof(SpendStatPointRequest))]
 [Union(26, typeof(CraftItemRequest))]
 [Union(27, typeof(PromoteGradeRequest))]
+[Union(28, typeof(RespecStatsRequest))]
 public abstract class ClientMessage { }
 
 // Самое первое сообщение в сессии. Если ProtocolVersion несовместим, сервер
@@ -93,12 +94,21 @@ public class ListCharactersRequest : ClientMessage { }
 public class CreateCharacterRequest : ClientMessage
 {
 	[Key(0)] public string CharacterName;
+	// Итоговые статы (база + 10 распределённых очков).
 	[Key(1)] public int Str;
 	[Key(2)] public int Int;
 	[Key(3)] public int Con;
 	[Key(4)] public int Wit;
 	[Key(5)] public int Men;
 	[Key(6)] public int Dex;
+	// База до раздачи (35..45 рандом). Нужна серверу чтобы сохранить её в
+	// CharacterData.BaseXxx — для будущего респека в Гильдии.
+	[Key(7)] public int BaseStr;
+	[Key(8)] public int BaseInt;
+	[Key(9)] public int BaseCon;
+	[Key(10)] public int BaseWit;
+	[Key(11)] public int BaseMen;
+	[Key(12)] public int BaseDex;
 }
 
 [MessagePackObject]
@@ -256,6 +266,12 @@ public class CraftItemRequest : ClientMessage
 [MessagePackObject]
 public class PromoteGradeRequest : ClientMessage { }
 
+// Респек статов в Гильдии: возвращает все распределённые очки (поверх базы)
+// в UnspentStatPoints, статы откатываются на BaseXxx. Списывает цену
+// (см. CharacterCommands.RespecStats — формула по Level).
+[MessagePackObject]
+public class RespecStatsRequest : ClientMessage { }
+
 // === Server → Client ===========================================================
 
 [Union(0, typeof(ServerWelcome))]
@@ -351,6 +367,14 @@ public class SelectCharacterResponse : ServerMessage
 	// JSON CharacterData выбранного персонажа. Кладём в этот ответ чтобы
 	// клиенту не делать второй round-trip за полным состоянием. Пусто при Success=false.
 	[Key(2)] public string CharacterJson;
+	// Если у персонажа был активный бой (например, сервер крашился или игрок
+	// разорвал соединение в середине боя) — здесь JSON BattleState + метаданные.
+	// Клиент при HasActiveBattle=true переходит сразу в Combat в режиме resume
+	// вместо обычного LocationSelect/Map. См. A1 в tasks.md.
+	[Key(3)] public bool HasActiveBattle;
+	[Key(4)] public string ActiveBattleJson;
+	[Key(5)] public int ActiveBattleNodeType;
+	[Key(6)] public int ActiveBattleLocationIndex;
 }
 
 [MessagePackObject]

@@ -7,13 +7,13 @@ using GuildOfGreed.Shared.Net;
 // Корневой роутер.
 //
 // Поток (после введения сети):
-//   Connecting → handshake → если несовместимо: UpdateRequired
-//                          → если есть токен: Resume → CharacterSelect (или AuthView при failure)
-//                          → иначе: AuthView
+//   Title → "Играть" → Connecting → handshake → если несовместимо: UpdateRequired
+//                                             → если есть токен: Resume → CharacterSelect (или AuthView при failure)
+//                                             → иначе: AuthView
 //   AuthView → CharacterSelect
 //   CharacterSelect → CharacterCreation (создать) или сразу LocationSelect (выбрать существующего)
 //   LocationSelect → MapView → Combat → ... → LocationSelect (как раньше)
-//   Logout → AuthPrefs.Clear → AuthView
+//   Logout → AuthPrefs.Clear → Title
 public partial class Main : Control
 {
 	private NetworkClient _net;
@@ -23,9 +23,25 @@ public partial class Main : Control
 
 	public override void _Ready()
 	{
+		CrashLogger.Install();
 		UIStyle.FillParent(this);
 		MouseFilter = MouseFilterEnum.Ignore;
-		StartFlow();
+		var pendingCrashes = CrashLogger.CollectPendingCrashes();
+		if (pendingCrashes.Length > 0)
+			GD.Print($"CrashLogger: {pendingCrashes.Length} unsent crash log(s) from prior sessions");
+		ShowTitle();
+	}
+
+	private void ShowTitle()
+	{
+		_net?.Dispose();
+		_net = null;
+		GameData.Instance.Net = null;
+		ClearContent();
+		var view = new TitleView();
+		view.PlayRequested += StartFlow;
+		view.QuitRequested += () => GetTree().Quit();
+		AddChild(view);
 	}
 
 	private void StartFlow()
@@ -97,11 +113,18 @@ public partial class Main : Control
 				}
 				_login = resp.Login;
 			}
-			// Активный бой/run на сервере уже не существует (in-memory). Кидаем
-			// игрока в хаб — это известно-хорошее состояние.
+			// A1: после reconnect персонажа надо переселить — серверный Session
+			// был новый и не знает selected_character. Если в БД есть active
+			// battle — SelectCharacter поднимет его обратно и кинем в Combat.
 			FinishReconnect();
-			if (string.IsNullOrEmpty(_login)) ShowAuth();
-			else                              ShowLocationSelect();
+			if (string.IsNullOrEmpty(_login)) { ShowAuth(); return; }
+			var prevChar = GameData.Instance.Character;
+			if (prevChar != null)
+			{
+				OnCharacterSelected(prevChar.Id.ToString());
+				return;
+			}
+			ShowLocationSelect();
 		}
 		catch (System.Exception ex)
 		{
@@ -224,6 +247,13 @@ public partial class Main : Control
 			var character = JsonSerializer.Deserialize<CharacterData>(resp.CharacterJson,
 				new JsonSerializerOptions { IncludeFields = true });
 			GameData.Instance.SetCharacter(character);
+			// A1: если сервер сообщил об активном бою — поднимаем Combat в
+			// resume-режиме сразу, минуя LocationSelect/Map.
+			if (resp.HasActiveBattle && !string.IsNullOrEmpty(resp.ActiveBattleJson))
+			{
+				ShowResumedBattle(resp.ActiveBattleJson);
+				return;
+			}
 			ShowLocationSelect();
 		}
 		catch (Exception ex)
@@ -233,12 +263,49 @@ public partial class Main : Control
 		}
 	}
 
+	private void ShowResumedBattle(string snapshotJson)
+	{
+		ClearContent();
+		var combat = new Combat
+		{
+			Net = _net,
+			ResumeBattleJson = snapshotJson,
+		};
+		combat.ResetCharacterRequested += OnResetCharacterFromGame;
+		combat.CombatExitRequested += OnResumedBattleExit;
+		AddChild(combat);
+	}
+
+	private void OnResumedBattleExit(bool advance)
+	{
+		// Восстановленный бой завершился — не знаем точно в каком узле забега
+		// он шёл, поэтому возвращаем игрока в LocationSelect (известно-хорошее
+		// состояние). Сервер уже очистил active_battle на ended.
+		GameData.Instance.EndRun();
+		ShowLocationSelect();
+	}
+
 	private async void OnLogoutRequested()
 	{
-		try { await _net.LogoutAsync(); } catch { /* swallow — token уже на сервере мог истечь */ }
+		// Logout — best-effort: токен может уже не существовать на сервере
+		// (истёк), сеть может быть оборвана. Локальный AuthPrefs.Clear() и
+		// возврат на TitleView обязаны произойти в любом случае, но ошибки
+		// логируем — если они систематичны, мы это увидим в журнале.
+		try
+		{
+			await _net.LogoutAsync();
+		}
+		catch (ServerException ex)
+		{
+			GD.Print($"Logout: server rejected token (ok to ignore): {ex.Code}");
+		}
+		catch (Exception ex)
+		{
+			GD.Print($"Logout: network error during logout (ok to ignore): {ex.Message}");
+		}
 		AuthPrefs.Clear();
 		_login = null;
-		StartFlow();
+		ShowTitle();
 	}
 
 	private void ShowUpdateRequired(ServerWelcome welcome)
@@ -251,24 +318,37 @@ public partial class Main : Control
 	// Character creation
 	// =====================================================================
 
+	// Активная CharacterCreation — нужна, чтобы Main мог вернуть серверную
+	// ошибку обратно в форму (вместо молчаливого отката на CharacterSelect).
+	private CharacterCreation _creationView;
+
 	private void ShowCharacterCreation()
 	{
 		ClearContent();
-		var cc = new CharacterCreation();
-		cc.Confirmed += OnCharacterCreationConfirmed;
-		AddChild(cc);
+		_creationView = new CharacterCreation();
+		_creationView.Confirmed += OnCharacterCreationConfirmed;
+		_creationView.BackRequested += ShowCharacterSelect;
+		AddChild(_creationView);
 	}
 
 	private async void OnCharacterCreationConfirmed(CharacterData ch)
 	{
+		var view = _creationView;
+		// Игрок мог нажать «Назад» пока летит запрос — view уже уничтожен.
+		void ReportError(string err)
+		{
+			if (GodotObject.IsInstanceValid(view)) view.ShowServerError(err);
+		}
+
 		try
 		{
 			var resp = await _net.CreateCharacterAsync(
-				ch.CharacterName, ch.Str, ch.Int, ch.Con, ch.Wit, ch.Men, ch.Dex);
+				ch.CharacterName, ch.Str, ch.Int, ch.Con, ch.Wit, ch.Men, ch.Dex,
+				ch.BaseStr, ch.BaseInt, ch.BaseCon, ch.BaseWit, ch.BaseMen, ch.BaseDex);
 			if (!resp.Success)
 			{
 				GD.PrintErr($"CreateCharacter failed: {resp.Error}");
-				ShowCharacterSelect();
+				ReportError(resp.Error ?? "unknown");
 				return;
 			}
 
@@ -278,18 +358,19 @@ public partial class Main : Control
 			if (!selectResp.Success)
 			{
 				GD.PrintErr($"SelectCharacter after create failed: {selectResp.Error}");
-				ShowCharacterSelect();
+				ReportError(selectResp.Error ?? "unknown");
 				return;
 			}
 			var character = JsonSerializer.Deserialize<CharacterData>(selectResp.CharacterJson,
 				new JsonSerializerOptions { IncludeFields = true });
 			GameData.Instance.SetCharacter(character);
+			_creationView = null;
 			ShowStarterBattle();
 		}
 		catch (Exception ex)
 		{
 			GD.PrintErr($"CreateCharacter exception: {ex.Message}");
-			ShowCharacterSelect();
+			ReportError($"network: {ex.Message}");
 		}
 	}
 
