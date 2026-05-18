@@ -85,6 +85,32 @@ public static class ItemGenerator
 	}
 
 	// =========================================================================
+	// Щиты
+	// =========================================================================
+	//
+	// Аффиксы щита берутся из общего пула (isWeapon: false, как у брони) —
+	// PhysDef/MagDef/Hp/Mp/MpRegen/HpRegen из AffixesDB.Prefixes/Suffixes.
+	// Специфический «защитный пул» (отдельные аффиксы только для щитов)
+	// зарезервирован, но пока не выделен.
+	public static ShieldData RollShield(string baseId, RandomSource rng, ItemRarity? forceRarity = null)
+	{
+		var src = ShieldsDB.Get(baseId);
+		if (src == null) return null;
+		var item = src.Clone();
+
+		var grade = ItemGrades.Parse(item.Grade);
+		var rarity = forceRarity ?? RollRarity(grade, rng);
+		if (!ItemGrades.IsRarityAllowed(grade, rarity))
+		{
+			var allowed = ItemGrades.AllowedRarities(grade);
+			rarity = allowed[allowed.Count - 1];
+		}
+		item.Rarity = rarity;
+		item.Affixes = RollAffixes(rarity, grade, isWeapon: false, rng);
+		return item;
+	}
+
+	// =========================================================================
 	// Оружие
 	// =========================================================================
 

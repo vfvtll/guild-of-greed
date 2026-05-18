@@ -896,6 +896,13 @@ public static class CombatEngine
 					{
 						state.Player.Inventory.TryAddInstance(armor);
 						dropped.Add($"{entry.ItemId}*");
+						continue;
+					}
+					var shield = ItemGenerator.RollShield(entry.ItemId, state.Rng);
+					if (shield != null)
+					{
+						state.Player.Inventory.TryAddInstance(shield);
+						dropped.Add($"{entry.ItemId}*");
 					}
 				}
 				continue;

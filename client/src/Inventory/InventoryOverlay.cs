@@ -195,10 +195,12 @@ public partial class InventoryOverlay : Control
 	{
 		int physAtk = ch.Str / 3 + ch.WeaponPhysAtk() + ch.PhysAtkBonus();
 		int magAtk  = ch.Int / 3 + ch.WeaponMagAtk() + ch.MagicAtkBonus();
-		int def = ch.PhysDef();
+		int physDef = ch.PhysDef();
+		int magDef  = ch.MagDef();
 		int hp = ch.MaxHp();
+		int hpReg = ch.HpRegen();
 		int mp = ch.MaxMp();
-		int regen = ch.MpRegen();
+		int mpReg = ch.MpRegen();
 		// Уровень персонажа + (если есть оружие) уровень навыка оружия.
 		string levelLine = $"⭐ Уровень {ch.Level} ({ch.Grade}-грейд {ch.LevelWithinGrade()}/{CharacterData.LevelsPerGrade}, {ch.Exp}/{ch.XpForNextCharacterLevel()} XP)";
 		if (ch.Weapon != null)
@@ -212,8 +214,12 @@ public partial class InventoryOverlay : Control
 		_summaryLevel.Text = levelLine;
 		_summaryAtk.Text =
 			$"⚔ ФизАтк {physAtk} × {ch.PhysMult():F1}    🔮 МагАтк {magAtk} × {ch.MagicMult():F1}";
+		// HpRegen обычно 0 (приходит только из аффиксов/сетов); скрываем строку
+		// «+0/ход» чтобы не путать. MpRegen всегда виден — это базовый ресурс
+		// от WIT, ноль означает что игрок реально не регенит ману.
+		string hpText = hpReg > 0 ? $"❤ ХП {hp} (+{hpReg}/ход)" : $"❤ ХП {hp}";
 		_summaryDef.Text =
-			$"🛡 Защ {def}    ❤ ХП {hp}    💧 МП {mp} (+{regen}/ход)    ✋ Хэнд {ch.HandSize()}";
+			$"🛡 ФизЗащ {physDef}  🌀 МагЗащ {magDef}    {hpText}    💧 МП {mp} (+{mpReg}/ход)    ✋ Хэнд {ch.HandSize()}";
 		string critText = ch.Weapon != null
 			? $"🎯 Крит каждые {ch.EffectiveCritEveryN()} ат. × {ch.CritMultiplier():F2}"
 			: "🎯 Без оружия — нет крита";

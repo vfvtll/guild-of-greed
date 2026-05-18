@@ -92,7 +92,7 @@ public partial class Combat : Control
 			_endTurnButton.Disabled = false;
 			_busy = false;
 			ClearLog();
-			AddLogLine("Бой восстановлен после дисконнекта");
+			Log("Бой восстановлен после дисконнекта");
 			RefreshUI();
 		}
 		catch (Exception ex)

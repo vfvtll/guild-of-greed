@@ -356,7 +356,13 @@ public static partial class CharacterCommands
 			if (!ForgeDB.CanUpgrade(s.Grade, s.Rarity)) return Result.Fail(CharacterCommandError.CantUpgrade);
 			long cost = ForgeDB.UpgradeCost(s.Grade, s.Tier, s.Rarity);
 			if (ch.Inventory.Essence < cost) return Result.Fail(CharacterCommandError.NoEssence);
-			s.Rarity = ForgeDB.NextRarity(s.Rarity);
+			var newRarity = ForgeDB.NextRarity(s.Rarity);
+			// Раньше для щита просто бампали Rarity — это не давало аффиксов
+			// при апгрейде. Теперь катаем заново через RollShield → щит получает
+			// аффиксы согласно новой rarity (как оружие и броня).
+			var fresh = ItemGenerator.RollShield(s.Id, rng, newRarity);
+			if (fresh == null) return Result.Fail(CharacterCommandError.NotForgeable);
+			stack.ShieldInstance = fresh;
 			ch.Inventory.Essence -= cost;
 			return Result.Success();
 		}
@@ -390,6 +396,17 @@ public static partial class CharacterCommands
 			var fresh = ItemGenerator.RollArmor(a.Id, rng, a.Rarity);
 			if (fresh == null) return Result.Fail(CharacterCommandError.NotForgeable);
 			stack.ArmorInstance = fresh;
+			ch.Inventory.Essence -= cost;
+			return Result.Success();
+		}
+		if (stack.ShieldInstance != null)
+		{
+			var s = stack.ShieldInstance;
+			long cost = ForgeDB.RerollCost(s.Grade, s.Tier);
+			if (ch.Inventory.Essence < cost) return Result.Fail(CharacterCommandError.NoEssence);
+			var fresh = ItemGenerator.RollShield(s.Id, rng, s.Rarity);
+			if (fresh == null) return Result.Fail(CharacterCommandError.NotForgeable);
+			stack.ShieldInstance = fresh;
 			ch.Inventory.Essence -= cost;
 			return Result.Success();
 		}

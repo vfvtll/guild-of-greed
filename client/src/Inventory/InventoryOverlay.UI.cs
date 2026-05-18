@@ -210,18 +210,10 @@ public partial class InventoryOverlay
 		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
 	}
 
-	private Control MakeShieldSlotRow(string icon, string slotName, ShieldData item, Action onClick)
-	{
-		string itemName = item?.Name ?? "—";
-		string detail   = item == null ? "(пусто)" : DescribeShieldMultiline(item);
-		var rarity = item?.Rarity ?? ItemRarity.Common;
-		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
-	}
-
 	// Off-hand: одна строка, варьируется по состоянию.
 	//   weapon занят 2H → "Двуручное оружие — обе руки"
-	//   offhand != null → как WeaponSlotRow
-	//   shield  != null → как ShieldSlotRow
+	//   offhand != null → оружие в левой руке (dual-wield, −2 к HandSize)
+	//   shield  != null → щит (−1 к HandSize)
 	//   ничего → пустой слот "вторая рука свободна"
 	private Control MakeOffhandRow(CharacterData ch)
 	{
@@ -230,12 +222,24 @@ public partial class InventoryOverlay
 				"Двуручное оружие занимает обе руки", true, ItemRarity.Common, () => { });
 
 		if (ch.Offhand != null)
-			return MakeWeaponSlotRow("⚔", "Левая рука", ch.Offhand, () => UnequipOffhand());
+		{
+			string detail = ItemsDB.DescribeWeaponMultiline(ch.Offhand)
+				+ "\n\n⚠ Dual-wield: −2 к размеру руки в бою.";
+			return BuildSlotRow("⚔", "Левая рука (dual-wield)", ch.Offhand.Name,
+				detail, false, ch.Offhand.Rarity, () => UnequipOffhand());
+		}
 
 		if (ch.Shield != null)
-			return MakeShieldSlotRow("🛡", "Щит", ch.Shield, () => UnequipShield());
+		{
+			string detail = DescribeShieldMultiline(ch.Shield)
+				+ "\n\n⚠ Щит: −1 к размеру руки в бою.";
+			return BuildSlotRow("🛡", "Щит", ch.Shield.Name,
+				detail, false, ch.Shield.Rarity, () => UnequipShield());
+		}
 
-		return BuildSlotRow("✊", "Левая рука", "—", "Можно вторую 1H-руку или щит",
+		return BuildSlotRow("✊", "Левая рука", "—",
+			"Можно вторую 1H-руку (dual-wield: −2 к размеру руки)\n"
+			+ "или щит (−1 к размеру руки)",
 			true, ItemRarity.Common, () => { });
 	}
 

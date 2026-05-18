@@ -207,16 +207,16 @@ public class CharacterData
 	public int   MagDef()        => ApplyAffix(Shield?.MagDef ?? 0, AffixStatKind.MagDef);
 
 	// Сумма плоских префиксов выбранного типа со всех надетых предметов
-	// (оружие + броня + бижутерия). Использует и Weapon, и AllArmor.
+	// (Weapon, Offhand, Shield, броня, бижутерия). Раньше Shield/Offhand
+	// в подсчёте не участвовали — их аффиксы молча игнорировались.
 	public int AffixFlat(AffixStatKind kind)
 	{
 		int sum = 0;
-		if (Weapon != null)
-			foreach (var aff in Weapon.Affixes)
-				if (aff.Slot == AffixSlot.Prefix && aff.Kind == kind) sum += aff.Magnitude;
+		sum += AffixFlatFromList(Weapon?.Affixes, kind);
+		sum += AffixFlatFromList(Offhand?.Affixes, kind);
+		sum += AffixFlatFromList(Shield?.Affixes, kind);
 		foreach (var armor in AllArmor())
-			foreach (var aff in armor.Affixes)
-				if (aff.Slot == AffixSlot.Prefix && aff.Kind == kind) sum += aff.Magnitude;
+			sum += AffixFlatFromList(armor.Affixes, kind);
 		return sum;
 	}
 
@@ -225,12 +225,29 @@ public class CharacterData
 	public int AffixPct(AffixStatKind kind)
 	{
 		int sum = 0;
-		if (Weapon != null)
-			foreach (var aff in Weapon.Affixes)
-				if (aff.Slot == AffixSlot.Suffix && aff.Kind == kind) sum += aff.Magnitude;
+		sum += AffixPctFromList(Weapon?.Affixes, kind);
+		sum += AffixPctFromList(Offhand?.Affixes, kind);
+		sum += AffixPctFromList(Shield?.Affixes, kind);
 		foreach (var armor in AllArmor())
-			foreach (var aff in armor.Affixes)
-				if (aff.Slot == AffixSlot.Suffix && aff.Kind == kind) sum += aff.Magnitude;
+			sum += AffixPctFromList(armor.Affixes, kind);
+		return sum;
+	}
+
+	private static int AffixFlatFromList(List<AppliedAffix> affixes, AffixStatKind kind)
+	{
+		if (affixes == null) return 0;
+		int sum = 0;
+		foreach (var aff in affixes)
+			if (aff.Slot == AffixSlot.Prefix && aff.Kind == kind) sum += aff.Magnitude;
+		return sum;
+	}
+
+	private static int AffixPctFromList(List<AppliedAffix> affixes, AffixStatKind kind)
+	{
+		if (affixes == null) return 0;
+		int sum = 0;
+		foreach (var aff in affixes)
+			if (aff.Slot == AffixSlot.Suffix && aff.Kind == kind) sum += aff.Magnitude;
 		return sum;
 	}
 
