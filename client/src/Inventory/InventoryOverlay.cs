@@ -42,8 +42,9 @@ public partial class InventoryOverlay : Control
 	private Label _readOnlyHint;
 	private VBoxContainer _equipmentList;
 	private GridContainer _inventoryGrid;
-	private Label _summaryAtk, _summaryDef, _summarySets;
-	private Label _summaryLevel;
+	// Сводка персонажа (статы / бой / пассивы / сеты) больше не висит inline
+	// в шапке — она открывается модалкой по кнопке 📊 в title row, см.
+	// OpenCharacterSheet() в InventoryOverlay.Detail.cs.
 	private RichTextLabel _currencyLabel;
 
 	// Виджет распределения очков — показывается только когда UnspentStatPoints > 0.
@@ -104,7 +105,6 @@ public partial class InventoryOverlay : Control
 
 		_capacityLabel.Text = $"Содержимое ({ch.Inventory.Slots.Count}/{Inventory.Capacity})";
 		RefreshCurrency(ch);
-		RefreshSummary(ch);
 		RefreshStatPoints(ch);
 
 		ClearChildren(_equipmentList);
@@ -198,7 +198,10 @@ public partial class InventoryOverlay : Control
 		Refresh();
 	}
 
-	private void RefreshSummary(CharacterData ch)
+	// Полное тело character sheet — что раньше билдилось во множество inline-
+	// label'ов через RefreshSummary, теперь собирается в одну строку и
+	// показывается в модалке (см. OpenCharacterSheet в .Detail.cs).
+	private static string BuildCharacterSheetBody(CharacterData ch)
 	{
 		int physAtk = ch.Str / 3 + ch.WeaponPhysAtk() + ch.PhysAtkBonus();
 		int magAtk  = ch.Int / 3 + ch.WeaponMagAtk() + ch.MagicAtkBonus();
@@ -209,30 +212,92 @@ public partial class InventoryOverlay : Control
 		int mp = ch.MaxMp();
 		int mpReg = ch.MpRegen();
 
-		// Уровень персонажа + (если есть оружие) уровень навыка оружия.
-		string levelLine = $"⭐ Уровень {ch.Level} ({ch.Grade}-грейд {ch.LevelWithinGrade()}/{CharacterData.LevelsPerGrade}, {ch.Exp}/{ch.XpForNextCharacterLevel()} XP)";
+		var sb = new System.Text.StringBuilder();
+
+		// Шапка: уровень + (если есть оружие) уровень навыка оружия.
+		sb.Append($"⭐ Уровень {ch.Level} ({ch.Grade}-грейд {ch.LevelWithinGrade()}/{CharacterData.LevelsPerGrade}, {ch.Exp}/{ch.XpForNextCharacterLevel()} XP)");
 		if (ch.Weapon != null)
 		{
 			string wt = ch.Weapon.Type;
 			int wlvl = ch.GetWeaponLevel(wt);
 			int wxp  = ch.GetWeaponXp(wt);
 			int wnext = ch.XpForNextWeaponLevel(wt);
-			levelLine += $"   🗡 {ItemsDB.WeaponTypeName(wt)} ур.{wlvl} ({wxp}/{wnext})";
+			sb.Append($"\n🗡 {ItemsDB.WeaponTypeName(wt)} ур.{wlvl} ({wxp}/{wnext})");
 		}
-		_summaryLevel.Text = levelLine;
 
-		// Атака + крит в одной строке (крит — небольшое продолжение атак).
+		// Статы (3+3 для узкой ширины модалки).
+		sb.Append("\n\nСТАТЫ");
+		sb.Append($"\n💪 STR {ch.Str}    🧠 INT {ch.Int}    ❤ CON {ch.Con}");
+		sb.Append($"\n✨ WIT {ch.Wit}    🔮 MEN {ch.Men}    ⚡ DEX {ch.Dex}");
+
+		// Боевые параметры.
 		string critText = ch.Weapon != null
 			? $"🎯 крит /{ch.EffectiveCritEveryN()} ат. ×{ch.CritMultiplier():F2}"
 			: "🎯 без крита";
-		_summaryAtk.Text = $"⚔ ФизАтк {physAtk}    🔮 МагАтк {magAtk}    {critText}";
-
-		// Защита + ресурсы в одной строке.
 		string hpText = hpReg > 0 ? $"❤ ХП {hp} (+{hpReg}/ход)" : $"❤ ХП {hp}";
-		_summaryDef.Text =
-			$"🛡 ФизЗащ {physDef}  🌀 МагЗащ {magDef}    {hpText}    💧 МП {mp} (+{mpReg}/ход)    ✋ Хэнд {ch.HandSize()}";
 
-		_summarySets.Text = BuildSetsSummary(ch);
+		sb.Append("\n\nБОЙ");
+		sb.Append($"\n⚔ ФизАтк {physAtk}    🔮 МагАтк {magAtk}");
+		sb.Append($"\n🛡 ФизЗащ {physDef}    🌀 МагЗащ {magDef}");
+		sb.Append($"\n{critText}    ✋ хэнд {ch.HandSize()}");
+		sb.Append($"\n{hpText}    💧 МП {mp} (+{mpReg}/ход)");
+
+		// Пассивы (если есть).
+		string passives = BuildPassivesSummary(ch);
+		if (!string.IsNullOrEmpty(passives))
+		{
+			sb.Append("\n\nПАССИВЫ");
+			sb.Append('\n');
+			sb.Append(passives);
+		}
+
+		// Сеты (если есть).
+		string sets = BuildSetsSummary(ch);
+		if (!string.IsNullOrEmpty(sets))
+		{
+			sb.Append("\n\nСЕТЫ");
+			sb.Append('\n');
+			sb.Append(sets);
+		}
+
+		return sb.ToString();
+	}
+
+	// Пассивные эффекты от надетой экипировки.
+	// Берём оружие, щит — для off-hand оружия пассивы не работают (см. правила
+	// dual-wield), поэтому не показываем.
+	private static string BuildPassivesSummary(CharacterData ch)
+	{
+		var lines = new System.Collections.Generic.List<string>();
+		if (ch.Weapon != null && ch.Weapon.Passives != null)
+		{
+			foreach (var p in ch.Weapon.Passives)
+			{
+				string d = ItemsDB.DescribePassive(p);
+				if (!string.IsNullOrEmpty(d))
+					lines.Add($"🗡 {d}");
+			}
+		}
+		if (ch.Shield != null)
+		{
+			string eff = DescribeShieldEffectShort(ch.Shield);
+			if (!string.IsNullOrEmpty(eff))
+				lines.Add($"🛡 {ch.Shield.Name}: {eff}");
+		}
+		return string.Join("\n", lines);
+	}
+
+	// Одна строка с эффектом щита — короче, чем многоlines DescribeShieldMultiline.
+	private static string DescribeShieldEffectShort(ShieldData s)
+	{
+		if (s == null) return null;
+		return s.Type switch
+		{
+			ShieldType.Magic    => $"возвращает {s.EffectMagnitude}% маг.урона врагу",
+			ShieldType.Physical => $"+{s.EffectMagnitude}% MaxHP в блок каждый ход",
+			ShieldType.Balanced => $"+{s.EffectMagnitude}% counter-урон следующий ход",
+			_                    => null,
+		};
 	}
 
 	// Текстовая сводка активных сетов: "🔗 Кожанка следопыта 4/4: +2 ФизАтк, +3 ФизЗащ, +15 ХП".

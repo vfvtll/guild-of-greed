@@ -224,6 +224,20 @@ public partial class InventoryOverlay
 	};
 
 	// =========================================================================
+	// Сводка персонажа в модалке (открывается кнопкой 📊 в title row)
+	// =========================================================================
+	private void OpenCharacterSheet()
+	{
+		var ch = GameData.Instance.Character;
+		if (ch == null) return;
+		string body = BuildCharacterSheetBody(ch);
+		// Legendary-окрашенный title = голд. Нейтрально и читабельно для
+		// "📊 Персонаж". Никаких действий кроме "Закрыть".
+		ShowItemDetail("📊 Персонаж", null, body, ItemRarity.Legendary,
+			new List<(string, Action, bool)> { ("Закрыть", null, false) });
+	}
+
+	// =========================================================================
 	// Реальные действия, вызываются из кнопок диалога
 	// =========================================================================
 	private async void DoEquip(int slotIndex)
