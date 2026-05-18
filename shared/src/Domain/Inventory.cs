@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace GuildOfGreed.Shared.Domain;
 
@@ -23,7 +24,10 @@ namespace GuildOfGreed.Shared.Domain;
 // через FindInstance/CountOf — instance-предметы НЕ матчат базовый Id.
 public class Inventory
 {
-	public const int Capacity = 20;
+	// Вместимость основного инвентаря. Поднята с 20 до 40 — освобождает
+	// игрока от постоянной чистки между боями и даёт место под лут крупных
+	// забегов. Стэш по-прежнему 50 — он остаётся «дальним складом».
+	public const int Capacity = 40;
 
 	public List<InventoryStack> Slots = new();
 
@@ -52,7 +56,7 @@ public class Inventory
 			foreach (var s in Slots)
 			{
 				if (s.ItemId != itemId) continue;
-				if (s.WeaponInstance != null || s.ArmorInstance != null || s.ShieldInstance != null) continue;
+				if (s.HasInstance) continue;
 				int free = maxStack - s.Count;
 				if (free <= 0) continue;
 				int put = count < free ? count : free;
@@ -128,7 +132,7 @@ public class Inventory
 		for (int i = Slots.Count - 1; i >= 0 && count > 0; i--)
 		{
 			if (Slots[i].ItemId != itemId) continue;
-			if (Slots[i].WeaponInstance != null || Slots[i].ArmorInstance != null) continue;
+			if (Slots[i].HasInstance) continue;
 			int take = Slots[i].Count < count ? Slots[i].Count : count;
 			Slots[i].Count -= take;
 			count -= take;
@@ -154,7 +158,7 @@ public class Inventory
 		foreach (var s in Slots)
 		{
 			if (s.ItemId != itemId) continue;
-			if (s.WeaponInstance != null || s.ArmorInstance != null || s.ShieldInstance != null) continue;
+			if (s.HasInstance) continue;
 			total += s.Count;
 		}
 		return total;
@@ -167,9 +171,20 @@ public class InventoryStack
 {
 	public string ItemId;
 	public int Count;
-	// Payload для instance-предметов. Не более одного из *Instance != null.
-	// При наличии instance Count всегда = 1 (нестакаемо).
+	// Payload для instance-предметов. Инвариант: не более одного из *Instance
+	// не-null одновременно. При наличии instance Count всегда = 1 (нестакаемо).
+	// [JsonIgnore WhenWritingNull] чтобы стакаемые слоты (зелья и пр.) не тащили
+	// три лишних null-ключа в JSON — заметная экономия на больших стэшах.
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public WeaponData WeaponInstance;     // И6.2
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public ArmorData  ArmorInstance;      // И6.2
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public ShieldData ShieldInstance;     // И6.4
+
+	// True если в стаке лежит конкретный экземпляр (с роллнутыми аффиксами),
+	// а не стакаемый baseId-предмет. Используется проверками в Inventory/Stash.
+	[JsonIgnore]
+	public bool HasInstance =>
+		WeaponInstance != null || ArmorInstance != null || ShieldInstance != null;
 }

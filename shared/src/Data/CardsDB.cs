@@ -210,7 +210,7 @@ public static class CardsDB
 
 	// Физ. урон до защиты и блока цели.
 	// Формула: (BaseDamage + STR/3 + Оружие.ФизАтк + Броня.ФизАтк + ПрефФизАтк)
-	//          × Оружие.ФизМульт × (1 + СуфФизАтк%/100) × (1 + ПроломБрони/100)
+	//          × (1 + СуфФизАтк%/100) × (1 + ПроломБрони/100)
 	//          × (1 + N_nonAttack × PowerPerNonAttack/100)         ← И6.3
 	// PhysAtkBonus()/MagicAtkBonus() уже включают плоские префиксы аффиксов
 	// (см. CharacterData). PhysAtkPct() — суффиксы.
@@ -221,8 +221,7 @@ public static class CardsDB
 		List<string> hand = null)
 	{
 		if (p == null) return Math.Max(1, card.BaseDamage);
-		float baseAmt = card.BaseDamage + p.Str / 3f + p.WeaponPhysAtk() + p.PhysAtkBonus();
-		float raw = baseAmt * p.PhysMult();
+		float raw = card.BaseDamage + p.Str / 3f + p.WeaponPhysAtk() + p.PhysAtkBonus();
 		// Суффиксы аффиксов на ФизАтк (мультипликативный).
 		raw *= 1f + p.PhysAtkPct() / 100f;
 		// Пассив одноручника: каждая non-attack карта в руке усиливает удар.
@@ -242,7 +241,7 @@ public static class CardsDB
 
 	// Маг. урон до защиты и блока цели.
 	// Формула: (BaseDamage + INT/3 + Оружие.МагАтк + Броня.МагАтк + ПрефМагАтк)
-	//          × Оружие.МагМульт × (1 + СуфМагАтк%/100) × (1 + Бафф/100)
+	//          × (1 + СуфМагАтк%/100) × (1 + Бафф/100)
 	//          × (1 + chainCount × MagicChain.Magnitude/100)        ← И6.3
 	// chainCount — сколько атакующих маг.заклинаний уже было в ЭТОМ ходу
 	// (т.е. для первого = 0, для второго = 1). Передаётся из CombatEngine.
@@ -250,8 +249,7 @@ public static class CardsDB
 		int chainCount = 0)
 	{
 		if (p == null) return Math.Max(1, card.BaseDamage);
-		float baseAmt = card.BaseDamage + p.Int / 3f + p.WeaponMagAtk() + p.MagicAtkBonus();
-		float raw = baseAmt * p.MagicMult();
+		float raw = card.BaseDamage + p.Int / 3f + p.WeaponMagAtk() + p.MagicAtkBonus();
 		raw *= 1f + p.MagicAtkPct() / 100f;
 		raw *= 1f + p.GetEffectAmount("magic_dmg_pct") / 100f;
 		// Пассив посоха: каждое следующее заклинание +Magnitude% урона.

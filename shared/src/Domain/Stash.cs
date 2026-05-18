@@ -29,7 +29,7 @@ public class Stash
 			foreach (var s in Slots)
 			{
 				if (s.ItemId != itemId) continue;
-				if (s.WeaponInstance != null || s.ArmorInstance != null || s.ShieldInstance != null) continue;
+				if (s.HasInstance) continue;
 				int free = maxStack - s.Count;
 				if (free <= 0) continue;
 				int put = count < free ? count : free;

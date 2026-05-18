@@ -173,18 +173,10 @@ public static class ItemGenerator
 		// Копия чтобы не мутировать исходный pool.
 		var remaining = new List<AffixDef>(pool);
 		// Внутри одного списка (Prefix или Suffix) не разрешаем дублирование
-		// одного и того же AffixStatKind — это даёт скучный одностаковый
-		// предмет вместо разнообразного.
+		// одного и того же AffixStatKind — это даёт скучный одностаковый предмет
+		// вместо разнообразного. Между Prefix/Suffix ветками дубли разрешены:
+		// +5 ФизАтк префикс и +5% ФизАтк суффикс — нормально (см. design doc).
 		var usedKinds = new HashSet<AffixStatKind>();
-		// Учитываем kinds, уже добавленные ранее (например префиксы при выборе суффикса).
-		// Стоп, не учитываем: design = префиксы и суффиксы могут совпадать по kind.
-		// Просто учитываем kind'ы внутри текущей ветки (prefixes XOR suffixes).
-		AffixSlot? sameSlotFilter = pool.Count > 0 ? (AffixSlot?)pool[0].Slot : null;
-		foreach (var a in outList)
-		{
-			if (sameSlotFilter.HasValue && a.Slot == sameSlotFilter.Value)
-				usedKinds.Add(a.Kind);
-		}
 
 		while (count > 0 && remaining.Count > 0)
 		{

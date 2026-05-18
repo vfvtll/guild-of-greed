@@ -49,8 +49,6 @@ public partial class InventoryOverlay
 		public Dictionary<AffixStatKind, int> Flat;
 		public Dictionary<AffixStatKind, int> Pct;
 		public int ExtraDraw;
-		public float PhysMult;
-		public float MagicMult;
 		public int CritEveryN;       // 0 если неприменимо (броня).
 
 		public static ItemTotals Empty() => new()
@@ -100,8 +98,6 @@ public partial class InventoryOverlay
 		Add(t.Flat, AffixStatKind.PhysAtk, w.PhysAtk);
 		Add(t.Flat, AffixStatKind.MagAtk,  w.MagicAtk);
 		t.ExtraDraw = w.ExtraDraw;
-		t.PhysMult = w.PhysMult;
-		t.MagicMult = w.MagicMult;
 		t.CritEveryN = w.CritEveryNAttacks;
 		AddAffixes(t, w.Affixes);
 		return t;
@@ -131,8 +127,6 @@ public partial class InventoryOverlay
 		var o = TotalsFor(old);
 		var deltas = new List<string>();
 		AppendKindDeltas(deltas, n, o);
-		AddDeltaFloat(deltas, "ФизМульт", n.PhysMult  - o.PhysMult);
-		AddDeltaFloat(deltas, "МагМульт", n.MagicMult - o.MagicMult);
 		AddDelta(deltas,      "Карты",    n.ExtraDraw - o.ExtraDraw);
 
 		// Крит: меньше CritEveryN = лучше → инвертируем знак, чтобы "+ это улучшение".
@@ -235,13 +229,6 @@ public partial class InventoryOverlay
 		if (diff == 0) return;
 		string sign = diff > 0 ? "+" : "";
 		list.Add($"  {sign}{diff} {label}");
-	}
-
-	private static void AddDeltaFloat(List<string> list, string label, float diff)
-	{
-		if (System.Math.Abs(diff) < 0.01f) return;
-		string sign = diff > 0 ? "+" : "";
-		list.Add($"  {sign}{diff:F1} {label}");
 	}
 
 	// =====================================================================

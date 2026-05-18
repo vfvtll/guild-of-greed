@@ -26,8 +26,9 @@ public static class ItemsDB
 		{
 			Id = "sword_1h_low", Name = "Старый меч", Type = "sword_1h",
 			Grade = "E", Tier = "low", IsTwoHanded = false,
-			PhysAtk = 4, MagicAtk = 0,
-			PhysMult = 1.0f, MagicMult = 0.5f,
+			// 1H sword — основной phys, лёгкий маг.сплеш. 6 phys = 60% от 2H (10);
+			// при dual-wield 2×6=12 > 10 (2H), но dual-wield платит HandSize −2.
+			PhysAtk = 6, MagicAtk = 4,
 			ExtraDraw = 1,
 			CritEveryNAttacks = 10,
 			// Одноручник — "стойка": каждая non-attack карта в руке (block,
@@ -39,8 +40,8 @@ public static class ItemsDB
 		{
 			Id = "sword_2h_low", Name = "Тяжёлый двуручник", Type = "sword_2h",
 			Grade = "E", Tier = "low", IsTwoHanded = true,
-			PhysAtk = 8, MagicAtk = 0,
-			PhysMult = 1.3f, MagicMult = 0.4f,
+			// 2H — heavy hitter: больше плоского ФизАтк, чем у 1H, заметный маг.сплеш.
+			PhysAtk = 10, MagicAtk = 7,
 			CritEveryNAttacks = 12,
 			// Двуручник — "разрез": гиперболическая формула с насыщением.
 			// bleed = dmg² × Magnitude / (100 × (dmg + 200))
@@ -54,8 +55,8 @@ public static class ItemsDB
 		{
 			Id = "staff_low", Name = "Посох ученика", Type = "staff",
 			Grade = "E", Tier = "low", IsTwoHanded = true,
-			PhysAtk = 1, MagicAtk = 10,
-			PhysMult = 0.4f, MagicMult = 1.5f,
+			// Посох — магический специалист, но даёт небольшой физ для базовых ударов.
+			PhysAtk = 7, MagicAtk = 15,
 			CritEveryNAttacks = 20,
 			// Посох — "магическая цепь": каждое следующее атакующее
 			// маг.заклинание в одном ходу: Magnitude=+20% урона,
@@ -69,8 +70,8 @@ public static class ItemsDB
 		{
 			Id = "dagger_low", Name = "Кинжал бродяги", Type = "knife",
 			Grade = "E", Tier = "low", IsTwoHanded = false,
-			PhysAtk = 3, MagicAtk = 0,
-			PhysMult = 0.9f, MagicMult = 0.4f,
+			// Кинжал — лёгкий и быстрый, маленькие числа но топовый crit.
+			PhysAtk = 3, MagicAtk = 3,
 			CritEveryNAttacks = 6,   // Сам по себе хороший crit.
 		},
 	};
@@ -81,19 +82,24 @@ public static class ItemsDB
 	public static readonly Dictionary<string, ArmorData> Armors = new()
 	{
 		// === ГРУДЬ (chest) — основной кусок, наибольшая защита и бонусы ===
+		// Tier="top" — этот chest входит в top-сет robe_e_top, остальные 3 части
+		// которого (robe_helmet/gloves/boots_e_top) тоже top-тира. ID оставлен
+		// исторический "_low" чтобы не ломать сейвы.
 		["robe_chest_power_low"] = new()
 		{
 			Id = "robe_chest_power_low", Name = "Роба силы", Type = "robe",
-			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
+			Slot = ArmorSlot.Chest, Grade = "E", Tier = "top",
 			SetId = "robe_e_top",
 			PhysDef = 2,
 			MpMaxBonus = 30, MpRegenBonus = 2,
 			MagicAtkBonus = 5, MagicAtkPct = 5,
 		},
+		// Tier="mid" — входит в mid-сет robe_e_mid; остальные 3 части ниже тоже mid.
+		// ID исторический "_low" — не ломаем сейвы.
 		["robe_chest_wisdom_low"] = new()
 		{
 			Id = "robe_chest_wisdom_low", Name = "Роба мудрости", Type = "robe",
-			Slot = ArmorSlot.Chest, Grade = "E", Tier = "low",
+			Slot = ArmorSlot.Chest, Grade = "E", Tier = "mid",
 			SetId = "robe_e_mid",
 			PhysDef = 2,
 			MpMaxBonus = 30, MpRegenBonus = 6,
@@ -117,10 +123,12 @@ public static class ItemsDB
 		},
 
 		// === ШЛЕМ (helmet) ===
+		// Tier="mid" — часть mid-сета robe_e_mid (см. robe_chest_wisdom_low).
+		// ID "_low" исторический.
 		["robe_helmet_low"] = new()
 		{
 			Id = "robe_helmet_low", Name = "Капюшон мага", Type = "robe",
-			Slot = ArmorSlot.Helmet, Grade = "E", Tier = "low",
+			Slot = ArmorSlot.Helmet, Grade = "E", Tier = "mid",
 			SetId = "robe_e_mid",
 			PhysDef = 1, MpMaxBonus = 8, MagicAtkBonus = 2,
 		},
@@ -136,7 +144,7 @@ public static class ItemsDB
 		["robe_gloves_low"] = new()
 		{
 			Id = "robe_gloves_low", Name = "Перчатки мага", Type = "robe",
-			Slot = ArmorSlot.Gloves, Grade = "E", Tier = "low",
+			Slot = ArmorSlot.Gloves, Grade = "E", Tier = "mid",
 			SetId = "robe_e_mid",
 			PhysDef = 1, MagicAtkBonus = 3,
 		},
@@ -152,7 +160,7 @@ public static class ItemsDB
 		["robe_boots_low"] = new()
 		{
 			Id = "robe_boots_low", Name = "Туфли мага", Type = "robe",
-			Slot = ArmorSlot.Boots, Grade = "E", Tier = "low",
+			Slot = ArmorSlot.Boots, Grade = "E", Tier = "mid",
 			SetId = "robe_e_mid",
 			PhysDef = 1, MpRegenBonus = 2,
 		},
@@ -250,8 +258,6 @@ public static class ItemsDB
 		if (w == null) return "—";
 		var parts = new List<string>
 		{
-			$"Физ ×{w.PhysMult:F1}",
-			$"Маг ×{w.MagicMult:F1}",
 			$"+{w.PhysAtk} ФизАтк",
 			$"+{w.MagicAtk} МагАтк",
 		};
@@ -325,7 +331,6 @@ public static class ItemsDB
 		var lines = new List<string>();
 
 		// База.
-		lines.Add($"Физ ×{w.PhysMult:F1}    Маг ×{w.MagicMult:F1}");
 		if (w.PhysAtk  > 0) lines.Add($"+{w.PhysAtk} ФизАтк");
 		if (w.MagicAtk > 0) lines.Add($"+{w.MagicAtk} МагАтк");
 		if (w.ExtraDraw > 0) lines.Add($"+{w.ExtraDraw} карта в руке");

@@ -45,6 +45,13 @@ public static class ForgeDB
 	private static readonly int[] UpgradeCostPct = { 20, 40, 80, 160, 320 };
 
 	// Максимальная rarity по grade. E ограничен Uncommon, S — до Legendary.
+	//
+	// A и S оба упираются в Legendary преднамеренно: Legendary — высший
+	// rarity-каркас (см. ItemRarity), кузничный кап у A и S совпадает.
+	// Разница между ними — в прогрессии персонажа (S-предметы требуют S-grade
+	// = уровни 101..120, A-предметы достижимы на 81..100). Кузнечный потолок
+	// прокачки персонажа — 100 уровень; A-шмотки позволяют дойти до 90,
+	// S-шмотки нужны чтобы пробить выше.
 	private static readonly Dictionary<string, ItemRarity> MaxRarityByGrade = new()
 	{
 		["E"] = ItemRarity.Uncommon,

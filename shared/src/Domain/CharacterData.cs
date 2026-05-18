@@ -143,10 +143,14 @@ public class CharacterData
 	// Старые сейвы без BaseXxx → 0. Считаем что у такого персонажа база =
 	// текущие статы (респек ничего не вернёт). Идемпотентна: повторный вызов
 	// после успешного заполнения ничего не меняет.
+	//
+	// Проверка по нижней границе RollStat (35), а не "!= 0" — устойчивее к
+	// будущим миграциям: если когда-нибудь появится валидный статус ниже 35,
+	// флаг "уже инициализировано" станет неоднозначным; "≥ 35 в первом стате"
+	// чётко отражает "база уже была роллнута".
 	public void EnsureBaseStats()
 	{
-		if (BaseStr != 0 || BaseInt != 0 || BaseCon != 0 ||
-		    BaseWit != 0 || BaseMen != 0 || BaseDex != 0) return;
+		if (BaseStr >= 35) return;
 		BaseStr = Str; BaseInt = Int; BaseCon = Con;
 		BaseWit = Wit; BaseMen = Men; BaseDex = Dex;
 	}
@@ -193,8 +197,6 @@ public class CharacterData
 		return System.Math.Max(1, n);
 	}
 
-	public float PhysMult()      => Weapon?.PhysMult ?? 1.0f;
-	public float MagicMult()     => Weapon?.MagicMult ?? 1.0f;
 	// Статы суммируются с off-hand оружием (И6.4 — dual-wield). Шит не даёт
 	// атаки; его Phys/MagDef учитываются в PhysDef()/MagDef() ниже.
 	public int   WeaponPhysAtk() => (Weapon?.PhysAtk ?? 0) + (Offhand?.PhysAtk ?? 0);
@@ -265,12 +267,20 @@ public class CharacterData
 	// === Сеты (И6.2-D) =====================================================
 	// Активные сеты на персонаже = setId → число надетых частей этого сета.
 	// Подсчёт идёт только по AllArmor — оружие в сеты пока не входит.
+	//
+	// Сверяем armor.Id со списком SetData.PartIds — это защищает от опечаток
+	// в SetId на самом предмете И от ситуации "две левые части в одном сете
+	// зачитаются дважды". Если предмет помечен SetId, но в реестре сета его
+	// нет в PartIds — он не учитывается (молча, без ошибок).
 	public Dictionary<string, int> ActiveSets()
 	{
 		var counts = new Dictionary<string, int>();
 		foreach (var armor in AllArmor())
 		{
 			if (string.IsNullOrEmpty(armor.SetId)) continue;
+			var set = SetsDB.Get(armor.SetId);
+			if (set == null) continue;
+			if (!set.PartIds.Contains(armor.Id)) continue;
 			counts.TryGetValue(armor.SetId, out int n);
 			counts[armor.SetId] = n + 1;
 		}

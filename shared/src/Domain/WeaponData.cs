@@ -26,10 +26,14 @@ public class WeaponData
 	// Двуручное — занимает обе руки. Off-hand слот недоступен.
 	// Одноручное — допускает второе 1H в off-hand или щит.
 	public bool IsTwoHanded;
+	// Базовые плоские значения. К ним сверху прибавляются:
+	//   - STR/3 (физ) и INT/3 (маг) от персонажа,
+	//   - плоские бонусы брони (PhysAtkBonus/MagicAtkBonus),
+	//   - плоские префиксы аффиксов и сетов.
+	// Всё это потом умножается на (1 + сумма%-суффиксов/100) — см.
+	// CardsDB.ComputePhysDamage/ComputeMagicDamage.
 	public int PhysAtk;
 	public int MagicAtk;
-	public float PhysMult = 1.0f;
-	public float MagicMult = 1.0f;
 	public int ExtraDraw;
 
 	// Базовый кулдаун крита в атаках. DEX/10 уменьшает, нижний предел 2.

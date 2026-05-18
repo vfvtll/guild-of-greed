@@ -80,6 +80,16 @@ public static class ShopDB
 		_                    => 30,
 	};
 
+	// Полная цена instance-предмета с учётом редкости И грейда/тира.
+	// Без grade/tier-множителя Legendary E-low и Legendary S-top стоили одинаково,
+	// что плющит экономику топ-контента. Используем TierProgression.Mult — ту же
+	// кривую, по которой растут статы предмета: цена движется в ногу с силой.
+	private static long PriceForItem(ItemRarity rarity, string grade, string tier)
+	{
+		float m = TierProgression.Mult(grade ?? "E", tier ?? "low");
+		return (long)System.Math.Round(PriceByRarity(rarity) * m);
+	}
+
 	// === Покупка ========================================================
 
 	// Цена покупки по baseId. null для предметов которые лавка не продаёт.
@@ -101,11 +111,20 @@ public static class ShopDB
 		if (stack == null) return 0;
 
 		if (stack.WeaponInstance != null)
-			return Floor(PriceByRarity(stack.WeaponInstance.Rarity) * SellRatio);
+		{
+			var w = stack.WeaponInstance;
+			return Floor(PriceForItem(w.Rarity, w.Grade, w.Tier) * SellRatio);
+		}
 		if (stack.ArmorInstance != null)
-			return Floor(PriceByRarity(stack.ArmorInstance.Rarity) * SellRatio);
+		{
+			var a = stack.ArmorInstance;
+			return Floor(PriceForItem(a.Rarity, a.Grade, a.Tier) * SellRatio);
+		}
 		if (stack.ShieldInstance != null)
-			return Floor(PriceByRarity(stack.ShieldInstance.Rarity) * SellRatio);
+		{
+			var sh = stack.ShieldInstance;
+			return Floor(PriceForItem(sh.Rarity, sh.Grade, sh.Tier) * SellRatio);
+		}
 
 		// Стакаемое: считаем за весь стак.
 		long unit;
@@ -115,15 +134,15 @@ public static class ShopDB
 			// База без аффиксов (например, "sword_1h_low" в сейв-блобе) — оцениваем
 			// по rarity самой базы из ItemsDB.
 			var w = ItemsDB.GetWeapon(stack.ItemId);
-			if (w != null) unit = PriceByRarity(w.Rarity);
+			if (w != null) unit = PriceForItem(w.Rarity, w.Grade, w.Tier);
 			else
 			{
 				var a = ItemsDB.GetArmor(stack.ItemId);
-				if (a != null) unit = PriceByRarity(a.Rarity);
+				if (a != null) unit = PriceForItem(a.Rarity, a.Grade, a.Tier);
 				else
 				{
 					var s = ShieldsDB.Get(stack.ItemId);
-					unit = s != null ? PriceByRarity(s.Rarity) : 1;
+					unit = s != null ? PriceForItem(s.Rarity, s.Grade, s.Tier) : 1;
 				}
 			}
 		}

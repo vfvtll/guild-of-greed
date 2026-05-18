@@ -42,7 +42,7 @@ public partial class InventoryOverlay : Control
 	private Label _readOnlyHint;
 	private VBoxContainer _equipmentList;
 	private GridContainer _inventoryGrid;
-	private Label _summaryAtk, _summaryDef, _summaryCrit, _summarySets;
+	private Label _summaryAtk, _summaryDef, _summarySets;
 	private Label _summaryLevel;
 	private RichTextLabel _currencyLabel;
 
@@ -56,7 +56,9 @@ public partial class InventoryOverlay : Control
 	private PanelContainer _panel;
 	private ColorRect _dim;
 
-	private const int GridColumns = 4;
+	// 5 колонок × 8 рядов = 40 ячеек ровно. На 1280-ширине без переполнения:
+	// 5×170 + 4×8 sep ≈ 882, помещается в правую колонку.
+	private const int GridColumns = 5;
 
 	public override void _Ready()
 	{
@@ -106,7 +108,10 @@ public partial class InventoryOverlay : Control
 		RefreshStatPoints(ch);
 
 		ClearChildren(_equipmentList);
-		_equipmentList.AddChild(MakeWeaponSlotRow("⚔",  "Оружие",   ch.Weapon, () => UnequipWeapon()));
+		// Каждый слот при тапе открывает диалог детализации (см. .Detail.cs):
+		// игрок видит описание + сравнение и явно подтверждает "Снять". Это
+		// особенно важно на мобильных, где hover-тултип не показывается.
+		_equipmentList.AddChild(MakeWeaponSlotRow("⚔",  "Оружие",   ch.Weapon, UnequipWeapon));
 		// Off-hand: либо второе одноручное (Offhand), либо щит (Shield),
 		// либо подсказка "вторая рука свободна" / "двуручное занимает обе".
 		_equipmentList.AddChild(MakeOffhandRow(ch));
@@ -126,7 +131,9 @@ public partial class InventoryOverlay : Control
 			if (i < slots.Count)
 			{
 				int idx = i;
-				_inventoryGrid.AddChild(MakeItemCard(slots[i], () => UseInventorySlot(idx)));
+				// Тап → диалог (а не прямой equip/use). DoEquip/DoUsePotion
+				// вызываются из кнопок диалога после подтверждения игроком.
+				_inventoryGrid.AddChild(MakeItemCard(slots[i], () => OpenInventorySlotDialog(idx)));
 			}
 			else
 			{
@@ -201,6 +208,7 @@ public partial class InventoryOverlay : Control
 		int hpReg = ch.HpRegen();
 		int mp = ch.MaxMp();
 		int mpReg = ch.MpRegen();
+
 		// Уровень персонажа + (если есть оружие) уровень навыка оружия.
 		string levelLine = $"⭐ Уровень {ch.Level} ({ch.Grade}-грейд {ch.LevelWithinGrade()}/{CharacterData.LevelsPerGrade}, {ch.Exp}/{ch.XpForNextCharacterLevel()} XP)";
 		if (ch.Weapon != null)
@@ -212,18 +220,18 @@ public partial class InventoryOverlay : Control
 			levelLine += $"   🗡 {ItemsDB.WeaponTypeName(wt)} ур.{wlvl} ({wxp}/{wnext})";
 		}
 		_summaryLevel.Text = levelLine;
-		_summaryAtk.Text =
-			$"⚔ ФизАтк {physAtk} × {ch.PhysMult():F1}    🔮 МагАтк {magAtk} × {ch.MagicMult():F1}";
-		// HpRegen обычно 0 (приходит только из аффиксов/сетов); скрываем строку
-		// «+0/ход» чтобы не путать. MpRegen всегда виден — это базовый ресурс
-		// от WIT, ноль означает что игрок реально не регенит ману.
+
+		// Атака + крит в одной строке (крит — небольшое продолжение атак).
+		string critText = ch.Weapon != null
+			? $"🎯 крит /{ch.EffectiveCritEveryN()} ат. ×{ch.CritMultiplier():F2}"
+			: "🎯 без крита";
+		_summaryAtk.Text = $"⚔ ФизАтк {physAtk}    🔮 МагАтк {magAtk}    {critText}";
+
+		// Защита + ресурсы в одной строке.
 		string hpText = hpReg > 0 ? $"❤ ХП {hp} (+{hpReg}/ход)" : $"❤ ХП {hp}";
 		_summaryDef.Text =
 			$"🛡 ФизЗащ {physDef}  🌀 МагЗащ {magDef}    {hpText}    💧 МП {mp} (+{mpReg}/ход)    ✋ Хэнд {ch.HandSize()}";
-		string critText = ch.Weapon != null
-			? $"🎯 Крит каждые {ch.EffectiveCritEveryN()} ат. × {ch.CritMultiplier():F2}"
-			: "🎯 Без оружия — нет крита";
-		_summaryCrit.Text = critText;
+
 		_summarySets.Text = BuildSetsSummary(ch);
 	}
 
@@ -294,37 +302,9 @@ public partial class InventoryOverlay : Control
 		Refresh();
 	}
 
-	private async void UseInventorySlot(int slotIndex)
-	{
-		// Бой блокирует ВСЁ (зелья — через панель игрока), забег блокирует
-		// только смену экипировки — зелья из инвентаря разрешены.
-		if (BlockedByReadOnly()) return;
-		var slots = GameData.Instance.Character?.Inventory?.Slots;
-		if (slots == null || slotIndex < 0 || slotIndex >= slots.Count) return;
-		var st = slots[slotIndex];
-
-		// Зелье — пьём (доступно и в подземелье).
-		if (st.WeaponInstance == null && st.ArmorInstance == null
-			&& PotionsDB.Get(st.ItemId) != null)
-		{
-			var outcome = await GameData.Instance.UsePotionAsync(st.ItemId);
-			if (outcome.Ok) SetStatus("Зелье выпито.", error: false);
-			else SetStatus(TranslateError(outcome.Error, "Не удалось применить зелье."), error: true);
-			Refresh();
-			return;
-		}
-
-		// Оружие/броня — надеваем. В подземелье запрещено.
-		if (RunLocked)
-		{
-			SetStatus("В подземелье нельзя менять экипировку. Выйдите в город.", error: true);
-			return;
-		}
-		var equipOutcome = await GameData.Instance.EquipFromInventoryAsync(slotIndex);
-		if (equipOutcome.Ok) SetStatus("Надето.", error: false);
-		else SetStatus(TranslateError(equipOutcome.Error, "Не удалось надеть."), error: true);
-		Refresh();
-	}
+	// UseInventorySlot заменён на пару OpenInventorySlotDialog + DoEquip/DoUsePotion
+	// (см. InventoryOverlay.Detail.cs). Тап теперь открывает диалог сравнения,
+	// фактическое надевание/использование вызывается из кнопок диалога.
 
 	private static string TranslateError(string code, string fallback) => code switch
 	{

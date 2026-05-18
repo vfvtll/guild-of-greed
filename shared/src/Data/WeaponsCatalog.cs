@@ -18,16 +18,15 @@ namespace GuildOfGreed.Shared.Data;
 //   sword_1h_e_mid, sword_1h_e_top, sword_1h_d_low, ..., dagger_d_top.
 internal static class WeaponsCatalog
 {
-	// Профиль одного типа оружия. Все коэффициенты/пассивы повторяются
-	// между tier'ами; меняются только PhysAtk/MagicAtk через Mult.
+	// Профиль одного типа оружия. Все характеристики повторяются между
+	// tier'ами; меняются только PhysAtk/MagicAtk через TierProgression.Mult.
+	// Базовые значения на E-low соответствуют тому, что лежит inline в ItemsDB.
 	private struct Profile
 	{
 		public string Type;
 		public bool IsTwoHanded;
 		public int PhysAtkBase;
 		public int MagicAtkBase;
-		public float PhysMult;
-		public float MagicMult;
 		public int ExtraDraw;
 		public int CritEveryNAttacks;
 		public List<WeaponPassive> Passives;
@@ -38,32 +37,28 @@ internal static class WeaponsCatalog
 		["sword_1h"] = new Profile
 		{
 			Type = "sword_1h", IsTwoHanded = false,
-			PhysAtkBase = 4, MagicAtkBase = 0,
-			PhysMult = 1.0f, MagicMult = 0.5f,
+			PhysAtkBase = 6, MagicAtkBase = 4,
 			ExtraDraw = 1, CritEveryNAttacks = 10,
 			Passives = new() { new WeaponPassive(WeaponPassive.PowerPerNonAttack, 10) },
 		},
 		["sword_2h"] = new Profile
 		{
 			Type = "sword_2h", IsTwoHanded = true,
-			PhysAtkBase = 8, MagicAtkBase = 0,
-			PhysMult = 1.3f, MagicMult = 0.4f,
+			PhysAtkBase = 10, MagicAtkBase = 7,
 			ExtraDraw = 0, CritEveryNAttacks = 12,
 			Passives = new() { new WeaponPassive(WeaponPassive.BleedOnHit, 50) },
 		},
 		["staff"] = new Profile
 		{
 			Type = "staff", IsTwoHanded = true,
-			PhysAtkBase = 1, MagicAtkBase = 10,
-			PhysMult = 0.4f, MagicMult = 1.5f,
+			PhysAtkBase = 7, MagicAtkBase = 15,
 			ExtraDraw = 0, CritEveryNAttacks = 20,
 			Passives = new() { new WeaponPassive(WeaponPassive.MagicChain, 20, 30) },
 		},
 		["knife"] = new Profile
 		{
 			Type = "knife", IsTwoHanded = false,
-			PhysAtkBase = 3, MagicAtkBase = 0,
-			PhysMult = 0.9f, MagicMult = 0.4f,
+			PhysAtkBase = 3, MagicAtkBase = 3,
 			ExtraDraw = 0, CritEveryNAttacks = 6,
 			Passives = new(),
 		},
@@ -134,8 +129,6 @@ internal static class WeaponsCatalog
 			IsTwoHanded = p.IsTwoHanded,
 			PhysAtk = p.PhysAtkBase > 0 ? Math.Max(1, (int)Math.Round(p.PhysAtkBase * m)) : 0,
 			MagicAtk = p.MagicAtkBase > 0 ? Math.Max(1, (int)Math.Round(p.MagicAtkBase * m)) : 0,
-			PhysMult = p.PhysMult,
-			MagicMult = p.MagicMult,
 			ExtraDraw = p.ExtraDraw,
 			CritEveryNAttacks = p.CritEveryNAttacks,
 			Passives = ClonePassives(p.Passives),

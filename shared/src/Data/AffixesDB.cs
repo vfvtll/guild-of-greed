@@ -38,9 +38,9 @@ public static class AffixesDB
 		// Атака
 		["sharp"]      = new() { Id = "sharp",      Name = "Острый",       Slot = AffixSlot.Prefix, Kind = AffixStatKind.PhysAtk, BaseMagnitude = 3 },
 		["arcane"]     = new() { Id = "arcane",     Name = "Чарованный",   Slot = AffixSlot.Prefix, Kind = AffixStatKind.MagAtk,  BaseMagnitude = 3 },
-		// Защита
-		["sturdy"]     = new() { Id = "sturdy",     Name = "Крепкий",      Slot = AffixSlot.Prefix, Kind = AffixStatKind.PhysDef, BaseMagnitude = 2 },
-		["warded"]     = new() { Id = "warded",     Name = "Защищённый",   Slot = AffixSlot.Prefix, Kind = AffixStatKind.MagDef,  BaseMagnitude = 2 },
+		// Защита (по дизайну — только на броне/щите, на оружие НЕ катится)
+		["sturdy"]     = new() { Id = "sturdy",     Name = "Крепкий",      Slot = AffixSlot.Prefix, Kind = AffixStatKind.PhysDef, BaseMagnitude = 2, ArmorOnly = true },
+		["warded"]     = new() { Id = "warded",     Name = "Защищённый",   Slot = AffixSlot.Prefix, Kind = AffixStatKind.MagDef,  BaseMagnitude = 2, ArmorOnly = true },
 		// Ресурсы
 		["robust"]     = new() { Id = "robust",     Name = "Здоровый",     Slot = AffixSlot.Prefix, Kind = AffixStatKind.Hp,      BaseMagnitude = 12 },
 		["mystic"]     = new() { Id = "mystic",     Name = "Мистический",  Slot = AffixSlot.Prefix, Kind = AffixStatKind.Mp,      BaseMagnitude = 10 },
@@ -57,9 +57,9 @@ public static class AffixesDB
 		// Атака %
 		["of_power"]     = new() { Id = "of_power",     Name = "Силы",       Slot = AffixSlot.Suffix, Kind = AffixStatKind.PhysAtk, BaseMagnitude = 5 },
 		["of_magic"]     = new() { Id = "of_magic",     Name = "Магии",      Slot = AffixSlot.Suffix, Kind = AffixStatKind.MagAtk,  BaseMagnitude = 5 },
-		// Защита %
-		["of_stone"]     = new() { Id = "of_stone",     Name = "Камня",      Slot = AffixSlot.Suffix, Kind = AffixStatKind.PhysDef, BaseMagnitude = 8 },
-		["of_warding"]   = new() { Id = "of_warding",   Name = "Оберегания", Slot = AffixSlot.Suffix, Kind = AffixStatKind.MagDef,  BaseMagnitude = 8 },
+		// Защита % (по дизайну — только на броне/щите, на оружие НЕ катится)
+		["of_stone"]     = new() { Id = "of_stone",     Name = "Камня",      Slot = AffixSlot.Suffix, Kind = AffixStatKind.PhysDef, BaseMagnitude = 8, ArmorOnly = true },
+		["of_warding"]   = new() { Id = "of_warding",   Name = "Оберегания", Slot = AffixSlot.Suffix, Kind = AffixStatKind.MagDef,  BaseMagnitude = 8, ArmorOnly = true },
 		// Ресурсы %
 		["of_vitality"]  = new() { Id = "of_vitality",  Name = "Жизни",      Slot = AffixSlot.Suffix, Kind = AffixStatKind.Hp,      BaseMagnitude = 6 },
 		["of_mana"]      = new() { Id = "of_mana",      Name = "Маны",       Slot = AffixSlot.Suffix, Kind = AffixStatKind.Mp,      BaseMagnitude = 8 },

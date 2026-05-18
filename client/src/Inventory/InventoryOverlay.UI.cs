@@ -14,31 +14,37 @@ public partial class InventoryOverlay
 		AddChild(_dim);
 		UIStyle.FillParent(_dim);
 
-		// Адаптивный размер: панель ВСЕГДА на весь экран с отступом, независимо
-		// от количества контента (FillParent явно прибивает offsets к нулю).
+		// Панель на весь экран с отступом. FillParent прибивает offsets к нулю.
 		_panel = new PanelContainer();
 		_panel.AddThemeStyleboxOverride("panel", UIStyle.PanelStyle());
 		AddChild(_panel);
 		UIStyle.FillParent(_panel, marginX: 40, marginY: 30);
 
 		var v = new VBoxContainer();
-		v.AddThemeConstantOverride("separation", 12);
+		v.AddThemeConstantOverride("separation", 10);
 		_panel.AddChild(v);
 
-		// Шапка: иконка слева для центровки + название по центру + ✕ справа.
-		// Кнопка ✕ дублирует "Закрыть" внизу — гарантия что закрыть можно
-		// независимо от размера экрана и количества контента.
+		// === Шапка: 🎒 название | кошель | ✕ ===
+		// Кошель перенесён сюда из отдельной строки — экономит вертикаль.
 		var titleRow = new HBoxContainer();
-		titleRow.AddThemeConstantOverride("separation", 8);
+		titleRow.AddThemeConstantOverride("separation", 12);
 		v.AddChild(titleRow);
 
-		var leftSpacer = new Control { CustomMinimumSize = new Vector2(44, 0) };
-		titleRow.AddChild(leftSpacer);
-
 		var title = UIStyle.MakeLabel("🎒 Инвентарь", 22, UIStyle.GoldBright);
-		title.HorizontalAlignment = HorizontalAlignment.Center;
-		title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		title.HorizontalAlignment = HorizontalAlignment.Left;
 		titleRow.AddChild(title);
+
+		_currencyLabel = new RichTextLabel
+		{
+			BbcodeEnabled = true,
+			FitContent = true,
+			ScrollActive = false,
+			CustomMinimumSize = new Vector2(0, 24),
+		};
+		_currencyLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		_currencyLabel.AddThemeFontSizeOverride("normal_font_size", 14);
+		_currencyLabel.AddThemeColorOverride("default_color", UIStyle.TextPrimary);
+		titleRow.AddChild(_currencyLabel);
 
 		var xBtn = new Button { Text = "✕" };
 		UIStyle.StyleButton(xBtn);
@@ -65,6 +71,7 @@ public partial class InventoryOverlay
 		v.AddChild(sep);
 
 		// === Сводка по эффективным параметрам ===
+		// Компактная: 3 строки вместо 5. Atk+Def слиты, крит туда же.
 		var summary = new PanelContainer();
 		summary.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
 		v.AddChild(summary);
@@ -75,17 +82,18 @@ public partial class InventoryOverlay
 		_summaryLevel = UIStyle.MakeLabel("", 13, UIStyle.GoldBright);
 		_summaryAtk   = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
 		_summaryDef   = UIStyle.MakeLabel("", 13, UIStyle.TextPrimary);
-		_summaryCrit  = UIStyle.MakeLabel("", 13, UIStyle.WarnAmber);
 		_summarySets  = UIStyle.MakeLabel("", 12, UIStyle.RarityUncommon);
 		_summarySets.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		_summaryAtk.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		_summaryDef.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		summaryV.AddChild(_summaryLevel);
 		summaryV.AddChild(_summaryAtk);
 		summaryV.AddChild(_summaryDef);
-		summaryV.AddChild(_summaryCrit);
 		summaryV.AddChild(_summarySets);
 
-		// Виджет распределения очков статов. Сидит отдельной панелью под
-		// сводкой; Refresh скрывает её при UnspentStatPoints=0.
+		// === Распределение очков статов ===
+		// Сетка 3×2 вместо HBox на 6 кнопок: 6×140 = 840px не помещается
+		// на 1280-ширине после margin'ов. 3×2 ≈ 420×каждая по 100px широки.
 		_statSpendPanel = new PanelContainer();
 		_statSpendPanel.AddThemeStyleboxOverride("panel", UIStyle.MiniPanelStyle());
 		v.AddChild(_statSpendPanel);
@@ -97,44 +105,46 @@ public partial class InventoryOverlay
 		_statPointsAvailLabel = UIStyle.MakeLabel("", 14, UIStyle.GoldBright);
 		spendV.AddChild(_statPointsAvailLabel);
 
-		var spendBtnRow = new HBoxContainer();
-		spendBtnRow.AddThemeConstantOverride("separation", 8);
-		spendV.AddChild(spendBtnRow);
+		var spendGrid = new GridContainer { Columns = 3 };
+		spendGrid.AddThemeConstantOverride("h_separation", 6);
+		spendGrid.AddThemeConstantOverride("v_separation", 4);
+		spendV.AddChild(spendGrid);
 
 		for (int i = 0; i < 6; i++)
 		{
 			var btn = new Button { Text = "" };
 			UIStyle.StyleButton(btn);
-			btn.CustomMinimumSize = new Vector2(140, 0);
+			btn.CustomMinimumSize = new Vector2(120, 0);
+			btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 			string capturedStat = StatIds[i];
 			btn.TooltipText = StatTooltip(capturedStat);
 			btn.Pressed += () => OnSpendStatPressed(capturedStat);
-			spendBtnRow.AddChild(btn);
+			spendGrid.AddChild(btn);
 			_statSpendButtons[i] = btn;
 		}
 
-		// Две колонки: надето слева, инвентарь справа.
+		// Две колонки: надето слева, инвентарь справа. ExpandFill даёт им
+		// доступную высоту целиком — оба внутренних скролла растягиваются.
 		var columns = new HBoxContainer();
-		columns.AddThemeConstantOverride("separation", 24);
+		columns.AddThemeConstantOverride("separation", 20);
 		columns.SizeFlagsVertical = SizeFlags.ExpandFill;
+		columns.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		v.AddChild(columns);
 
 		// === Левая колонка: надето ===
-		var left = new VBoxContainer { CustomMinimumSize = new Vector2(280, 0) };
-		left.AddThemeConstantOverride("separation", 8);
+		var left = new VBoxContainer { CustomMinimumSize = new Vector2(260, 0) };
+		left.AddThemeConstantOverride("separation", 6);
 		columns.AddChild(left);
 
 		left.AddChild(UIStyle.MakeSectionTitle("Надето"));
 
-		// 8 слотов могут не помещаться по высоте на маленьких экранах —
-		// ScrollContainer гарантирует что всё остаётся доступно через скролл.
 		var equipScroll = new ScrollContainer();
 		equipScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
 		equipScroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
 		left.AddChild(equipScroll);
 
 		_equipmentList = new VBoxContainer();
-		_equipmentList.AddThemeConstantOverride("separation", 6);
+		_equipmentList.AddThemeConstantOverride("separation", 5);
 		_equipmentList.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		equipScroll.AddChild(_equipmentList);
 
@@ -143,29 +153,26 @@ public partial class InventoryOverlay
 
 		// === Правая колонка: инвентарь ===
 		var right = new VBoxContainer();
-		right.AddThemeConstantOverride("separation", 8);
+		right.AddThemeConstantOverride("separation", 6);
 		right.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		right.SizeFlagsVertical   = SizeFlags.ExpandFill;
 		columns.AddChild(right);
 
 		_capacityLabel = UIStyle.MakeSectionTitle("Содержимое");
 		right.AddChild(_capacityLabel);
 
-		// Кошель: цветные номиналы золото / серебро / медь. Reused в Refresh.
-		_currencyLabel = new RichTextLabel
-		{
-			BbcodeEnabled = true,
-			FitContent = true,
-			ScrollActive = false,
-			CustomMinimumSize = new Vector2(0, 22),
-		};
-		_currencyLabel.AddThemeFontSizeOverride("normal_font_size", 14);
-		_currencyLabel.AddThemeColorOverride("default_color", UIStyle.TextPrimary);
-		right.AddChild(_currencyLabel);
+		// 40 ячеек × 50px = 400px + отступы — при 8 рядах легко выходит за
+		// экран. ScrollContainer держит сетку всегда внутри границ панели.
+		var invScroll = new ScrollContainer();
+		invScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+		invScroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		invScroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		right.AddChild(invScroll);
 
 		_inventoryGrid = new GridContainer { Columns = GridColumns };
-		_inventoryGrid.AddThemeConstantOverride("h_separation", 8);
-		_inventoryGrid.AddThemeConstantOverride("v_separation", 8);
-		right.AddChild(_inventoryGrid);
+		_inventoryGrid.AddThemeConstantOverride("h_separation", 6);
+		_inventoryGrid.AddThemeConstantOverride("v_separation", 6);
+		invScroll.AddChild(_inventoryGrid);
 
 		var hint2 = UIStyle.MakeLabel("Клик — надеть / выпить зелье", 11, UIStyle.TextDim);
 		right.AddChild(hint2);
@@ -181,7 +188,7 @@ public partial class InventoryOverlay
 
 		var closeBtn = new Button { Text = "Закрыть" };
 		UIStyle.StyleButton(closeBtn, primary: true);
-		closeBtn.CustomMinimumSize = new Vector2(180, 44);
+		closeBtn.CustomMinimumSize = new Vector2(180, 40);
 		closeBtn.Pressed += Close;
 		btnRow.AddChild(closeBtn);
 	}
@@ -202,12 +209,16 @@ public partial class InventoryOverlay
 	// Фабрики карточек слотов
 	// =====================================================================
 
-	private Control MakeWeaponSlotRow(string icon, string slotName, WeaponData item, Action onClick)
+	// Action unequipAction передаётся в диалог; сам клик по строке открывает
+	// детализацию через OpenEquipmentSlotDialog (см. .Detail.cs).
+	private Control MakeWeaponSlotRow(string icon, string slotName, WeaponData item, Action unequipAction)
 	{
 		string itemName = item?.Name ?? "—";
 		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeWeaponMultiline(item);
 		var rarity = item?.Rarity ?? ItemRarity.Common;
-		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
+		bool isEmpty = item == null;
+		Action onClick = () => OpenEquipmentSlotDialog(slotName, itemName, detail, rarity, isEmpty, unequipAction);
+		return BuildSlotRow(icon, slotName, itemName, detail, isEmpty, rarity, onClick);
 	}
 
 	// Off-hand: одна строка, варьируется по состоянию.
@@ -218,29 +229,42 @@ public partial class InventoryOverlay
 	private Control MakeOffhandRow(CharacterData ch)
 	{
 		if (ch.Weapon != null && ch.Weapon.IsTwoHanded)
-			return BuildSlotRow("✊", "Вторая рука", "—",
-				"Двуручное оружие занимает обе руки", true, ItemRarity.Common, () => { });
+		{
+			const string slot = "Вторая рука";
+			const string detail = "Двуручное оружие занимает обе руки";
+			return BuildSlotRow("✊", slot, "—", detail, true, ItemRarity.Common,
+				() => OpenEquipmentSlotDialog(slot, "—", detail, ItemRarity.Common, true, null));
+		}
 
 		if (ch.Offhand != null)
 		{
+			const string slot = "Левая рука (dual-wield)";
 			string detail = ItemsDB.DescribeWeaponMultiline(ch.Offhand)
 				+ "\n\n⚠ Dual-wield: −2 к размеру руки в бою.";
-			return BuildSlotRow("⚔", "Левая рука (dual-wield)", ch.Offhand.Name,
-				detail, false, ch.Offhand.Rarity, () => UnequipOffhand());
+			return BuildSlotRow("⚔", slot, ch.Offhand.Name,
+				detail, false, ch.Offhand.Rarity,
+				() => OpenEquipmentSlotDialog(slot, ch.Offhand.Name, detail,
+					ch.Offhand.Rarity, false, UnequipOffhand));
 		}
 
 		if (ch.Shield != null)
 		{
+			const string slot = "Щит";
 			string detail = DescribeShieldMultiline(ch.Shield)
 				+ "\n\n⚠ Щит: −1 к размеру руки в бою.";
-			return BuildSlotRow("🛡", "Щит", ch.Shield.Name,
-				detail, false, ch.Shield.Rarity, () => UnequipShield());
+			return BuildSlotRow("🛡", slot, ch.Shield.Name,
+				detail, false, ch.Shield.Rarity,
+				() => OpenEquipmentSlotDialog(slot, ch.Shield.Name, detail,
+					ch.Shield.Rarity, false, UnequipShield));
 		}
 
-		return BuildSlotRow("✊", "Левая рука", "—",
-			"Можно вторую 1H-руку (dual-wield: −2 к размеру руки)\n"
-			+ "или щит (−1 к размеру руки)",
-			true, ItemRarity.Common, () => { });
+		{
+			const string slot = "Левая рука";
+			const string detail = "Можно вторую 1H-руку (dual-wield: −2 к размеру руки)\n"
+				+ "или щит (−1 к размеру руки)";
+			return BuildSlotRow("✊", slot, "—", detail, true, ItemRarity.Common,
+				() => OpenEquipmentSlotDialog(slot, "—", detail, ItemRarity.Common, true, null));
+		}
 	}
 
 	private static string DescribeShieldMultiline(ShieldData s)
@@ -265,18 +289,20 @@ public partial class InventoryOverlay
 		return lines.Count == 0 ? "—" : string.Join("\n", lines);
 	}
 
-	private Control MakeArmorSlotRow(string icon, string slotName, ArmorData item, Action onClick)
+	private Control MakeArmorSlotRow(string icon, string slotName, ArmorData item, Action unequipAction)
 	{
 		string itemName = item?.Name ?? "—";
 		string detail   = item == null ? "(пусто)" : ItemsDB.DescribeArmorMultiline(item);
 		var rarity = item?.Rarity ?? ItemRarity.Common;
-		return BuildSlotRow(icon, slotName, itemName, detail, item == null, rarity, onClick);
+		bool isEmpty = item == null;
+		Action onClick = () => OpenEquipmentSlotDialog(slotName, itemName, detail, rarity, isEmpty, unequipAction);
+		return BuildSlotRow(icon, slotName, itemName, detail, isEmpty, rarity, onClick);
 	}
 
 	private Control BuildSlotRow(string icon, string slotName, string itemName, string detail,
 		bool isEmpty, ItemRarity rarity, Action onClick)
 	{
-		var panel = new PanelContainer { CustomMinimumSize = new Vector2(280, 48) };
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(260, 44) };
 		var hovered = false;
 		ApplySlotStyle(panel, hovered, isEmpty);
 		panel.MouseFilter = MouseFilterEnum.Stop;
@@ -312,6 +338,10 @@ public partial class InventoryOverlay
 
 		return panel;
 	}
+
+	// Размеры карточек. Меньше = больше слотов помещается без скролла.
+	private const int ItemCardWidth  = 170;
+	private const int ItemCardHeight = 50;
 
 	private Control MakeItemCard(InventoryStack stack, Action onClick)
 	{
@@ -359,7 +389,7 @@ public partial class InventoryOverlay
 
 		var ch = GameData.Instance.Character;
 
-		var panel = new PanelContainer { CustomMinimumSize = new Vector2(190, 56) };
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(ItemCardWidth, ItemCardHeight) };
 		var hovered = false;
 		ApplyItemStyle(panel, hovered, rarity);
 		panel.MouseFilter = MouseFilterEnum.Stop;
@@ -397,7 +427,7 @@ public partial class InventoryOverlay
 
 	private Control MakeEmptyCard()
 	{
-		var panel = new PanelContainer { CustomMinimumSize = new Vector2(190, 56) };
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(ItemCardWidth, ItemCardHeight) };
 		panel.MouseFilter = MouseFilterEnum.Ignore;
 		var sb = UIStyle.MiniPanelStyle();
 		sb.BorderColor = UIStyle.GoldDark * 0.4f;
